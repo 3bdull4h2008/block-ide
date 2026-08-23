@@ -1,0 +1,39 @@
+id = "w5-01-area-rect"
+world = 5
+title = "Your First Function"
+xp = 20
+starter = """#include <stdio.h>
+
+static int area(int w, int h) {
+    return w * h;
+}
+
+int main(void) {
+    int w, h;
+    if (scanf("%d %d", &w, &h) != 2) return 1;
+
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "3 4\n"
+stdout = "12\n"
+exit = 0
+
+[[tests]]
+stdin = "10 25\n"
+stdout = "250\n"
+exit = 0
+
+[[hints]]
+text = 'The function already exists - call it!'
+
+[[hints]]
+text = 'area(w, h) gives back a number you can print.'
+
+[[hints]]
+text = 'printf("%d\n", area(w, h));'
+
+[solution]
+path = "solution.c"

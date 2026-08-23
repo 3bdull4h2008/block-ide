@@ -1,0 +1,35 @@
+id = "w3-06-boss-fizzbuzz"
+world = 3
+title = "BOSS: FizzBuzz Arena"
+xp = 30
+starter = """#include <stdio.h>
+
+/* Boss battle! Read n and print 1..n where multiples
+   of 3 say Fizz, of 5 say Buzz, of both say FizzBuzz. */
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "5\n"
+stdout = "1\n2\nFizz\n4\nBuzz\n"
+exit = 0
+
+[[tests]]
+stdin = "3\n"
+stdout = "1\n2\nFizz\n"
+exit = 0
+
+[[hints]]
+text = 'Loop 1..n. Multiples of BOTH 3 and 5 say FizzBuzz.'
+
+[[hints]]
+text = 'Check i % 15 == 0 FIRST, then % 3, then % 5.'
+
+[[hints]]
+text = 'Each answer on its own line.'
+
+[solution]
+path = "solution.c"

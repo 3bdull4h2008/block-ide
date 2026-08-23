@@ -1,0 +1,44 @@
+id = "w5-03-power"
+world = 5
+title = "Power Function"
+xp = 20
+starter = """#include <stdio.h>
+
+static long long power(int base, int exp) {
+    return 0;
+}
+
+int main(void) {
+    int b, e;
+    if (scanf("%d %d", &b, &e) != 2) return 1;
+    printf("%lld\n", power(b, e));
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "2 10\n"
+stdout = "1024\n"
+exit = 0
+
+[[tests]]
+stdin = "5 0\n"
+stdout = "1\n"
+exit = 0
+
+[[tests]]
+stdin = "3 4\n"
+stdout = "81\n"
+exit = 0
+
+[[hints]]
+text = 'Anything to the power 0 is 1 - start r at 1.'
+
+[[hints]]
+text = 'Multiply r by base exactly exp times in a loop.'
+
+[[hints]]
+text = 'for (int i = 0; i < exp; i++) r *= base;'
+
+[solution]
+path = "solution.c"

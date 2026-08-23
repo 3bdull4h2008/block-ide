@@ -1,0 +1,9 @@
+/target
+node_modules/
+dist/
+build/
+*.log
+.DS_Store
+
+# generated at bundle time from third_party/tcc (single source of truth)
+app/src-tauri/resources/tcc/

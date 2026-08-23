@@ -1,0 +1,37 @@
+id = "w3-04-grade"
+world = 3
+title = "The Grader"
+xp = 20
+starter = """#include <stdio.h>
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "95\n"
+stdout = "A\n"
+exit = 0
+
+[[tests]]
+stdin = "85\n"
+stdout = "B\n"
+exit = 0
+
+[[tests]]
+stdin = "42\n"
+stdout = "F\n"
+exit = 0
+
+[[hints]]
+text = 'Order matters: check A first, then B, then C.'
+
+[[hints]]
+text = '>= 90 A, >= 80 B, >= 70 C, else F.'
+
+[[hints]]
+text = 'Once an if fires, the rest of the chain is skipped — that gives correct cutoffs.'
+
+[solution]
+path = "solution.c"

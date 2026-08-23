@@ -1,0 +1,37 @@
+id = "w3-05-leap-year"
+world = 3
+title = "Leap Year"
+xp = 20
+starter = """#include <stdio.h>
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "2024\n"
+stdout = "leap\n"
+exit = 0
+
+[[tests]]
+stdin = "2023\n"
+stdout = "common\n"
+exit = 0
+
+[[tests]]
+stdin = "2000\n"
+stdout = "leap\n"
+exit = 0
+
+[[hints]]
+text = 'Divisible by 4 usually means leap...'
+
+[[hints]]
+text = '...but centuries must divide by 400: 2000 yes, 1900 no.'
+
+[[hints]]
+text = 'int leap = (y%4==0 && y%100!=0) || (y%400==0);'
+
+[solution]
+path = "solution.c"

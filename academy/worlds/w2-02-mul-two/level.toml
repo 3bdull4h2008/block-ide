@@ -1,0 +1,35 @@
+id = "w2-02-mul-two"
+world = 2
+title = "Times Table Machine"
+xp = 15
+starter = """#include <stdio.h>
+
+int main(void) {
+    int a, b;
+    if (scanf("%d %d", &a, &b) != 2) return 1;
+
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "6 7\n"
+stdout = "42\n"
+exit = 0
+
+[[tests]]
+stdin = "-3 9\n"
+stdout = "-27\n"
+exit = 0
+
+[[hints]]
+text = "Multiplication in C is the star: a * b"
+
+[[hints]]
+text = 'Print it with %d like Sum Two Numbers.'
+
+[[hints]]
+text = "Negative numbers work automatically — trust the math."
+
+[solution]
+path = "solution.c"

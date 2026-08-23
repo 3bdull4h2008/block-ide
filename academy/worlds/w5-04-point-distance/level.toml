@@ -1,0 +1,38 @@
+id = "w5-04-point-distance"
+world = 5
+title = "Structs: Point Distance"
+xp = 25
+starter = """#include <stdio.h>
+#include <stdlib.h>
+
+typedef struct { int x, y; } Point;
+
+int main(void) {
+    Point p, q;
+    if (scanf("%d %d %d %d", &p.x, &p.y, &q.x, &q.y) != 4) return 1;
+
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "1 2 4 6\n"
+stdout = "7\n"
+exit = 0
+
+[[tests]]
+stdin = "-1 -1 1 1\n"
+stdout = "4\n"
+exit = 0
+
+[[hints]]
+text = 'Manhattan distance: |dx| + |dy| - walk along streets, not diagonals.'
+
+[[hints]]
+text = 'abs() from <stdlib.h> makes values positive.'
+
+[[hints]]
+text = 'abs(p.x - q.x) + abs(p.y - q.y)'
+
+[solution]
+path = "solution.c"

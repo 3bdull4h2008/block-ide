@@ -1,0 +1,32 @@
+id = "w1-04-two-lines"
+world = 1
+title = "Two Lines"
+xp = 10
+starter = """#include <stdio.h>
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = ""
+stdout = "Block-IDE\nmakes C friendly\n"
+exit = 0
+
+[[tests]]
+stdin = "ignore me\n"
+stdout = "Block-IDE\nmakes C friendly\n"
+exit = 0
+
+[[hints]]
+text = "One printf can contain two lines using \\n twice."
+
+[[hints]]
+text = 'printf("Block-IDE\\nmakes C friendly\\n");'
+
+[[hints]]
+text = "Or use two printf calls, each ending with \\n."
+
+[solution]
+path = "solution.c"

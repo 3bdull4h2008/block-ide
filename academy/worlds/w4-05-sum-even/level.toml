@@ -1,0 +1,39 @@
+id = "w4-05-sum-even"
+world = 4
+title = "Sum of Evens"
+xp = 20
+starter = """#include <stdio.h>
+
+/* Add every EVEN number from 2 up to n (inclusive if n is even). */
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "10\n"
+stdout = "30\n"
+exit = 0
+
+[[tests]]
+stdin = "7\n"
+stdout = "12\n"
+exit = 0
+
+[[tests]]
+stdin = "1\n"
+stdout = "0\n"
+exit = 0
+
+[[hints]]
+text = 'Start at 2 and jump by two: i += 2.'
+
+[[hints]]
+text = 'Loop while i <= n - an odd n just never gets added.'
+
+[[hints]]
+text = 'Sum of evens up to 7 is 2+4+6 = 12. Check your loop against that!'
+
+[solution]
+path = "solution.c"

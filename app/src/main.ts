@@ -1,0 +1,956 @@
+import { Application, Container, Graphics, Text } from 'pixi.js'
+import { invoke } from '@tauri-apps/api/core'
+import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import {
+  buildBlocks,
+  layoutStack,
+  findDropTarget,
+  hitTestHeader,
+  flatten,
+  COLORS,
+  PAD,
+  ROW_H,
+  type BBlock,
+  type CTreeJSON,
+} from './blocks'
+import { History } from './history'
+import { spliceInsert, spliceMove, applyEdit } from './ops'
+import './style.css'
+
+interface DragPayload {
+  label: string
+  snippet?: string
+  move?: { start: number; end: number }
+}
+
+const SAMPLE = `#include <stdio.h>
+
+int main(void) {
+    printf("hello\\n");
+    int total = 0;
+    for (int i = 0; i < 5; i++) {
+        total = total + i;
+    }
+    return 0;
+}
+`
+
+const NEW_TEMPLATE = `#include <stdio.h>
+
+int main(void) {
+    printf("hi\\n");
+    return 0;
+}
+`
+
+const TEMPLATES = [
+  { name: 'for', cat: 'control', snippet: 'for (int i = 0; i < 10; i++) {\n}' },
+  { name: 'if', cat: 'control', snippet: 'if (cond) {\n}' },
+  { name: 'while', cat: 'loops', snippet: 'while (cond) {\n}' },
+  { name: 'int var =', cat: 'statement', snippet: 'int value = 0;' },
+  { name: 'assign +=', cat: 'statement', snippet: 'value = value + 1;' },
+  { name: 'printf', cat: 'statement', snippet: 'printf("hi\\n");' },
+  { name: 'call fn', cat: 'functions', snippet: 'value = myfn(value);' },
+  { name: 'struct field', cat: 'structs', snippet: 'p.x = 0;' },
+  { name: 'return', cat: 'statement', snippet: 'return 0;' },
+  { name: '// note', cat: 'comment', snippet: '// note' },
+]
+
+const srcEl = document.getElementById('src') as HTMLTextAreaElement
+const statusEl = document.getElementById('status') as HTMLSpanElement
+const hostEl = document.getElementById('canvas-host') as HTMLDivElement
+const consoleEl = document.getElementById('console') as HTMLPreElement
+const paletteEl = document.getElementById('palette') as HTMLDivElement
+const tabsEl = document.getElementById('tabs') as HTMLDivElement
+const filesEl = document.getElementById('files') as HTMLDivElement
+
+const app = new Application()
+await app.init({ resizeTo: hostEl, background: '#1e1e2e', antialias: true })
+hostEl.appendChild(app.canvas)
+const world = new Container()
+app.stage.addChild(world)
+const overlay = new Container()
+app.stage.addChild(overlay)
+
+interface Diag {
+  line: number
+  col: number
+  severity: string
+  message: string
+  offset: number
+  node_id: number
+  node_kind: string
+}
+
+const dropbar = document.createElement('div')
+dropbar.id = 'dropbar'
+document.body.appendChild(dropbar)
+const ghost = document.createElement('div')
+ghost.id = 'ghost'
+ghost.style.display = 'none'
+document.body.appendChild(ghost)
+
+let workspace: string | null = null
+let activePath: string | null = null
+const savedCache = new Map<string, string>()
+const fileCache = new Map<string, string>()
+let files: string[] = []
+
+let src = SAMPLE
+let roots: BBlock[] = []
+let rendering = false
+const hist = new History()
+
+function markDirty(): void {
+  const dirty = activePath !== null && savedCache.get(activePath) !== src
+  for (const t of Array.from(tabsEl.children) as HTMLElement[]) {
+    if (t.dataset.path === activePath) t.classList.toggle('dirty', dirty)
+    t.classList.toggle('active', t.dataset.path === activePath)
+  }
+}
+
+function setSrc(next: string, kind: 'op' | 'type' = 'op'): void {
+  hist.push(src, kind)
+  src = next
+  srcEl.value = next
+  void render(next)
+  markDirty()
+}
+
+async function render(source: string): Promise<void> {
+  if (rendering) return
+  rendering = true
+  try {
+    const out = await invoke<{ tree: CTreeJSON; has_errors: boolean }>('parse_c', { src: source })
+    roots = buildBlocks(out.tree)
+    layoutStack(roots, 40, 40)
+    world.removeChildren()
+    for (const b of roots) drawBlock(b)
+    world.addChild(overlay)
+    statusEl.textContent = out.has_errors ? 'parsed with errors' : 'parsed clean'
+    statusEl.className = out.has_errors ? 'warn' : 'ok'
+  } catch (e) {
+    statusEl.textContent = String(e)
+    statusEl.className = 'warn'
+  } finally {
+    rendering = false
+  }
+}
+
+async function canonicalize(): Promise<void> {
+  try {
+    const clean = await invoke<string>('canonicalize_c', { src })
+    if (clean !== src) setSrc(clean, 'op')
+  } catch {
+    /* keep as-is */
+  }
+  void refreshDiags()
+}
+
+function drawDiagOverlay(ds: Diag[]): void {
+  overlay.removeChildren()
+  if (ds.length === 0 || roots.length === 0) return
+  const all = flatten(roots)
+  const g = new Graphics()
+  for (const d of ds) {
+    const candidates = all.filter(
+      (b) =>
+        (b.start <= d.offset && d.offset < b.end) ||
+        (b.start === d.offset && b.end === d.offset),
+    )
+    if (candidates.length === 0) continue
+    const smallest = candidates.reduce((a, b) => (a.w * a.h <= b.w * b.h ? a : b))
+    g.roundRect(
+      smallest.x - 2,
+      smallest.y - 2,
+      smallest.w + 4,
+      Math.min(ROW_H, smallest.h) + 4,
+      8,
+    )
+    g.stroke({ width: 2.5, color: d.severity.includes('error') ? 0xf38ba8 : 0xf9e2af })
+  }
+  overlay.addChild(g)
+}
+
+async function refreshDiags(): Promise<void> {
+  try {
+    const ds = await invoke<Diag[]>('diag_c', { src })
+    drawDiagOverlay(ds)
+    if (ds.length > 0) {
+      consoleEl.textContent =
+        ds.map((d) => `[${d.severity}] line ${d.line}:${d.col} — ${d.message}`).join('\n') + '\n'
+    }
+  } catch {
+    /* diagnostics are best-effort */
+  }
+}
+
+function drawBlock(b: BBlock): void {
+  const g = new Graphics()
+  if (b.sticky) {
+    g.roundRect(b.x, b.y, b.w, b.h, 4)
+    g.fill({ color: COLORS.comment })
+    const t = new Text({
+      text: b.label,
+      style: { fontFamily: 'Consolas, monospace', fontSize: 13, fill: 0x5b4a00 },
+    })
+    t.x = b.x + PAD
+    t.y = b.y + (ROW_H - t.height) / 2
+    t.eventMode = 'static'
+    attachHeaderEvents(t, b)
+    world.addChild(g, t)
+    return
+  }
+  g.roundRect(b.x, b.y, b.w, b.h, b.container ? 8 : 6)
+  g.fill({ color: COLORS[b.cat] })
+  g.roundRect(b.x, b.y, 5, Math.min(ROW_H, b.h), 2)
+  g.fill({ color: 0x00000040 })
+  if (b.container) {
+    g.roundRect(b.x, b.y, b.w, b.h, 8)
+    g.stroke({ width: 1, color: 0x00000030 })
+  }
+  const label = new Text({
+    text: b.label,
+    style: { fontFamily: 'Consolas, monospace', fontSize: 13, fill: 0xffffff },
+  })
+  label.x = b.x + PAD
+  label.y = b.y + (ROW_H - label.height) / 2
+  world.addChild(g, label)
+  g.eventMode = 'static'
+  attachHeaderEvents(g, b)
+  for (const c of b.children) drawBlock(c)
+}
+
+function screenToWorld(ox: number, oy: number): { x: number; y: number } {
+  return { x: (ox - world.x) / world.scale.x, y: (oy - world.y) / world.scale.y }
+}
+
+let drag: DragPayload | null = null
+
+function startHtmlDrag(e: PointerEvent, payload: DragPayload): void {
+  drag = payload
+  ghost.textContent = payload.label
+  ghost.style.display = 'block'
+  ghost.style.left = `${e.clientX + 12}px`
+  ghost.style.top = `${e.clientY - 14}px`
+  window.addEventListener('pointermove', onDragMove)
+  window.addEventListener('pointerup', onDragEnd, { once: true })
+}
+
+function onDragMove(e: PointerEvent): void {
+  ghost.style.left = `${e.clientX + 12}px`
+  ghost.style.top = `${e.clientY - 14}px`
+  const r = hostEl.getBoundingClientRect()
+  const inside =
+    e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom
+  if (inside && drag) {
+    const w = screenToWorld(e.clientX - r.left, e.clientY - r.top)
+    const target = findDropTarget(roots, w.x, w.y)
+    if (target && !(drag.move && isInsideRange(target.container, drag.move))) {
+      const kids = target.container.children
+      const y =
+        target.index < kids.length
+          ? kids[target.index].y
+          : kids.length > 0
+            ? kids[kids.length - 1].y + kids[kids.length - 1].h
+            : target.container.y + ROW_H
+      dropbar.style.display = 'block'
+      dropbar.style.left = `${target.container.x * world.scale.x + world.x}px`
+      dropbar.style.top = `${y * world.scale.y + world.y}px`
+      dropbar.style.width = `${target.container.w * world.scale.x}px`
+      return
+    }
+  }
+  dropbar.style.display = 'none'
+}
+
+function isInsideRange(inner: BBlock, outer: { start: number; end: number }): boolean {
+  return inner.start >= outer.start && inner.end <= outer.end
+}
+
+async function onDragEnd(e: PointerEvent): Promise<void> {
+  window.removeEventListener('pointermove', onDragMove)
+  ghost.style.display = 'none'
+  dropbar.style.display = 'none'
+  const d = drag
+  drag = null
+  if (!d) return
+  const r = hostEl.getBoundingClientRect()
+  const inside =
+    e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom
+  if (!inside) return
+  const w = screenToWorld(e.clientX - r.left, e.clientY - r.top)
+  const target = findDropTarget(roots, w.x, w.y)
+  if (!target) return
+  if (d.move && isInsideRange(target.container, d.move)) return
+
+  const text = src
+  let next: string | null
+  if (d.move) {
+    next = spliceMove(text, d.move, target.offset)
+  } else {
+    next = spliceInsert(text, target.offset, d.snippet ?? '')
+  }
+  if (next === null) return
+  setSrc(next)
+  void canonicalize()
+}
+
+function attachHeaderEvents(
+  obj: { on: (ev: string, fn: (e: unknown) => void) => void },
+  b: BBlock,
+): void {
+  obj.on('pointerdown', (e) => {
+    const pe = e as { global: { x: number; y: number }; stopPropagation?: () => void }
+    pe.stopPropagation?.()
+    const r = hostEl.getBoundingClientRect()
+    startHtmlDrag(
+      { clientX: r.left + pe.global.x, clientY: r.top + pe.global.y } as PointerEvent,
+      { label: b.label || b.nodeKind, move: { start: b.start, end: b.end } },
+    )
+  })
+}
+
+hostEl.addEventListener('dblclick', (e) => {
+  const me = e as MouseEvent
+  const w = screenToWorld(me.offsetX, me.offsetY)
+  const hit = hitTestHeader(roots, w.x, w.y)
+  if (!hit || hit.sticky) return
+  const replacement = window.prompt('Edit statement:', hit.label)
+  if (replacement === null) return
+  setSrc(applyEdit(hit, replacement)(src))
+  void canonicalize()
+})
+
+document.getElementById('run')?.addEventListener('click', () => {
+  void startRun()
+})
+
+// ------------------------------------------------------- stage panel + run
+const stageCanvas = document.getElementById('stage') as HTMLCanvasElement
+const stageCtx = stageCanvas.getContext('2d') as CanvasRenderingContext2D
+const stopBtn = document.getElementById('stage-stop') as HTMLButtonElement
+const fpsEl = document.getElementById('stage-fps') as HTMLSpanElement
+
+let running = false
+let lastFrame = 0
+let pollTimer = 0
+let fpsFrames = 0
+let fpsT0 = 0
+const u32max = 4294967295
+const downKeys = new Set<number>()
+
+interface StageFrameOut {
+  frame: number
+  w: number
+  h: number
+  b64: string
+}
+
+function keyToCode(e: KeyboardEvent): number | null {
+  switch (e.key) {
+    case 'ArrowLeft':
+      return 1
+    case 'ArrowUp':
+      return 2
+    case 'ArrowRight':
+      return 3
+    case 'ArrowDown':
+      return 4
+  }
+  if (e.key.length === 1) {
+    const c = e.key.toUpperCase().charCodeAt(0)
+    if (c >= 32 && c <= 126) return c
+  }
+  return null
+}
+
+window.addEventListener('keydown', (e) => {
+  if (!running) return
+  const code = keyToCode(e)
+  if (code !== null) {
+    e.preventDefault()
+    void invoke('stage_keys', { down: Array.from(downKeys.add(code)) })
+  }
+})
+window.addEventListener('keyup', (e) => {
+  if (!running) return
+  const code = keyToCode(e)
+  if (code !== null) {
+    e.preventDefault()
+    downKeys.delete(code)
+    void invoke('stage_keys', { down: Array.from(downKeys) })
+  }
+})
+
+async function paintStage(): Promise<void> {
+  try {
+    const f = await invoke<StageFrameOut | null>('stage_frame', { last: lastFrame })
+    if (f) {
+      lastFrame = f.frame
+      const bin = atob(f.b64)
+      const bytes = new Uint8ClampedArray(bin.length)
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+      const img = new ImageData(bytes, f.w, f.h)
+      const off = new OffscreenCanvas(f.w, f.h)
+      off.getContext('2d')?.putImageData(img, 0, 0)
+      stageCtx.imageSmoothingEnabled = false
+      stageCtx.drawImage(off, 0, 0, stageCanvas.width, stageCanvas.height)
+      fpsFrames++
+      const now = performance.now()
+      if (now - fpsT0 > 500) {
+        fpsEl.textContent = `${Math.round((fpsFrames * 1000) / (now - fpsT0))} fps`
+        fpsFrames = 0
+        fpsT0 = now
+      }
+    }
+  } catch {
+    /* child not up yet */
+  }
+}
+
+function finishRun(r: {
+  stdout: string
+  stderr: string
+  exit: number
+  timed_out: boolean
+}): void {
+  let out = ''
+  if (r.stdout) out += r.stdout
+  if (r.stderr) out += (out ? '\n[stderr] ' : '[stderr] ') + r.stderr
+  out += `\n[exit ${r.exit}${r.timed_out ? ', timed out' : ''}]`
+  consoleEl.textContent = out.trim() || '(no output)'
+}
+
+async function startRun(): Promise<void> {
+  consoleEl.textContent = 'running…'
+  lastFrame = u32max
+  downKeys.clear()
+  running = true
+  stopBtn.style.display = 'block'
+  fpsT0 = performance.now()
+  fpsFrames = 0
+  const tracing = memTraceEl.checked
+  lastMemState = { boxes: [], edges: [], live: false }
+  memListEl.style.display = tracing ? 'block' : 'none'
+  await invoke('run_start', { src, traceMem: tracing })
+  if (tracing) {
+    void invoke<boolean>('mem_attach').then((ok) => {
+      if (ok) startMemPoll()
+    })
+  }
+  // attach while the child boots, then pump frames until run_poll lands
+  void invoke<[number, number] | null>('stage_attach')
+  requestAnimationFrame(async function loop() {
+    if (!running) return
+    await paintStage()
+    requestAnimationFrame(loop)
+  })
+  clearInterval(pollTimer)
+  pollTimer = window.setInterval(() => {
+    void invoke<unknown>('run_poll')
+      .then((r) => {
+        if (r) {
+          running = false
+          clearInterval(pollTimer)
+          stopBtn.style.display = 'none'
+          fpsEl.textContent = ''
+          finishRun(r as Parameters<typeof finishRun>[0])
+          reportLeaks()
+        }
+      })
+      .catch(() => {})
+  }, 120)
+}
+
+// ------------------------------------------------------------- memory view
+interface MemBox {
+  addr: string
+  size: number
+  line: number
+}
+interface MemEdge {
+  from: string
+  offset: number
+  to: string
+}
+interface MemState {
+  boxes: MemBox[]
+  edges: MemEdge[]
+  live: boolean
+}
+
+const memTraceEl = document.getElementById('mem-trace') as HTMLInputElement
+const memListEl = document.getElementById('mem-list') as HTMLDivElement
+let lastMemState: MemState | null = null
+let memTimer = 0
+
+function renderMemView(): void {
+  const s = lastMemState
+  if (!s) return
+  const svgNs = 'http://www.w3.org/2000/svg'
+  const svgId = 'mem-arrows'
+  let rows = ''
+  for (const b of s.boxes.slice(0, 48)) {
+    const w = Math.min(100, Math.max(8, Math.sqrt(b.size) * 2))
+    rows += `<div class="heap-box" data-addr="${b.addr}" title="${b.addr} · ${b.size} B · line ${b.line}"><i style="width:${w}%"></i><span>line ${b.line} · ${b.size} B</span></div>`
+  }
+  if (s.boxes.length === 0) rows = '<span class="m-free">(heap empty)</span>'
+  memListEl.innerHTML = `<svg id="${svgId}"></svg>` + rows
+
+  const svg = document.getElementById(svgId) as unknown as SVGSVGElement
+  const idx = new Map<string, number>()
+  s.boxes.slice(0, 48).forEach((b, i) => idx.set(b.addr, i))
+  const boxEls = memListEl.querySelectorAll('.heap-box')
+  const W = Math.max(memListEl.clientWidth, 200)
+  const H = memListEl.scrollHeight || 1
+  svg.setAttribute('width', String(W))
+  svg.setAttribute('height', String(H))
+  svg.innerHTML =
+    '<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f5e0dc"/></marker></defs>'
+  for (const e of s.edges) {
+    const fi = idx.get(e.from)
+    const ti = idx.get(e.to)
+    if (fi === undefined || ti === undefined) continue
+    const fe = boxEls[fi] as HTMLElement | undefined
+    const te = boxEls[ti] as HTMLElement | undefined
+    if (!fe || !te) continue
+    const y1 = fe.offsetTop + fe.offsetHeight / 2
+    const y2 = te.offsetTop + te.offsetHeight / 2
+    const x1 = W - 4
+    const x2 = 4
+    const mx = (x1 + x2) / 2
+    const p = document.createElementNS(svgNs, 'path')
+    p.setAttribute(
+      'd',
+      `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`,
+    )
+    p.setAttribute('fill', 'none')
+    p.setAttribute('stroke', '#f5e0dc')
+    p.setAttribute('stroke-width', '1.5')
+    p.setAttribute('marker-end', 'url(#arr)')
+    p.setAttribute('opacity', '0.85')
+    svg.appendChild(p)
+  }
+}
+
+function startMemPoll(): void {
+  clearInterval(memTimer)
+  memTimer = window.setInterval(() => {
+    void invoke<MemState>('mem_state')
+      .then((s) => {
+        lastMemState = s
+        renderMemView()
+      })
+      .catch(() => {})
+  }, 150)
+}
+
+function reportLeaks(): void {
+  clearInterval(memTimer)
+  if (!memTraceEl.checked) return
+  const boxes = lastMemState?.boxes ?? []
+  let bytes = 0
+  for (const b of boxes) bytes += b.size
+  const head =
+    boxes.length === 0
+      ? '[memory] heap fully freed — no leaks ✓'
+      : `[memory] ${boxes.length} live allocation(s), ${bytes} B not freed`
+  consoleEl.textContent += `\n${head}`
+  let i = 0
+  for (const b of boxes) {
+    if (i++ >= 8) {
+      consoleEl.textContent += `\n[memory] … ${boxes.length - 8} more`
+      break
+    }
+    consoleEl.textContent += `\n[memory]   leak: ${b.size} B from line ${b.line}`
+  }
+}
+
+stopBtn.addEventListener('click', () => {
+  void invoke('stage_stop')
+})
+
+
+// ------------------------------------------------------------- workspace/tabs
+async function refreshFiles(): Promise<void> {
+  if (!workspace) return
+  files = await invoke<string[]>('list_c_files', { root: workspace })
+  filesEl.innerHTML = ''
+  for (const f of files) {
+    const el = document.createElement('div')
+    el.className = 'file'
+    el.textContent = f
+    el.addEventListener('click', () => void openTab(f))
+    filesEl.appendChild(el)
+  }
+}
+
+async function openTab(rel: string): Promise<void> {
+  if (Array.from(tabsEl.children).some((t) => (t as HTMLElement).dataset.path === rel)) {
+    activateTab(rel)
+    return
+  }
+  const content =
+    fileCache.get(rel) ?? (await invoke<string>('read_file', { root: workspace, rel }))
+  fileCache.set(rel, content)
+  savedCache.set(rel, content)
+  const tab = document.createElement('div')
+  tab.className = 'tab'
+  tab.dataset.path = rel
+  tab.textContent = rel.split('/').pop() ?? rel
+  tab.addEventListener('click', () => activateTab(rel))
+  tabsEl.appendChild(tab)
+  activateTab(rel)
+}
+
+function activateTab(rel: string): void {
+  if (activePath === rel) return
+  hist.reset()
+  activePath = rel
+  src = fileCache.get(rel) ?? ''
+  srcEl.value = src
+  void render(src)
+  markDirty()
+}
+
+document.getElementById('open-folder')?.addEventListener('click', async () => {
+  const dir = await openDialog({ directory: true })
+  if (typeof dir !== 'string') return
+  workspace = dir
+  tabsEl.innerHTML = ''
+  fileCache.clear()
+  savedCache.clear()
+  activePath = null
+  await refreshFiles()
+  consoleEl.textContent = `workspace: ${dir}`
+})
+
+document.getElementById('new-file')?.addEventListener('click', async () => {
+  if (!workspace) {
+    consoleEl.textContent = 'open a folder first'
+    return
+  }
+  const name = window.prompt('New file name:', 'main.c')
+  if (!name) return
+  const rel = name.endsWith('.c') ? name : name + '.c'
+  await invoke('write_file', { root: workspace, rel, content: NEW_TEMPLATE })
+  await refreshFiles()
+  await openTab(rel)
+})
+
+document.getElementById('save')?.addEventListener('click', saveActive)
+
+async function saveActive(): Promise<void> {
+  if (!workspace || !activePath) {
+    consoleEl.textContent = 'nothing to save — no file open'
+    return
+  }
+  await invoke('write_file', { root: workspace, rel: activePath, content: src })
+  savedCache.set(activePath, src)
+  markDirty()
+  void invoke('journal_clear')
+  consoleEl.textContent = `saved ${activePath}`
+}
+
+window.addEventListener('keydown', (e) => {
+  const ctrl = e.ctrlKey || e.metaKey
+  if (!ctrl) return
+  if (e.key === 's') {
+    e.preventDefault()
+    void saveActive()
+  } else if (e.key === 'z' && !e.shiftKey) {
+    e.preventDefault()
+    const prev = hist.undo(src)
+    if (prev !== null) {
+      src = prev
+      srcEl.value = prev
+      void render(prev)
+      markDirty()
+    }
+  } else if ((e.key === 'y' || (e.key === 'z' && e.shiftKey)) === true) {
+    e.preventDefault()
+    const next = hist.redo(src)
+    if (next !== null) {
+      src = next
+      srcEl.value = next
+      void render(next)
+      markDirty()
+    }
+  }
+})
+
+srcEl.addEventListener('input', () => {
+  hist.push(src, 'type')
+  src = srcEl.value
+  void render(src)
+  markDirty()
+})
+srcEl.addEventListener('blur', () => void canonicalize())
+
+// ------------------------------------------------------------------ pan/zoom
+let panning = false
+let lastX = 0
+let lastY = 0
+app.stage.eventMode = 'static'
+app.stage.hitArea = app.screen
+app.stage.on('pointerdown', (e) => {
+  const r = hostEl.getBoundingClientRect()
+  const w = screenToWorld(e.global.x - r.left, e.global.y - r.top)
+  if (hitTestHeader(roots, w.x, w.y)) return
+  panning = true
+  lastX = e.global.x
+  lastY = e.global.y
+})
+app.stage.on('pointermove', (e) => {
+  if (!panning) return
+  world.x += e.global.x - lastX
+  world.y += e.global.y - lastY
+  lastX = e.global.x
+  lastY = e.global.y
+})
+window.addEventListener('pointerup', () => (panning = false))
+hostEl.addEventListener(
+  'wheel',
+  (e) => {
+    e.preventDefault()
+    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1
+    const mx = e.offsetX
+    const my = e.offsetY
+    const wx = (mx - world.x) / world.scale.x
+    const wy = (my - world.y) / world.scale.y
+    world.scale.set(world.scale.x * factor)
+    world.x = mx - wx * world.scale.x
+    world.y = my - wy * world.scale.y
+  },
+  { passive: false },
+)
+
+for (const tpl of TEMPLATES) {
+  const el = document.createElement('div')
+  el.className = `pal pal-${tpl.cat}`
+  el.dataset.cat = tpl.cat
+  el.textContent = tpl.name
+  el.addEventListener('pointerdown', (e) => {
+    if (el.classList.contains('locked')) {
+      e.preventDefault()
+      return
+    }
+    e.preventDefault()
+    startHtmlDrag(e, { label: tpl.name, snippet: tpl.snippet })
+  })
+  paletteEl.appendChild(el)
+}
+
+// ---------------------------------------------------------------- academy
+interface ProfileOut {
+  xp: number
+  completed: string[]
+  unlocked: string[]
+}
+interface LevelInfo {
+  id: string
+  world: number
+  title: string
+  xp: number
+  done: boolean
+}
+
+const xpBadge = document.getElementById('xp-badge') as HTMLSpanElement
+const levelSelect = document.getElementById('level-select') as HTMLSelectElement
+const hintBtn = document.getElementById('hint-btn') as HTMLButtonElement
+let profile: ProfileOut | null = null
+let hints: string[] = []
+let hintTier = 0
+
+function renderPaletteLocks(): void {
+  if (!profile) return
+  for (const chip of Array.from(paletteEl.children) as HTMLElement[]) {
+    const cat = chip.dataset.cat ?? ''
+    const locked = !profile.unlocked.includes(cat)
+    chip.classList.toggle('locked', locked)
+    if (locked) chip.title = `Locked — complete ${cat} levels in the Academy`
+    else chip.removeAttribute('title')
+  }
+}
+
+async function refreshProfile(): Promise<void> {
+  try {
+    profile = await invoke<ProfileOut>('profile_get')
+    xpBadge.textContent = `★ ${profile.xp} XP`
+    renderPaletteLocks()
+  } catch {
+    /* profile optional */
+  }
+}
+
+async function refreshLevels(): Promise<void> {
+  try {
+    const levels = await invoke<LevelInfo[]>('academy_levels')
+    levelSelect.innerHTML = ''
+    for (const l of levels) {
+      const o = document.createElement('option')
+      o.value = l.id
+      o.textContent = `W${l.world}${l.done ? ' ✓' : ''} · ${l.title} (${l.xp}xp)`
+      levelSelect.appendChild(o)
+    }
+  } catch {
+    /* academy dir may be missing */
+  }
+}
+
+document.getElementById('level-load')?.addEventListener('click', async () => {
+  const id = levelSelect.value
+  if (!id) return
+  try {
+    const l = await invoke<{ starter: string; hints: string[] }>('academy_load', { levelId: id })
+    setSrc(l.starter)
+    hints = l.hints
+    hintTier = 0
+    updateHintBtn()
+    consoleEl.textContent = `[academy] ${id} loaded — ${hints.length} hints available. Write code, press Check!`
+  } catch (e) {
+    consoleEl.textContent = String(e)
+  }
+})
+
+function updateHintBtn(): void {
+  hintBtn.textContent =
+    hints.length === 0 ? 'Hint' : `Hint (${Math.min(hintTier + 1, hints.length)}/${hints.length})`
+  hintBtn.disabled = hints.length === 0 || hintTier >= hints.length
+}
+
+hintBtn?.addEventListener('click', () => {
+  if (hintTier >= hints.length) return
+  consoleEl.textContent += `\n[hint ${hintTier + 1}/3] ${hints[hintTier]}`
+  consoleEl.scrollTop = consoleEl.scrollHeight
+  hintTier++
+  updateHintBtn()
+})
+
+document.getElementById('check-btn')?.addEventListener('click', async () => {
+  const id = levelSelect.value
+  if (!id || running) return
+  consoleEl.textContent = '[academy] checking…'
+  try {
+    const r = await invoke<{ passed: boolean; results: { index: number; ok: boolean }[]; xp_awarded: number; total_xp: number }>(
+      'academy_check',
+      { levelId: id, src },
+    )
+    if (r.passed) {
+      consoleEl.textContent =
+        r.xp_awarded > 0
+          ? `[academy] PASSED ✓  +${r.xp_awarded} XP (total ${r.total_xp})`
+          : `[academy] PASSED ✓  (already completed before — no extra XP)`
+      await refreshProfile()
+      await refreshLevels()
+    } else {
+      const bad = r.results.filter((x) => !x.ok).map((x) => `test[${x.index}]`)
+      consoleEl.textContent = `[academy] failed hidden tests: ${bad.join(', ')} — take a hint?`
+    }
+  } catch (e) {
+    consoleEl.textContent = String(e)
+  }
+})
+
+void refreshProfile()
+void refreshLevels()
+void recoverJournal()
+
+// ------------------------------------------------------- theme + keybinds
+const themeBtn = document.getElementById('theme-toggle') as HTMLButtonElement
+
+function setTheme(t: 'dark' | 'light'): void {
+  document.documentElement.dataset.theme = t
+  themeBtn.textContent = t === 'dark' ? '☾' : '☀'
+  localStorage.setItem('theme', t)
+}
+
+setTheme((localStorage.getItem('theme') as 'dark' | 'light') ?? 'dark')
+themeBtn.addEventListener('click', () =>
+  setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'),
+)
+
+// ------------------------------------------------- autosave crash journal
+let journalTimer = 0
+
+function journalSchedule(): void {
+  clearTimeout(journalTimer)
+  journalTimer = window.setTimeout(() => {
+    if (src.trim().length > 0) void invoke('journal_write', { path: activePath ?? '', content: src })
+  }, 2000)
+}
+
+async function recoverJournal(): Promise<void> {
+  try {
+    const j = await invoke<{ path: string; content: string; age_secs: number } | null>('journal_read')
+    if (j && j.content.trim()) {
+      src = j.content
+      srcEl.value = src
+      void render(src)
+      consoleEl.textContent = `[recovery] unsaved work from ${Math.round(j.age_secs)}s ago restored${j.path ? ` (${j.path})` : ''} — Ctrl+S to keep it`
+    }
+  } catch {
+    /* no journal */
+  }
+}
+
+srcEl.addEventListener('input', () => journalSchedule())
+window.addEventListener('beforeunload', () => {
+  // best effort: flush synchronously-ish; tauri invoke is async but fast enough
+  if (src.trim()) void invoke('journal_write', { path: activePath ?? '', content: src })
+})
+
+// keybindings: Ctrl+Enter / F5 run, Ctrl+B sidebar toggle
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'F5' || (e.ctrlKey && e.key === 'Enter')) {
+    e.preventDefault()
+    if (!running) void startRun()
+    return
+  }
+  if (e.ctrlKey && e.key.toLowerCase() === 'b') {
+    e.preventDefault()
+    const sb = document.getElementById('sidebar') as HTMLElement
+    sb.style.display = sb.style.display === 'none' ? 'flex' : 'none'
+    window.dispatchEvent(new Event('resize'))
+  }
+})
+
+// --------------------------------------------------------- onboarding tour
+const TOUR_STEPS: [string, string][] = [
+  ['Welcome to Block-IDE', 'Real C code on disk is the truth. Blocks are a live view of it — break either one and they stay in sync.'],
+  ['Drag & edit blocks', 'Drag chips from the palette into loops or main. Double-click any block to edit its text. Drag a block to move it.'],
+  ['Run & see', 'Ctrl+Enter runs your program. Output lands in the console, graphics in the Stage below, memory boxes appear when you tick "memory".'],
+  ['Learn in the Academy', 'Pick a level in the sidebar, press Load, solve it, then Check to earn XP. New block kinds unlock as you go.'],
+]
+
+function startTour(): void {
+  const overlay = document.getElementById('tour') as HTMLDivElement
+  let step = 0
+  const title = document.getElementById('tour-title') as HTMLHeadingElement
+  const body = document.getElementById('tour-body') as HTMLParagraphElement
+  const dots = document.getElementById('tour-dots') as HTMLSpanElement
+  const next = document.getElementById('tour-next') as HTMLButtonElement
+  const show = (): void => {
+    ;[title.textContent, body.textContent] = TOUR_STEPS[step]
+    dots.textContent = `${step + 1} / ${TOUR_STEPS.length}`
+    next.textContent = step === TOUR_STEPS.length - 1 ? 'Start coding' : 'Next'
+  }
+  overlay.style.display = 'flex'
+  show()
+  next.onclick = () => {
+    step++
+    if (step >= TOUR_STEPS.length) {
+      overlay.style.display = 'none'
+      localStorage.setItem('tour-done', '1')
+      return
+    }
+    show()
+  }
+}
+if (!localStorage.getItem('tour-done')) setTimeout(startTour, 400)
+
+
+srcEl.value = src
+void render(src)
+void refreshDiags()

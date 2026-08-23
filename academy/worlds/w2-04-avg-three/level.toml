@@ -1,0 +1,37 @@
+id = "w2-04-avg-three"
+world = 2
+title = "Average of Three"
+xp = 15
+starter = """#include <stdio.h>
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "1 2 3\n"
+stdout = "2\n"
+exit = 0
+
+[[tests]]
+stdin = "10 10 13\n"
+stdout = "11\n"
+exit = 0
+
+[[tests]]
+stdin = "-3 -3 -6\n"
+stdout = "-4\n"
+exit = 0
+
+[[hints]]
+text = 'Read three ints: scanf("%d %d %d", &a, &b, &c).'
+
+[[hints]]
+text = 'Add them, then divide by 3 - integers only.'
+
+[[hints]]
+text = '(a + b + c) / 3 truncates toward zero; that is what we want.'
+
+[solution]
+path = "solution.c"

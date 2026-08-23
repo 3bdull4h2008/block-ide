@@ -1,0 +1,40 @@
+id = "w2-06-boss-calculator"
+world = 2
+title = "BOSS: Mini Calculator"
+xp = 30
+starter = """#include <stdio.h>
+
+/* Boss battle! Read expressions like 12 + 30 and print
+   the result. Support + - and *. */
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "12 + 30\n"
+stdout = "42\n"
+exit = 0
+
+[[tests]]
+stdin = "9 - 4\n"
+stdout = "5\n"
+exit = 0
+
+[[tests]]
+stdin = "6 * 7\n"
+stdout = "42\n"
+exit = 0
+
+[[hints]]
+text = 'Read the operator as a char: scanf("%d %c %d", &a, &op, &b). The spaces in the format skip whitespace.'
+
+[[hints]]
+text = "Compare chars with single quotes: if (op == '+') ..."
+
+[[hints]]
+text = 'Set a result variable per operation; print it once at the end.'
+
+[solution]
+path = "solution.c"

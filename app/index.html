@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Block-IDE</title>
+  </head>
+  <body>
+    <div id="app">
+      <div id="toolbar">
+        <strong>Block-IDE</strong>
+        <span id="xp-badge">☆ 0 XP</span>
+        <button id="open-folder">Open Folder</button>
+        <button id="new-file">New File</button>
+        <button id="save">Save (Ctrl+S)</button>
+        <span class="sep"></span>
+        <span class="hint">Ctrl+Enter run · Ctrl+Z/Y undo/redo · Ctrl+S save · double-click a block to edit</span>
+        <button id="theme-toggle" title="Toggle light/dark theme">☾</button>
+        <button id="run">▶ Run</button>
+        <span id="status"></span>
+      </div>
+      <div id="sidebar">
+        <div id="files"></div>
+        <div id="palette"></div>
+        <div id="academy">
+          <strong>Academy</strong>
+          <select id="level-select"></select>
+          <div class="row">
+            <button id="level-load">Load</button>
+            <button id="hint-btn" disabled>Hint</button>
+            <button id="check-btn">Check</button>
+          </div>
+        </div>
+      </div>
+      <div id="main-col">
+        <div id="tabs"></div>
+        <textarea id="src" spellcheck="false"></textarea>
+      </div>
+      <div id="canvas-host"></div>
+      <pre id="console">console</pre>
+      <div id="stage-wrap">
+        <div id="stage-head">
+          <span>Stage</span>
+          <label id="mem-toggle"><input type="checkbox" id="mem-trace" /> memory</label>
+          <span id="stage-fps"></span>
+          <button id="stage-stop" title="Stop program">&#9632;</button>
+        </div>
+        <canvas id="stage" width="320" height="240"></canvas>
+        <div id="mem-list"></div>
+      </div>
+    </div>
+    <div id="tour" style="display:none">
+      <div id="tour-card">
+        <h2 id="tour-title"></h2>
+        <p id="tour-body"></p>
+        <div class="row">
+          <span class="step-dots" id="tour-dots"></span>
+          <button id="tour-next">Next</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

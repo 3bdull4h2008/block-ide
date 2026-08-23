@@ -1,0 +1,32 @@
+id = "w1-03-echo-number"
+world = 1
+title = "Echo a Number"
+xp = 10
+starter = """#include <stdio.h>
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "42\n"
+stdout = "you said 42\n"
+exit = 0
+
+[[tests]]
+stdin = "7\n"
+stdout = "you said 7\n"
+exit = 0
+
+[[hints]]
+text = 'scanf("%d", &n) reads an integer. Remember the &!'
+
+[[hints]]
+text = 'printf can print it back inside a sentence: printf("you said %d\n", n);'
+
+[[hints]]
+text = "Keep the exact wording: you said, then a space, then the number."
+
+[solution]
+path = "solution.c"

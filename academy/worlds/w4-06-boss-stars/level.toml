@@ -1,0 +1,39 @@
+id = "w4-06-boss-stars"
+world = 4
+title = "BOSS: Star Pyramid"
+xp = 30
+starter = """#include <stdio.h>
+
+/* Boss battle! Print a centered pyramid of stars, height n.
+   Height 3:
+     *
+    ***
+   *****
+*/
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "3\n"
+stdout = "  *\n ***\n*****\n"
+exit = 0
+
+[[tests]]
+stdin = "1\n"
+stdout = "*\n"
+exit = 0
+
+[[hints]]
+text = 'Row i has (n-i) spaces, then (2*i-1) stars.'
+
+[[hints]]
+text = 'Two nested loops inside your row loop: one for spaces, one for stars.'
+
+[[hints]]
+text = 'Height 1 is just "*" - a perfect first test case.'
+
+[solution]
+path = "solution.c"

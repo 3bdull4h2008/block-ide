@@ -1,0 +1,38 @@
+id = "w5-06-boss-target-practice"
+world = 5
+title = "BOSS: Target Practice"
+xp = 35
+starter = """#include <stdio.h>
+#include "stage.h"
+
+/* Boss battle! Read T targets, then S shots. A shot HITS a target
+   when |dx| <= 2 and |dy| <= 2. Draw the scene and print:
+   "<hits> of <S> shots hit"
+*/
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "1\n5 5\n3\n5 5\n0 0\n6 7\n"
+stdout = "2 of 3 shots hit\n"
+exit = 0
+
+[[tests]]
+stdin = "2\n0 0\n10 10\n4\n0 0\n1 1\n9 9\n20 20\n"
+stdout = "3 of 4 shots hit\n"
+exit = 0
+
+[[hints]]
+text = 'Write a helper: static int hit(int tx,int ty,int sx,int sy) with abs(dx)<=2 && abs(dy)<=2.'
+
+[[hints]]
+text = 'Count shots (not target-pairs): one shot can hit at most... well, count it once even if two targets overlap it.'
+
+[[hints]]
+text = 'stage_init(320,240), stage_rect for each shot/target, then ~20 stage_tick() frames before printing.'
+
+[solution]
+path = "solution.c"

@@ -1,0 +1,33 @@
+id = "w1-01-hello"
+world = 1
+title = "Hello, World"
+xp = 10
+starter = """#include <stdio.h>
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = ""
+stdout = "hello\n"
+exit = 0
+
+# anti-hardcode probe: same program must not depend on input
+[[tests]]
+stdin = "x"
+stdout = "hello\n"
+exit = 0
+
+[[hints]]
+text = "printf prints text. It lives in <stdio.h>."
+
+[[hints]]
+text = 'The text goes inside quotes: printf("hello\n");'
+
+[[hints]]
+text = 'Escape the newline as \\n so each test sees its own line.'
+
+[solution]
+path = "solution.c"

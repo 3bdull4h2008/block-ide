@@ -1,0 +1,40 @@
+id = "w5-05-swap-pointers"
+world = 5
+title = "Swap via Pointers"
+xp = 25
+starter = """#include <stdio.h>
+
+static void swap(int *a, int *b) {
+    /* make the magic happen through the pointers */
+}
+
+int main(void) {
+    int a, b;
+    if (scanf("%d %d", &a, &b) != 2) return 1;
+    swap(&a, &b);
+    printf("%d %d\n", a, b);
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "3 7\n"
+stdout = "7 3\n"
+exit = 0
+
+[[tests]]
+stdin = "10 -2\n"
+stdout = "-2 10\n"
+exit = 0
+
+[[hints]]
+text = '*a means "the int that a points at" - read AND write through it.'
+
+[[hints]]
+text = 'Save *a into a temp first, or you lose it: int t = *a;'
+
+[[hints]]
+text = 'Then *a = *b; and *b = t; - the caller sees the change because you worked on the ORIGINAL memory.'
+
+[solution]
+path = "solution.c"

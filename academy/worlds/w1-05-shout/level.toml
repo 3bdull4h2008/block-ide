@@ -1,0 +1,32 @@
+id = "w1-05-shout"
+world = 1
+title = "Shout It"
+xp = 10
+starter = """#include <stdio.h>
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "wow\n"
+stdout = "wow!\n"
+exit = 0
+
+[[tests]]
+stdin = "levelup\n"
+stdout = "levelup!\n"
+exit = 0
+
+[[hints]]
+text = "Read one word like in Echo and Echo a Number."
+
+[[hints]]
+text = 'The exclamation mark is just another character: "%s!"'
+
+[[hints]]
+text = 'Full line: printf("%s!\n", w);'
+
+[solution]
+path = "solution.c"

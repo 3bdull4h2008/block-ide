@@ -1,0 +1,39 @@
+id = "w4-03-factorial"
+world = 4
+title = "Factorial Factory"
+xp = 20
+starter = """#include <stdio.h>
+
+/* n! = 1 * 2 * 3 * ... * n, and 0! = 1. */
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "5\n"
+stdout = "120\n"
+exit = 0
+
+[[tests]]
+stdin = "0\n"
+stdout = "1\n"
+exit = 0
+
+[[tests]]
+stdin = "10\n"
+stdout = "3628800\n"
+exit = 0
+
+[[hints]]
+text = 'Start your product at 1 (never 0!).'
+
+[[hints]]
+text = 'Multiply i into the product for every i from 2 to n.'
+
+[[hints]]
+text = '10! already needs an unsigned long long - print with %llu.'
+
+[solution]
+path = "solution.c"

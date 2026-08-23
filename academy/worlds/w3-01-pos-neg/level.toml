@@ -1,0 +1,37 @@
+id = "w3-01-pos-neg"
+world = 3
+title = "Sign Detector"
+xp = 15
+starter = """#include <stdio.h>
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "5\n"
+stdout = "positive\n"
+exit = 0
+
+[[tests]]
+stdin = "-8\n"
+stdout = "negative\n"
+exit = 0
+
+[[tests]]
+stdin = "0\n"
+stdout = "zero\n"
+exit = 0
+
+[[hints]]
+text = 'Three cases: greater than 0, less than 0, exactly 0.'
+
+[[hints]]
+text = 'else if chains are perfect here.'
+
+[[hints]]
+text = 'printf("positive\n") — watch spelling.'
+
+[solution]
+path = "solution.c"

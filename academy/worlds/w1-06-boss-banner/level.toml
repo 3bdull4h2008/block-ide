@@ -1,0 +1,38 @@
+id = "w1-06-boss-banner"
+world = 1
+title = "BOSS: The Banner"
+xp = 30
+starter = """#include <stdio.h>
+
+/* Boss battle! Print this banner EXACTLY:
+ +------------+
+ |  BLOCK-IDE |
+ +------------+
+*/
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = ""
+stdout = "+------------+\n|  BLOCK-IDE |\n+------------+\n"
+exit = 0
+
+[[tests]]
+stdin = "zzz\n"
+stdout = "+------------+\n|  BLOCK-IDE |\n+------------+\n"
+exit = 0
+
+[[hints]]
+text = "Three printf lines. Copy the characters one by one."
+
+[[hints]]
+text = "The box edges are plus signs, dashes, and pipes: | is shift-backslash."
+
+[[hints]]
+text = 'Watch the two spaces after the pipe in "|  BLOCK-IDE |".'
+
+[solution]
+path = "solution.c"

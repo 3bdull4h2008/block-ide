@@ -1,0 +1,37 @@
+id = "w2-01-sum-two"
+world = 2
+title = "Sum Two Numbers"
+xp = 15
+starter = """#include <stdio.h>
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "3 4\n"
+stdout = "7\n"
+exit = 0
+
+[[tests]]
+stdin = "-5 12\n"
+stdout = "7\n"
+exit = 0
+
+[[tests]]
+stdin = "10 -3\n"
+stdout = "7\n"
+exit = 0
+
+[[hints]]
+text = "scanf(\"%d %d\", &a, &b) reads two integers."
+
+[[hints]]
+text = "The & gives scanf the ADDRESS of your variable — pointers sneak in early!"
+
+[[hints]]
+text = 'Print with %d: printf("%d\n", a + b);'
+
+[solution]
+path = "solution.c"

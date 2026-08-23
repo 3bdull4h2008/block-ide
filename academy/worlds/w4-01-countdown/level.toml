@@ -1,0 +1,32 @@
+id = "w4-01-countdown"
+world = 4
+title = "Countdown"
+xp = 15
+starter = """#include <stdio.h>
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "5\n"
+stdout = "5\n4\n3\n2\n1\n"
+exit = 0
+
+[[tests]]
+stdin = "3\n"
+stdout = "3\n2\n1\n"
+exit = 0
+
+[[hints]]
+text = 'Start at n and loop while i >= 1, going DOWN: i--.'
+
+[[hints]]
+text = 'for (int i = n; i >= 1; i--)'
+
+[[hints]]
+text = 'One number per line.'
+
+[solution]
+path = "solution.c"

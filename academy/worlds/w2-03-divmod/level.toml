@@ -1,0 +1,37 @@
+id = "w2-03-divmod"
+world = 2
+title = "Divide with Leftovers"
+xp = 15
+starter = """#include <stdio.h>
+
+int main(void) {
+    int a, b;
+    if (scanf("%d %d", &a, &b) != 2) return 1;
+
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "17 5\n"
+stdout = "3 2\n"
+exit = 0
+
+[[tests]]
+stdin = "40 8\n"
+stdout = "5 0\n"
+exit = 0
+
+[[hints]]
+text = "Integer division / throws away the fraction: 17/5 is 3."
+
+[[hints]]
+text = "The remainder operator % gives the leftovers: 17 % 5 is 2."
+
+[[hints]]
+text = 'printf("%d %d\n", a / b, a % b); prints both, space separated.'
+
+[solution]
+path = "solution.c"
+
+

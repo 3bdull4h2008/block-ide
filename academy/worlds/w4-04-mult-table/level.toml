@@ -1,0 +1,32 @@
+id = "w4-04-mult-table"
+world = 4
+title = "Multiplication Table"
+xp = 20
+starter = """#include <stdio.h>
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "3\n"
+stdout = "1 x 3 = 3\n2 x 3 = 6\n3 x 3 = 9\n"
+exit = 0
+
+[[tests]]
+stdin = "1\n"
+stdout = "1 x 1 = 1\n"
+exit = 0
+
+[[hints]]
+text = 'Loop i from 1 to n and print one row per pass.'
+
+[[hints]]
+text = 'Format: "%d x %d = %d" with i, n, and i*n.'
+
+[[hints]]
+text = 'Spaces surround the x and the = signs.'
+
+[solution]
+path = "solution.c"

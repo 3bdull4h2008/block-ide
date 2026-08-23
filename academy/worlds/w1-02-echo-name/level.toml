@@ -1,0 +1,32 @@
+id = "w1-02-echo-name"
+world = 1
+title = "Read and Echo"
+xp = 15
+starter = """#include <stdio.h>
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "Ada\n"
+stdout = "hi Ada\n"
+exit = 0
+
+[[tests]]
+stdin = "Grace\n"
+stdout = "hi Grace\n"
+exit = 0
+
+[[hints]]
+text = "scanf(\"%s\", name) reads one word into char name[64]."
+
+[[hints]]
+text = 'printf can splice it back: printf("hi %s\n", name);'
+
+[[hints]]
+text = "%s prints a string; the newline in quotes ends your output line."
+
+[solution]
+path = "solution.c"

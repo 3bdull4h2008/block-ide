@@ -1,0 +1,39 @@
+id = "w4-02-sum-to-n"
+world = 4
+title = "Gauss's Shortcut"
+xp = 15
+starter = """#include <stdio.h>
+
+/* Add every number from 1 to n. */
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "10\n"
+stdout = "55\n"
+exit = 0
+
+[[tests]]
+stdin = "100\n"
+stdout = "5050\n"
+exit = 0
+
+[[tests]]
+stdin = "1\n"
+stdout = "1\n"
+exit = 0
+
+[[hints]]
+text = 'Keep an accumulator: int s = 0; then add each i inside the loop.'
+
+[[hints]]
+text = 'for (int i = 1; i <= n; i++) s += i;'
+
+[[hints]]
+text = 'Gauss says the answer is n*(n+1)/2 - a great way to double-check!'
+
+[solution]
+path = "solution.c"

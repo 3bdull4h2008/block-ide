@@ -1,0 +1,32 @@
+id = "w3-02-max-two"
+world = 3
+title = "Max of Two"
+xp = 15
+starter = """#include <stdio.h>
+
+int main(void) {
+    return 0;
+}
+"""
+
+[[tests]]
+stdin = "3 9\n"
+stdout = "9\n"
+exit = 0
+
+[[tests]]
+stdin = "-2 -7\n"
+stdout = "-2\n"
+exit = 0
+
+[[hints]]
+text = 'Compare with > or >=.'
+
+[[hints]]
+text = 'Store the winner first, print once at the end.'
+
+[[hints]]
+text = 'winner = a; if (b > winner) winner = b;'
+
+[solution]
+path = "solution.c"
