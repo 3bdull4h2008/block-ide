@@ -9,7 +9,8 @@
     "copytcc": "node -e \"require('fs').cpSync('../../third_party/tcc/tcc','src-tauri/resources/tcc',{recursive:true})\"",
     "preview": "vite preview",
     "tauri": "tauri",
-    "app": "tauri dev",
+    "app": "npm run build && npm run copytcc && tauri dev",
+    "app:hmr": "tauri dev --config tauri-dev.conf.json",
     "installer": "tauri build --bundles nsis"
   },
     "devDependencies": {

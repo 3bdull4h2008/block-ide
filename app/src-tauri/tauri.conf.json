@@ -5,8 +5,6 @@
   "identifier": "com.blockide.dev",
   "build": {
     "frontendDist": "../dist",
-    "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build && npm run copytcc"
   },
   "app": {
