@@ -242,10 +242,22 @@ export function hitTestHeader(roots: BBlock[], wx: number, wy: number): BBlock |
   return hit
 }
 
+/** Scratch-style hue coding, harmonized to the sea-blue family.
+ *  statement = sea blue (the main color), control = play orange,
+ *  function = violet, comment = sand. BORDER holds a darker shade of
+ *  each fill for the chunky 3px clay outline. */
 export const COLORS: Record<Cat, number> = {
-  function: 0x4c97ff,
-  control: 0xffab19,
-  statement: 0x9966ff,
-  comment: 0xffe28a,
-  error: 0x9aa0a6,
+  function: 0x7c5ce0,
+  control: 0xff9f1a,
+  statement: 0x0891b2,
+  comment: 0xffe9a8,
+  error: 0x94a3b8,
+}
+
+export const BORDER: Record<Cat, number> = {
+  function: 0x5a3fc0,
+  control: 0xd97e06,
+  statement: 0x066a85,
+  comment: 0xd9b25a,
+  error: 0x64748b,
 }

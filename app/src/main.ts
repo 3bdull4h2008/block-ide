@@ -8,6 +8,7 @@ import {
   hitTestHeader,
   flatten,
   COLORS,
+  BORDER,
   PAD,
   ROW_H,
   type BBlock,
@@ -65,7 +66,7 @@ const tabsEl = document.getElementById('tabs') as HTMLDivElement
 const filesEl = document.getElementById('files') as HTMLDivElement
 
 const app = new Application()
-await app.init({ resizeTo: hostEl, background: '#1e1e2e', antialias: true })
+await app.init({ resizeTo: hostEl, background: '#dff3fa', antialias: true })
 hostEl.appendChild(app.canvas)
 const world = new Container()
 app.stage.addChild(world)
@@ -185,14 +186,31 @@ async function refreshDiags(): Promise<void> {
   }
 }
 
+function mixWhite(c: number, f: number): number {
+  const r = (c >> 16) & 255
+  const g = (c >> 8) & 255
+  const b = c & 255
+  const m = (v: number) => Math.round(v + (255 - v) * f)
+  return (m(r) << 16) | (m(g) << 8) | m(b)
+}
+
 function drawBlock(b: BBlock): void {
   const g = new Graphics()
+  const fill = COLORS[b.cat] ?? COLORS.statement
+  const edge = BORDER[b.cat] ?? BORDER.statement
   if (b.sticky) {
-    g.roundRect(b.x, b.y, b.w, b.h, 4)
-    g.fill({ color: COLORS.comment })
+    g.roundRect(b.x, b.y, b.w, b.h, 8)
+    g.fill({ color: fill })
+    g.roundRect(b.x, b.y, b.w, b.h, 8)
+    g.stroke({ width: 3, color: edge })
     const t = new Text({
       text: b.label,
-      style: { fontFamily: 'Consolas, monospace', fontSize: 13, fill: 0x5b4a00 },
+      style: {
+        fontFamily: "'Baloo 2', 'Segoe UI', sans-serif",
+        fontSize: 13,
+        fontWeight: '600',
+        fill: '#6b4d00',
+      },
     })
     t.x = b.x + PAD
     t.y = b.y + (ROW_H - t.height) / 2
@@ -201,17 +219,38 @@ function drawBlock(b: BBlock): void {
     world.addChild(g, t)
     return
   }
-  g.roundRect(b.x, b.y, b.w, b.h, b.container ? 8 : 6)
-  g.fill({ color: COLORS[b.cat] })
-  g.roundRect(b.x, b.y, 5, Math.min(ROW_H, b.h), 2)
-  g.fill({ color: 0x00000040 })
+  const radius = b.container ? 12 : 9
   if (b.container) {
-    g.roundRect(b.x, b.y, b.w, b.h, 8)
-    g.stroke({ width: 1, color: 0x00000030 })
+    // Scratch-style two-tone: light body, solid header
+    g.roundRect(b.x, b.y, b.w, b.h, radius)
+    g.fill({ color: mixWhite(fill, 0.62) })
+    g.roundRect(b.x, b.y, b.w, ROW_H, radius)
+    g.fill({ color: fill })
+    g.roundRect(b.x, b.y + ROW_H - 6, b.w, 6, 3)
+    g.fill({ color: fill })
+    g.roundRect(b.x, b.y, b.w, b.h, radius)
+    g.stroke({ width: 3, color: edge })
+    g.roundRect(b.x + 2, b.y + 2, Math.max(0, b.w - 4), 3, 2)
+    g.fill({ color: 0xffffff, alpha: 0.4 })
+  } else {
+    g.roundRect(b.x, b.y, b.w, b.h, radius)
+    g.fill({ color: fill })
+    g.roundRect(b.x + 2, b.y + 2, Math.max(0, b.w - 4), 3, 2)
+    g.fill({ color: 0xffffff, alpha: 0.35 })
+    g.roundRect(b.x, b.y, b.w, b.h, radius)
+    g.stroke({ width: 3, color: edge })
   }
+  // category notch on the header row
+  g.roundRect(b.x + 5, b.y + 5, 5, Math.min(ROW_H - 10, b.h - 10), 2)
+  g.fill({ color: 0x000000, alpha: 0.22 })
   const label = new Text({
     text: b.label,
-    style: { fontFamily: 'Consolas, monospace', fontSize: 13, fill: 0xffffff },
+    style: {
+      fontFamily: "'Baloo 2', 'Segoe UI', sans-serif",
+      fontSize: 13,
+      fontWeight: '600',
+      fill: '#ffffff',
+    },
   })
   label.x = b.x + PAD
   label.y = b.y + (ROW_H - label.height) / 2
@@ -864,9 +903,11 @@ function setTheme(t: 'dark' | 'light'): void {
   document.documentElement.dataset.theme = t
   themeBtn.textContent = t === 'dark' ? '☾' : '☀'
   localStorage.setItem('theme', t)
+  app.renderer.background.color = t === 'dark' ? 0x0c3543 : 0xdff3fa
+  world.emit('blockide:theme', t)
 }
 
-setTheme((localStorage.getItem('theme') as 'dark' | 'light') ?? 'dark')
+setTheme((localStorage.getItem('theme') as 'dark' | 'light') ?? 'light')
 themeBtn.addEventListener('click', () =>
   setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'),
 )
