@@ -8,7 +8,9 @@
     "build": "tsc && vite build",
     "copytcc": "node -e \"require('fs').cpSync('../../third_party/tcc/tcc','src-tauri/resources/tcc',{recursive:true})\"",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "app": "tauri dev",
+    "installer": "tauri build --bundles nsis"
   },
     "devDependencies": {
         "@tauri-apps/cli": "^2.11.4",
