@@ -168,7 +168,7 @@ function drawDiagOverlay(ds: Diag[]): void {
       Math.min(ROW_H, smallest.h) + 4,
       8,
     )
-    g.stroke({ width: 2.5, color: d.severity.includes('error') ? 0xf38ba8 : 0xf9e2af })
+    g.stroke({ width: 2.5, color: d.severity.includes('error') ? 0xe5484d : 0xffc93c })
   }
   overlay.addChild(g)
 }
@@ -192,6 +192,63 @@ function mixWhite(c: number, f: number): number {
   const b = c & 255
   const m = (v: number) => Math.round(v + (255 - v) * f)
   return (m(r) << 16) | (m(g) << 8) | m(b)
+}
+
+// Scratch puzzle geometry: a mouth recess on the top edge receives the tab
+// protruding from the bottom of the block above.
+const NX = 10 // mouth/tab x offset
+const TW = 18 // tab width
+const TD = 4.5 // tab depth
+const BR = 8 // corner radius
+
+function statementPath(g: Graphics, ox: number, oy: number, w: number, h: number): void {
+  g.moveTo(ox, oy + BR)
+  g.quadraticCurveTo(ox, oy, ox + BR, oy)
+  g.lineTo(ox + NX, oy)
+  g.lineTo(ox + NX + 3, oy + TD)
+  g.lineTo(ox + NX + TW - 3, oy + TD)
+  g.lineTo(ox + NX + TW, oy)
+  g.lineTo(ox + w - BR, oy)
+  g.quadraticCurveTo(ox + w, oy, ox + w, oy + BR)
+  g.lineTo(ox + w, oy + h - BR)
+  g.quadraticCurveTo(ox + w, oy + h, ox + w - BR, oy + h)
+  g.lineTo(ox + NX + TW, oy + h)
+  g.lineTo(ox + NX + TW - 3, oy + h + TD)
+  g.lineTo(ox + NX + 3, oy + h + TD)
+  g.lineTo(ox + NX, oy + h)
+  g.lineTo(ox + BR, oy + h)
+  g.quadraticCurveTo(ox, oy + h, ox, oy + h - BR)
+  g.closePath()
+}
+
+function cHeaderPath(g: Graphics, ox: number, oy: number, w: number, h: number): void {
+  g.moveTo(ox, oy + BR)
+  g.quadraticCurveTo(ox, oy, ox + BR, oy)
+  g.lineTo(ox + NX, oy)
+  g.lineTo(ox + NX + 3, oy + TD)
+  g.lineTo(ox + NX + TW - 3, oy + TD)
+  g.lineTo(ox + NX + TW, oy)
+  g.lineTo(ox + w - BR, oy)
+  g.quadraticCurveTo(ox + w, oy, ox + w, oy + BR)
+  g.lineTo(ox + w, oy + h)
+  g.lineTo(ox, oy + h)
+  g.closePath()
+}
+
+function cBodyPath(g: Graphics, ox: number, oy: number, w: number, top: number, h: number, close: boolean): void {
+  const y0 = oy + top
+  const y1 = oy + h
+  g.moveTo(ox + w, y0)
+  g.lineTo(ox + w, y1 - BR)
+  g.quadraticCurveTo(ox + w, y1, ox + w - BR, y1)
+  g.lineTo(ox + NX + TW, y1)
+  g.lineTo(ox + NX + TW - 3, y1 + TD)
+  g.lineTo(ox + NX + 3, y1 + TD)
+  g.lineTo(ox + NX, y1)
+  g.lineTo(ox + BR, y1)
+  g.quadraticCurveTo(ox, y1, ox, y1 - BR)
+  g.lineTo(ox, y0)
+  if (close) g.closePath()
 }
 
 function drawBlock(b: BBlock): void {
@@ -219,30 +276,6 @@ function drawBlock(b: BBlock): void {
     world.addChild(g, t)
     return
   }
-  const radius = b.container ? 12 : 9
-  if (b.container) {
-    // Scratch-style two-tone: light body, solid header
-    g.roundRect(b.x, b.y, b.w, b.h, radius)
-    g.fill({ color: mixWhite(fill, 0.62) })
-    g.roundRect(b.x, b.y, b.w, ROW_H, radius)
-    g.fill({ color: fill })
-    g.roundRect(b.x, b.y + ROW_H - 6, b.w, 6, 3)
-    g.fill({ color: fill })
-    g.roundRect(b.x, b.y, b.w, b.h, radius)
-    g.stroke({ width: 3, color: edge })
-    g.roundRect(b.x + 2, b.y + 2, Math.max(0, b.w - 4), 3, 2)
-    g.fill({ color: 0xffffff, alpha: 0.4 })
-  } else {
-    g.roundRect(b.x, b.y, b.w, b.h, radius)
-    g.fill({ color: fill })
-    g.roundRect(b.x + 2, b.y + 2, Math.max(0, b.w - 4), 3, 2)
-    g.fill({ color: 0xffffff, alpha: 0.35 })
-    g.roundRect(b.x, b.y, b.w, b.h, radius)
-    g.stroke({ width: 3, color: edge })
-  }
-  // category notch on the header row
-  g.roundRect(b.x + 5, b.y + 5, 5, Math.min(ROW_H - 10, b.h - 10), 2)
-  g.fill({ color: 0x000000, alpha: 0.22 })
   const label = new Text({
     text: b.label,
     style: {
@@ -254,6 +287,38 @@ function drawBlock(b: BBlock): void {
   })
   label.x = b.x + PAD
   label.y = b.y + (ROW_H - label.height) / 2
+
+  // clay drop shadow (silhouette approximation, offset down-right)
+  g.roundRect(b.x + 2, b.y + 4, b.w, b.h + TD, b.container ? 12 : 9)
+  g.fill({ color: 0x0c3543, alpha: 0.18 })
+
+  if (b.container) {
+    // Scratch C-block: mouth header + light body + tabbed floor
+    g.roundRect(b.x + 2, b.y + 4, b.w, b.h + TD, 12)
+    g.fill({ color: 0x0c3543, alpha: 0.18 })
+    cBodyPath(g, b.x, b.y, b.w, ROW_H, b.h, true)
+    g.fill({ color: mixWhite(fill, 0.62) })
+    cHeaderPath(g, b.x, b.y, b.w, ROW_H)
+    g.fill({ color: fill })
+    g.roundRect(b.x + 3, b.y + 3, Math.max(0, b.w - 6), 3, 2)
+    g.fill({ color: 0xffffff, alpha: 0.4 })
+    cHeaderPath(g, b.x, b.y, b.w, ROW_H)
+    g.stroke({ width: 3, color: edge })
+    cBodyPath(g, b.x, b.y, b.w, ROW_H, b.h, false)
+    g.stroke({ width: 3, color: edge })
+  } else {
+    g.roundRect(b.x + 2, b.y + 4, b.w, b.h + TD, 9)
+    g.fill({ color: 0x0c3543, alpha: 0.18 })
+    statementPath(g, b.x, b.y, b.w, b.h)
+    g.fill({ color: fill })
+    g.roundRect(b.x + 3, b.y + 3, Math.max(0, b.w - 6), 3, 2)
+    g.fill({ color: 0xffffff, alpha: 0.35 })
+    statementPath(g, b.x, b.y, b.w, b.h)
+    g.stroke({ width: 3, color: edge })
+  }
+  // category notch sits on the header row
+  g.roundRect(b.x + 5, b.y + 5, 5, Math.min(ROW_H - 10, b.h - 10), 2)
+  g.fill({ color: 0x000000, alpha: 0.22 })
   world.addChild(g, label)
   g.eventMode = 'static'
   attachHeaderEvents(g, b)
@@ -291,12 +356,13 @@ function onDragMove(e: PointerEvent): void {
         target.index < kids.length
           ? kids[target.index].y
           : kids.length > 0
-            ? kids[kids.length - 1].y + kids[kids.length - 1].h
+            ? kids[kids.length - 1].y + kids[kids.length - 1].h + TD
             : target.container.y + ROW_H
+      const r = hostEl.getBoundingClientRect()
       dropbar.style.display = 'block'
-      dropbar.style.left = `${target.container.x * world.scale.x + world.x}px`
-      dropbar.style.top = `${y * world.scale.y + world.y}px`
-      dropbar.style.width = `${target.container.w * world.scale.x}px`
+      dropbar.style.left = `${r.left + (target.container.x + 4) * world.scale.x + world.x}px`
+      dropbar.style.top = `${r.top + (y - 3) * world.scale.y + world.y}px`
+      dropbar.style.width = `${Math.max(0, (target.container.w - 8) * world.scale.x)}px`
       return
     }
   }

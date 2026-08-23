@@ -569,3 +569,77 @@ select:focus-visible,
     animation-duration: 0.01ms !important;
   }
 }
+
+/* ---- theme coverage for every remaining surface ---- */
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-deep);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::selection {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+#src {
+  caret-color: var(--accent);
+  box-shadow: inset 0 0 0 0 transparent;
+}
+
+#src:focus {
+  box-shadow: inset 0 0 0 3px var(--accent-soft);
+}
+
+#canvas-host {
+  cursor: grab;
+}
+
+#canvas-host:active {
+  cursor: grabbing;
+}
+
+/* Run = Scratch flag green, so "go" reads instantly */
+#run {
+  background: var(--ok);
+  min-width: 74px;
+}
+
+#theme-toggle {
+  min-width: 34px;
+  font-size: 14px;
+}
+
+#xp-badge {
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+}
+
+.tab {
+  cursor: pointer;
+}
+
+.file {
+  cursor: pointer;
+}
+
+label {
+  cursor: pointer;
+}

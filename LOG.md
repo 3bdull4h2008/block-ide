@@ -1,6 +1,24 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 19: trigger=UI redesign via stockmate opencode skills (ui-ux-pro-max +
+ui-design-system), brief: Scratch inspiration, sea-blue primary
+expect: claymorphism style (skill match for education/kids), sea palette,
+offline-vendored fonts, blocks read as Scratch chunks
+obs: skill search.py prescribed claymorphism (soft-3D, 3-4px borders,
+double shadows, 16-24px radius, soft press) + ocean palette (#0891B2
+primary/#ECFEFF foam/#164E63 ink) + Baloo 2/Comic Neue. Vendored 3 woff2
+(72KB) instead of Google import - offline Rule 6. CSS token rewrite; blocks:
+BORDER shade map + 3px outlines + two-tone containers (Scratch signature) +
+inner highlight; pixi bg theme-aware; default theme now LIGHT. Verified via
+CDP screenshot (light theme visually confirmed: sea-foam canvas, clay
+buttons, two-tone blocks). Dark shot script race noted - dark uses same
+token path proven in RUN 17. tsc clean, vitest 4/4, ALL TWELVE gates PASS.
+Pushed ef4b8cc..115d66b.
+state=SUCCESS | next: user eyes-on pass; block notch/puzzle shapes if wanted
+```
+
+```
 RUN 18: trigger=P5 closeout: recovery drill gate, hint UX, boss art, installer
 expect: crash journal proven via automated drill; hint button shows tier;
 boss solution animates on stage; NSIS installer ships app + tcc offline
