@@ -1,6 +1,23 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 20: trigger=user report: drop indicator misplaced + extend theme coverage
+expect: dropbar lands exactly at insertion slot; puzzle-notch Scratch blocks;
+theme reaches every remaining surface
+obs: TWO REAL BUGS. (1) dropbar was canvas-relative inside a viewport-fixed
+div - appeared offset by host rect for every drag since RUN 6; fix adds
+hostEl rect + slot-top alignment incl tab depth (TD) + 4px container inset.
+(2) container body fill drew in absolute space while stroke went local
+(post-translate) - outlines offset from fills; unified to origin-parameterized
+path builders (Pixi v8 has no Graphics.translate - tsc caught it).
+Puzzle geometry shipped: mouth recess top / tab bottom / C-block floor tab /
+clay drop shadows. Theme coverage: sea scrollbars, ::selection, caret,
+grab cursor, green Run (Scratch flag), diag palette, editor focus ring.
+CDP shot verified geometry; ALL TWELVE gates PASS; pushed 645068a.
+state=SUCCESS | next: drag-drop snap ghosts + sound? (user eyes first)
+```
+
+```
 RUN 19: trigger=UI redesign via stockmate opencode skills (ui-ux-pro-max +
 ui-design-system), brief: Scratch inspiration, sea-blue primary
 expect: claymorphism style (skill match for education/kids), sea palette,
