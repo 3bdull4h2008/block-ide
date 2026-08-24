@@ -1,6 +1,25 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 21: trigger=user: snap ghosts + drop sounds + block context menu
+expect: translucent preview at insertion slot; synth blips on pick/drop/
+delete; right-click Duplicate/Delete without pan hijack
+obs: ghost drawn from real subtree dims (move) or measured chip (palette)
+at slot; sounds = Web Audio oscillator blips (no assets, gesture-gated
+context). FOUND PRE-EXISTING BUG: stage pan handler double-subtracted
+hostEl rect from Pixi-global coords - header presses panned instead of
+suppressed; fixed. Verification saga: synthetic dispatchEvent never
+reaches Pixi v8 federated pipeline; CDP Input.dispatchMouseEvent (trusted)
+does - but fresh profiles open the TOUR which covers the canvas (first
+null results were #tour intercepting). Trusted-input press sweep proved
+dragStarted+ghostDrawn+slotY on movable blocks; self-drops correctly
+rejected (isInsideRange). Context menu verified visually (clay card,
+Duplicate/Delete). Debug instrumentation removed; __hitAt kept. ALL
+TWELVE gates PASS; pushed 4deb324.
+state=SUCCESS | next: user eyes-on; optional notch tab on palette chips
+```
+
+```
 RUN 20: trigger=user report: drop indicator misplaced + extend theme coverage
 expect: dropbar lands exactly at insertion slot; puzzle-notch Scratch blocks;
 theme reaches every remaining surface
