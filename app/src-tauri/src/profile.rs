@@ -15,6 +15,7 @@ pub struct Profile {
 pub const UNLOCK_RULES: &[(&str, usize)] = &[
     ("comment", 0),
     ("statement", 0),
+    ("variables", 2),
     ("control", 3),
     ("loops", 7),
     ("functions", 12),

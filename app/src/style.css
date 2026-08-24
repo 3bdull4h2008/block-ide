@@ -243,6 +243,7 @@ select:focus-visible,
 .pal-statement { background: #0891b2; }
 .pal-comment { background: #ffe9a8; color: #6b4d00; }
 .pal-loops { background: #22c55e; }
+.pal-variables { background: #2fbf71; }
 .pal-functions { background: #7c5ce0; }
 .pal-structs { background: #ec4899; }
 
@@ -591,6 +592,74 @@ select:focus-visible,
   background: var(--accent);
   color: #fff;
   box-shadow: 0 2px 0 rgba(21, 94, 117, 0.3);
+}
+
+/* ---- D7 mode split: sandbox | academy ---- */
+
+#mode-switch {
+  display: inline-flex;
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+
+#mode-switch .mm {
+  min-height: 24px;
+  padding: 2px 12px;
+  font-size: 12px;
+  background: transparent;
+  color: var(--fg-dim);
+  box-shadow: none;
+  border-radius: 8px;
+}
+
+#mode-switch .mm:hover {
+  color: var(--fg);
+  filter: none;
+  background: rgba(47, 191, 113, 0.15);
+}
+
+#mode-switch .mm.active {
+  background: #2fbf71;
+  color: #fff;
+  box-shadow: 0 2px 0 rgba(20, 110, 60, 0.3);
+}
+
+/* sandbox is campaign-free: hide all academy chrome */
+#app[data-mode='sandbox'] #academy,
+#app[data-mode='sandbox'] #xp-badge {
+  display: none !important;
+}
+
+/* inline slot editor (Scratch-style field overlay) */
+#slot-editor {
+  position: fixed;
+  z-index: 60;
+  font-family: 'Baloo 2', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0c3543;
+  background: #f6fbff;
+  border: 2px solid rgba(8, 145, 178, 0.65);
+  border-radius: 8px;
+  padding: 1px 6px;
+  outline: none;
+  box-shadow: 0 4px 10px rgba(12, 53, 67, 0.25);
+}
+
+#slot-editor.bad {
+  border-color: #e5484d;
+  animation: slot-shake 0.18s ease;
+}
+
+@keyframes slot-shake {
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
 }
 
 /* ---- view modes (D6): blocks / split / text ---- */

@@ -13,7 +13,9 @@ import {
   ROW_H,
   INDENT,
   measure,
+  partWidth,
   type BBlock,
+  type BlockPart,
   type CTreeJSON,
 } from './blocks'
 import { History } from './history'
@@ -52,7 +54,10 @@ const TEMPLATES = [
   { name: 'for', cat: 'control', snippet: 'for (int i = 0; i < 10; i++) {\n}' },
   { name: 'if', cat: 'control', snippet: 'if (cond) {\n}' },
   { name: 'while', cat: 'loops', snippet: 'while (cond) {\n}' },
-  { name: 'int var =', cat: 'statement', snippet: 'int value = 0;' },
+  { name: 'new int', cat: 'variables', snippet: 'int value = 0;' },
+  { name: 'set var =', cat: 'variables', snippet: 'value = 0;' },
+  { name: 'change var by', cat: 'variables', snippet: 'value = value + 1;' },
+  { name: 'copy var', cat: 'variables', snippet: 'a = b;' },
   { name: 'assign +=', cat: 'statement', snippet: 'value = value + 1;' },
   { name: 'printf', cat: 'statement', snippet: 'printf("hi\\n");' },
   { name: 'call fn', cat: 'functions', snippet: 'value = myfn(value);' },
@@ -130,6 +135,17 @@ let roots: BBlock[] = []
 let rendering = false
 const hist = new History()
 
+/** Editable slot hit-boxes in world coords, rebuilt on every render. */
+interface SlotHit {
+  block: BBlock
+  part: BlockPart
+  x: number
+  y: number
+  w: number
+  h: number
+}
+let slotHits: SlotHit[] = []
+
 function markDirty(): void {
   const dirty = activePath !== null && savedCache.get(activePath) !== src
   for (const t of Array.from(tabsEl.children) as HTMLElement[]) {
@@ -154,6 +170,7 @@ async function render(source: string): Promise<void> {
     roots = buildBlocks(out.tree)
     layoutStack(roots, 40, 40)
     world.removeChildren()
+    slotHits = []
     for (const b of roots) drawBlock(b)
     world.addChild(overlay)
     world.addChild(snapLayer)
@@ -284,8 +301,7 @@ function drawBlock(b: BBlock): void {
   const g = new Graphics()
   const fill = COLORS[b.cat] ?? COLORS.statement
   const edge = BORDER[b.cat] ?? BORDER.statement
-  if (b.sticky) {
-    g.roundRect(b.x, b.y, b.w, b.h, 8)
+  if (b.sticky) {    g.roundRect(b.x, b.y, b.w, b.h, 8)
     g.fill({ color: fill })
     g.roundRect(b.x, b.y, b.w, b.h, 8)
     g.stroke({ width: 3, color: edge })
@@ -305,18 +321,6 @@ function drawBlock(b: BBlock): void {
     world.addChild(g, t)
     return
   }
-  const label = new Text({
-    text: b.label,
-    style: {
-      fontFamily: "'Baloo 2', 'Segoe UI', sans-serif",
-      fontSize: 13,
-      fontWeight: '600',
-      fill: '#ffffff',
-    },
-  })
-  label.x = b.x + PAD
-  label.y = b.y + (ROW_H - label.height) / 2
-
   // clay drop shadow (silhouette approximation, offset down-right)
   g.roundRect(b.x + 2, b.y + 4, b.w, b.h + TD, b.container ? 12 : 9)
   g.fill({ color: 0x0c3543, alpha: 0.18 })
@@ -345,10 +349,54 @@ function drawBlock(b: BBlock): void {
     statementPath(g, b.x, b.y, b.w, b.h)
     g.stroke({ width: 3, color: edge })
   }
+  // header content: literal text chunks + typed input slots (Scratch fields)
+  const whiteLabel = {
+    fontFamily: "'Baloo 2', 'Segoe UI', sans-serif",
+    fontSize: 13,
+    fontWeight: '600',
+    fill: '#ffffff',
+  } as const
+  const darkLabel = {
+    fontFamily: "'Baloo 2', 'Segoe UI', sans-serif",
+    fontSize: 13,
+    fontWeight: '600',
+    fill: '#0c3543',
+  } as const
+  const header: (Text | Graphics)[] = []
+  if (b.parts.length === 0) {
+    const t = new Text({ text: b.label || b.nodeKind, style: whiteLabel })
+    t.x = b.x + PAD
+    t.y = b.y + (ROW_H - t.height) / 2
+    header.push(t)
+  } else {
+    let cx = b.x + PAD + 5 // clear the category notch
+    for (const p of b.parts) {
+      const w = partWidth(p)
+      if (p.type === 'text') {
+        const t = new Text({ text: p.text, style: whiteLabel })
+        t.x = cx
+        t.y = b.y + (ROW_H - t.height) / 2
+        header.push(t)
+      } else {
+        const box = new Graphics()
+        box.roundRect(cx, b.y + 6, w, ROW_H - 12, 7)
+        box.fill({ color: 0xf6fbff })
+        box.roundRect(cx, b.y + 6, w, ROW_H - 12, 7)
+        box.stroke({ width: 2, color: edge, alpha: 0.5 })
+        const t = new Text({ text: p.text, style: darkLabel })
+        t.x = cx + (w - t.width) / 2
+        t.y = b.y + (ROW_H - t.height) / 2
+        header.push(box, t)
+        slotHits.push({ block: b, part: p, x: cx, y: b.y + 6, w, h: ROW_H - 12 })
+      }
+      cx += w + 7
+    }
+  }
+
   // category notch sits on the header row
   g.roundRect(b.x + 5, b.y + 5, 5, Math.min(ROW_H - 10, b.h - 10), 2)
   g.fill({ color: 0x000000, alpha: 0.22 })
-  world.addChild(g, label)
+  world.addChild(g, ...header)
   g.eventMode = 'static'
   attachHeaderEvents(g, b)
   for (const c of b.children) drawBlock(c)
@@ -376,6 +424,8 @@ function catColor(cat: string | undefined, fallback = COLORS.statement): number 
     case 'control':
     case 'loops':
       return COLORS.control
+    case 'variables':
+      return COLORS.variables
     case 'functions':
       return COLORS.function
     case 'structs':
@@ -531,12 +581,112 @@ function attachHeaderEvents(
   })
 }
 
+// ----------------------------------------------------- inline slot editor
+// Scratch-style: click a typed field inside a block, type a replacement,
+// Enter/blur commits through the same text-splice seam as every other edit.
+const SLOT_PATTERNS: Record<string, RegExp> = {
+  ident: /^[A-Za-z_][A-Za-z0-9_]*$/,
+  number: /^[+-]?(\d+\.?\d*|\.\d+)$/,
+}
+
+function validateSlot(type: string, value: string): string | null {
+  const v = value.trim()
+  if (v.length === 0) return 'empty'
+  if (type === 'ident') return SLOT_PATTERNS.ident.test(v) ? v : null
+  if (type === 'number') return SLOT_PATTERNS.number.test(v) ? v : null
+  if (type === 'string') {
+    return /^".*"$/s.test(v) ? v : `"${v.replace(/"/g, '\\"')}"`
+  }
+  return null // text parts are not editable slots
+}
+
+function commitSlotValue(s: SlotHit, raw: string): string | null {
+  const final = validateSlot(s.part.type, raw)
+  if (final === null) {
+    return `${s.part.type} slot rejects ${JSON.stringify(raw)}`
+  }
+  if (final === s.part.text) return null
+  setSrc(src.slice(0, s.part.start) + final + src.slice(s.part.end))
+  void canonicalize()
+  blip(660, 0.05, 'sine', 0.06)
+  return null
+}
+
+const slotEditor = document.createElement('input')
+slotEditor.id = 'slot-editor'
+slotEditor.style.display = 'none'
+document.body.appendChild(slotEditor)
+let editingSlot: SlotHit | null = null
+
+function closeSlotEditor(commit: boolean): void {
+  const s = editingSlot
+  editingSlot = null
+  slotEditor.style.display = 'none'
+  slotEditor.classList.remove('bad')
+  if (s && commit) {
+    const err = commitSlotValue(s, slotEditor.value)
+    if (err !== null && s.part.type !== 'string') {
+      // reopen on invalid input so the user can fix it (strings self-quote)
+      openSlotEditor(s)
+      slotEditor.classList.add('bad')
+      blip(200, 0.08, 'square', 0.04)
+    }
+  }
+}
+
+function openSlotEditor(s: SlotHit): void {
+  editingSlot = s
+  const r = hostEl.getBoundingClientRect()
+  const scale = world.scale.x
+  slotEditor.value =
+    s.part.type === 'string' ? s.part.text.replace(/^"(.*)"$/s, '$1') : s.part.text
+  slotEditor.style.display = 'block'
+  slotEditor.style.left = `${r.left + s.x * scale + world.x - 4}px`
+  slotEditor.style.top = `${r.top + s.y * scale + world.y}px`
+  slotEditor.style.width = `${Math.max(60, s.w * scale + 8)}px`
+  slotEditor.focus()
+  slotEditor.select()
+}
+
+slotEditor.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    closeSlotEditor(true)
+  } else if (e.key === 'Escape') {
+    e.preventDefault()
+    closeSlotEditor(false)
+  }
+})
+slotEditor.addEventListener('blur', () => {
+  if (editingSlot) closeSlotEditor(true)
+})
+
+function slotAt(b: BBlock, wx: number, wy: number): SlotHit | null {
+  for (const s of slotHits) {
+    if (
+      s.block.id === b.id &&
+      wx >= s.x &&
+      wx <= s.x + s.w &&
+      wy >= s.y &&
+      wy <= s.y + s.h
+    ) {
+      return s
+    }
+  }
+  return null
+}
+
 hostEl.addEventListener('dblclick', (e) => {
   const me = e as MouseEvent
   const w = screenToWorld(me.offsetX, me.offsetY)
   const hit = hitTestHeader(roots, w.x, w.y)
   if (!hit || hit.sticky) return
   anchorToBlock(hit)
+  const s = hit.cat === 'error' ? null : slotAt(hit, w.x, w.y)
+  if (s) {
+    openSlotEditor(s)
+    return
+  }
   const replacement = window.prompt('Edit statement:', hit.label)
   if (replacement === null) return
   setSrc(applyEdit(hit, replacement)(src))
@@ -1055,11 +1205,29 @@ let profile: ProfileOut | null = null
 let hints: string[] = []
 let hintTier = 0
 
+// --------------------------------------------- D7 mode split: sandbox|academy
+type AppMode = 'sandbox' | 'academy'
+const appElMode = document.getElementById('app') as HTMLDivElement
+const modeBtns = Array.from(document.querySelectorAll<HTMLButtonElement>('.mm'))
+let appMode: AppMode = (localStorage.getItem('mode') as AppMode) ?? 'sandbox'
+
+function setMode(m: AppMode): void {
+  appMode = m
+  localStorage.setItem('mode', m)
+  appElMode.dataset.mode = m
+  modeBtns.forEach((b) => b.classList.toggle('active', b.dataset.mode === m))
+  renderPaletteLocks() // sandbox = everything unlocked, always
+}
+
+modeBtns.forEach((b) =>
+  b.addEventListener('click', () => setMode(b.dataset.mode as AppMode)),
+)
+
 function renderPaletteLocks(): void {
-  if (!profile) return
   for (const chip of Array.from(paletteEl.children) as HTMLElement[]) {
     const cat = chip.dataset.cat ?? ''
-    const locked = !profile.unlocked.includes(cat)
+    const locked =
+      appMode === 'academy' && profile !== null && !profile.unlocked.includes(cat)
     chip.classList.toggle('locked', locked)
     if (locked) chip.title = `Locked — complete ${cat} levels in the Academy`
     else chip.removeAttribute('title')
@@ -1070,10 +1238,10 @@ async function refreshProfile(): Promise<void> {
   try {
     profile = await invoke<ProfileOut>('profile_get')
     xpBadge.textContent = `★ ${profile.xp} XP`
-    renderPaletteLocks()
   } catch {
     /* profile optional */
   }
+  renderPaletteLocks()
 }
 
 async function refreshLevels(): Promise<void> {
@@ -1153,10 +1321,24 @@ document.getElementById('check-btn')?.addEventListener('click', async () => {
   const hit = hitTestHeader(roots, w.x, w.y)
   return hit ? hit.label || hit.nodeKind : null
 }
+;(window as unknown as { __blocksShape?: unknown }).__blocksShape = () =>
+  flatten(roots).map((b) => ({
+    kind: b.nodeKind,
+    container: b.container,
+    kids: b.children.length,
+  }))
+;(window as unknown as { __slots?: unknown }).__slots = () =>
+  slotHits.map((s) => ({ type: s.part.type, text: s.part.text }))
+;(window as unknown as { __commitSlot?: unknown }).__commitSlot = (i: number, v: string) => {
+  const s = slotHits[i]
+  if (!s) return 'no such slot'
+  return commitSlotValue(s, v)
+}
 
 void refreshProfile()
 void refreshLevels()
 void recoverJournal()
+setMode(appMode) // apply persisted sandbox/academy split (D7)
 
 // ------------------------------------------------------- semantic caret map
 // P1.2 residual: cursor survives Blocks/Split/Text switches by anchoring to

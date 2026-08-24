@@ -202,6 +202,9 @@ comment anchors) remain open — see P1.2 residual note.
 | 1.4 | Palette v1 categories: Control, Loops, Variables, Operators, Functions, I/O (printf family), Structs | ❌ | Each palette block emits compilable snippet |
 | 1.5 | Undo/redo spanning both views (command-pattern on AST ops + text diffs) | ❌ | Undo-to-byte-identical gate |
 | 1.6 | Autosave + crash recovery journal | ❌ | Kill -9 recovery test |
+| 1.7 | Loop/control statements ALWAYS render as Scratch C-mouths containing their blocks — braced or braceless (clang-format never adds braces), else-clauses included as sibling rows; header label excludes body text (old label bug: whole body collapsed into one fat block) | ✅ field-based bodies + else_clause unwrap (RUN 27) | vitest mouths suite |
+| 1.8 | D7 mode split realized: Sandbox (palette fully unlocked, academy chrome hidden) vs Academy campaign; persisted choice in toolbar segmented control | ✅ data-mode + CSS + lock bypass (RUN 27) | G-UI-E2E mode assertions |
+| 1.9 | Scratch-style inline typed inputs: header parts = text chunks + ident/number/string slots; click-to-edit overlay w/ per-type validation (idents/numbers regex, strings auto-quote); Variables palette category (new int / set var / change var / copy var) + unlock tier | ✅ parts pipeline + slot editor + cat (RUN 27) | vitest parts suite; G-UI-E2E slot commit/reject |
 
 **Gate 1:** ❌ NOT MET. `G-EDIT-E2E` scripted flows (build fizzbuzz entirely
 in blocks; fix injected bug found via blocks only).

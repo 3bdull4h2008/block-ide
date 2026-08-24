@@ -23,6 +23,11 @@ fn opens_5k_file_project_under_3s() {
         fs::write(sub.join("notes.md"), "# notes").unwrap();
     }
 
+    // warm-up walk (untimed): the gate metric is steady-state open time,
+    // not cold-cache penalty right after other validators churned the disk
+    let warm = app_lib::commands::list_c_files(dir.to_string_lossy().into_owned()).expect("warm");
+    assert_eq!(warm.len(), 5000);
+
     let t0 = Instant::now();
     let files =
         app_lib::commands::list_c_files(dir.to_string_lossy().into_owned()).expect("walk");

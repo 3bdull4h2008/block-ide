@@ -47,7 +47,7 @@ const check = (name, ok) => {
 const visible = (sel) =>
   ev(`(() => { const el = document.querySelector('${sel}'); return !!el && el.offsetParent !== null })()`);
 
-await ev("localStorage.setItem('tour-done','1'); localStorage.setItem('theme','light'); 'ok'");
+await ev("localStorage.setItem('tour-done','1'); localStorage.setItem('theme','light'); localStorage.setItem('mode','sandbox'); 'ok'");
 await send('Page.reload');
 await new Promise((r) => setTimeout(r, 1600));
 
@@ -112,9 +112,9 @@ await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Ent
 await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, modifiers: 2 });
 let ran = false;
 let lastConsole = '';
-// 20 s budget: this gate runs right after G-PERF's 5000-file churn, and tcc
+// 30 s budget: this gate runs right after G-PERF's 5000-file churn, and tcc
 // cold-compiles under whatever disk load that leaves behind.
-for (let i = 0; i < 80 && !ran; i++) {
+for (let i = 0; i < 120 && !ran; i++) {
   await new Promise((r) => setTimeout(r, 250));
   lastConsole = String((await ev(`document.getElementById('console').textContent`)) ?? '');
   ran = lastConsole.includes('[exit');
@@ -124,6 +124,40 @@ if (!ran) console.log(`  console was: ${lastConsole.trim().slice(0, 200)}`);
 
 // 7. academy levels populated
 check('academy: 30 levels', (await ev(`document.querySelectorAll('#level-select option').length`)) === 30);
+
+// 8. D7 mode split: sandbox default = no academy chrome + palette unlocked
+check('sandbox default: level select hidden', !(await visible('#academy')));
+check(
+  'sandbox default: functions chip unlocked',
+  (await ev(`!document.querySelector('.pal-functions').classList.contains('locked')`)) === true,
+);
+await ev(`document.querySelector('.mm[data-mode=\"academy\"]').click()`);
+await new Promise((r) => setTimeout(r, 200));
+check('academy mode: level panel visible', await visible('#academy'));
+check(
+  'academy mode: functions chip locked (fresh profile)',
+  (await ev(`document.querySelector('.pal-functions').classList.contains('locked')`)) === true,
+);
+await ev(`document.querySelector('.mm[data-mode=\"sandbox\"]').click()`);
+await new Promise((r) => setTimeout(r, 200));
+
+// 9. loop C-mouths: for_statement is a container holding its body row
+const shape = await ev(`window.__blocksShape().filter(b => b.kind === 'for_statement')[0]`);
+check('loop mouth: for is container with body inside', shape && shape.container === true && shape.kids >= 1);
+
+// 10. inline typed slots exist and validate
+const slots = await ev(`window.__slots()`);
+check('slots: number slot present in sample', Array.isArray(slots) && slots.some((s) => s.type === 'number'));
+const numIdx = await ev(`window.__slots().findIndex(s => s.type === 'number')`);
+check(
+  'slot reject: number field refuses identifier',
+  (await ev(`window.__commitSlot(${numIdx}, 'abc')`)) !== null,
+);
+check(
+  'slot commit: number field accepts 42',
+  (await ev(`window.__commitSlot(${numIdx}, '42')`)) === null &&
+    String(await ev(`document.getElementById('src').value`)).includes('42'),
+);
 
 await shot(process.env.TEMP + '\\ui-e2e.png');
 console.log(failures === 0 ? '[G-UI-E2E] PASS' : `[G-UI-E2E] FAIL (${failures})`);

@@ -91,7 +91,7 @@ Start-Sleep -Seconds 8
 node (Join-Path $repo 'tools\cdp-uie2e.mjs') $uiPort 2>&1 | Tee-Object -Variable ueOut | Out-Null
 $uiExit = $LASTEXITCODE
 if (-not $uiProc.HasExited) { Stop-Process -Id $uiProc.Id -Force -ErrorAction SilentlyContinue }
-Add-Gate -Id 'G-UI-E2E' -Pass ($uiExit -eq 0) -Metrics @{ tail = ($ueOut | Select-String 'G-UI-E2E') }
+Add-Gate -Id 'G-UI-E2E' -Pass ($uiExit -eq 0) -Metrics @{ tail = ($ueOut | Select-String 'G-UI-E2E'); failures = @($ueOut | Select-String 'FAIL') }
 
 # ------------------------------------------------------------ report + verdict
 $report = [ordered]@{

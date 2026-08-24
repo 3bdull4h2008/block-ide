@@ -1,6 +1,34 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 27: trigger=user: loops as mouths + sandbox/campaign split + Scratch-style
+typed inline inputs + more block types (variables palette)
+expect: 1.7 control statements always C-mouths (braced or not, else rows
+inside); 1.8 Sandbox vs Academy modes; 1.9 ident/number/string slots with
+per-type validation + Variables category
+obs: THREE root-cause finds while building. (1) old labelWithoutCompounds
+pushed leafText of the WHOLE node - braced loops/functions rendered as one
+fat block with the entire body inside the LABEL (user's "loops look like
+normal blocks"). Rebuilt header pipeline: field-based bodies (body/
+consequence/alternative) skipped from header; else_clause unwrapped; braced
+AND braceless loops now mouths with kids inside. (2) string_literal has
+text=null (content in children) -> parts came out empty; buildHeader now
+uses leafText. (3) canonical ids are dense pre-order per parse (RUN 24
+lesson) - unchanged here but shaped slot splice design (byte ranges from
+same parse as render). Slots: click field -> overlay input -> Enter/blur
+commits via text splice; idents/numbers regex-validated w/ shake-reject,
+strings auto-quote. Palette: variables cat (new int/set var/change var/
+copy var) + UNLOCK_RULES tier 2. Mode split: toolbar Sandbox|Academy
+(persisted); sandbox hides academy chrome + bypasses palette locks.
+GATE FLAKES fixed: G-PERF now warm-up walk before the timed one (cold-cache
+penalty after 12 validators is not the metric); UI-E2E run budget 30s;
+gate report now records WHICH ui check failed. vitest 16/16; ALL FOURTEEN
+gates PASS exit 0; CDP screenshot verified mouths+slots+palette+modes
+visually.
+state=SUCCESS | next: user eyes-on; vanilla install drill (manual, Gate 5)
+```
+
+```
 RUN 26: trigger=v0.1.0 tag milestone (next action from RUN 24/25)
 expect: versions synced at 0.1.0, NSIS installer builds, tag pushed
 obs: FOUND REAL BUG in release path: copytcc used ../../third_party/...

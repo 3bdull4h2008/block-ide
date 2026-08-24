@@ -16,7 +16,18 @@ export interface CTreeJSON {
   tail: string
 }
 
-export type Cat = 'function' | 'control' | 'statement' | 'comment' | 'error'
+export type Cat = 'function' | 'control' | 'statement' | 'variables' | 'comment' | 'error'
+
+/** One renderable chunk of a block header: literal text or an editable,
+ *  type-constrained input slot (Scratch-style rounded field). */
+export type PartType = 'text' | 'ident' | 'number' | 'string'
+export interface BlockPart {
+  type: PartType
+  /** display text (strings keep their quotes); byte range refers to src */
+  text: string
+  start: number
+  end: number
+}
 
 export interface BBlock {
   /** Stable node id from the parse — the semantic anchor for cursor mapping
@@ -24,6 +35,8 @@ export interface BBlock {
   id: number
   nodeKind: string
   label: string
+  /** header chunks: literal text + typed input slots (Scratch-style fields) */
+  parts: BlockPart[]
   cat: Cat
   sticky: boolean
   container: boolean
@@ -45,6 +58,9 @@ const CONTROL_KINDS = new Set([
   'do_statement',
   'switch_statement',
 ])
+
+/** tree-sitter-c field names that hold a control statement's nested bodies */
+const BODY_FIELDS = new Set(['body', 'consequence', 'alternative'])
 
 export function isBrace(n: CNodeJSON): boolean {
   return !n.named && (n.text === '{' || n.text === '}')
@@ -68,14 +84,66 @@ function findCompound(n: CNodeJSON): CNodeJSON | null {
   return null
 }
 
-function labelWithoutCompounds(n: CNodeJSON): string {
-  const parts: string[] = []
-  function walk(m: CNodeJSON): void {
-    if (m.kind === 'compound_statement' || m.kind === 'comment') return
-    parts.push(leafText(m))
+/** Body subtrees of a control statement (then/else/loop body), whether or
+ *  not they are braced. Everything else in the node is header. */
+function fieldedBodies(n: CNodeJSON): CNodeJSON[] {
+  return n.children.filter((c) => c.field !== null && BODY_FIELDS.has(c.field))
+}
+
+/** Leaf tokens of the HEADER region only — body subtrees, braces, and
+ *  comments excluded. This is what gets rendered as text + input slots. */
+/** Leaf nodes that become typed input slots — checked BEFORE recursion
+ *  because string literals contain child tokens (quotes + content). */
+const SLOT_KINDS: Record<string, PartType> = {
+  identifier: 'ident',
+  number_literal: 'number',
+  string_literal: 'string',
+}
+
+function headerLeaves(n: CNodeJSON, skip: Set<CNodeJSON>): CNodeJSON[] {
+  const out: CNodeJSON[] = []
+  const visit = (m: CNodeJSON): void => {
+    if (skip.has(m) || m.kind === 'comment' || m.kind === 'compound_statement') return
+    if (!m.named && m.text !== null && m.text.trim() === '') return // stray ws token
+    const slot = SLOT_KINDS[m.kind]
+    if (slot !== undefined || m.children.length === 0) {
+      out.push(m)
+      return
+    }
+    for (const c of m.children) visit(c)
   }
-  walk(n)
-  return collapse(parts.join(' '))
+  visit(n)
+  return out
+}
+
+function partTypeOf(kind: string): PartType {
+  return SLOT_KINDS[kind] ?? 'text'
+}
+
+function buildHeader(
+  n: CNodeJSON,
+  skip: Set<CNodeJSON>,
+): { parts: BlockPart[]; label: string } {
+  const raw = headerLeaves(n, skip).map((m) => ({
+    type: partTypeOf(m.kind),
+    // leafText, not m.text: composite leaves like string_literal carry
+    // their content in CHILDREN (quotes + string_content), with text=null
+    text: leafText(m).trim(),
+    start: m.start,
+    end: m.end,
+  }))
+  const parts: BlockPart[] = []
+  for (const p of raw) {
+    if (p.text.length === 0) continue
+    const last = parts[parts.length - 1]
+    if (p.type === 'text' && last !== undefined && last.type === 'text') {
+      last.text += ' ' + p.text
+      last.end = p.end
+    } else {
+      parts.push({ ...p })
+    }
+  }
+  return { parts, label: collapse(parts.map((p) => p.text).join(' ')) }
 }
 
 function categorize(kind: string): Cat {
@@ -94,24 +162,55 @@ function categorize(kind: string): Cat {
 
 function toBlock(n: CNodeJSON): BBlock {
   const cat = categorize(n.kind)
+  const bodies = fieldedBodies(n)
   const compound = findCompound(n)
-  const container = compound !== null && n.kind !== 'comment'
+  // Control statements are ALWAYS Scratch C-mouths — braced or not. Other
+  // containers (functions) keep the compound-based rule.
+  const container = CONTROL_KINDS.has(n.kind) || (compound !== null && n.kind !== 'comment')
+  // children: expanded bodies for controls, raw compound rows for functions
+  let kids: BBlock[] = []
+  if (container) {
+    if (bodies.length > 0) {
+      for (const b of bodies) {
+        // `else` arrives wrapped in an else_clause node — the statement
+        // inside is the actual body row
+        const inner =
+          b.kind === 'else_clause'
+            ? (b.children.find((c) => c.kind !== 'else') ?? b)
+            : b
+        if (isBrace(inner)) continue
+        if (inner.kind === 'compound_statement') kids.push(...stackFrom(inner))
+        else kids.push(toBlock(inner))
+      }
+    } else if (compound !== null) {
+      kids = stackFrom(compound)
+    }
+  }
+  const skip = new Set<CNodeJSON>(bodies)
+  const { parts, label } =
+    cat === 'error' || cat === 'comment'
+      ? { parts: [] as BlockPart[], label: '' }
+      : buildHeader(n, skip)
   return {
     id: n.id,
     nodeKind: n.kind,
     label:
       cat === 'error'
         ? collapse(leafText(n)) || '(incomplete)'
-        : container
-          ? labelWithoutCompounds(n)
-          : collapse(leafText(n)),
+        : label,
+    parts,
     cat,
     sticky: cat === 'comment',
     container,
-    children: container ? stackFrom(compound as CNodeJSON) : [],
+    children: kids,
     start: n.start,
     end: n.end,
-    headerEnd: container ? (compound as CNodeJSON).start : n.end,
+    headerEnd:
+      container
+        ? bodies.length > 0
+          ? Math.min(...bodies.map((b) => b.start))
+          : (compound as CNodeJSON).start
+        : n.end,
     x: 0,
     y: 0,
     w: 0,
@@ -149,6 +248,21 @@ export function measure(label: string): number {
   return w
 }
 
+/** Slots draw as rounded input boxes — wider than their text, with a
+ *  minimum click target (Scratch fields never collapse to nothing). */
+export function partWidth(p: BlockPart): number {
+  if (p.type === 'text') return measure(p.text)
+  return Math.max(36, measure(p.text) + 16)
+}
+
+/** Width of the header row: parts laid out left→right plus padding. */
+export function headerWidth(b: BBlock, gap = 7): number {
+  if (b.parts.length === 0) return measure(b.label || b.nodeKind)
+  let w = PAD
+  for (const p of b.parts) w += partWidth(p) + gap
+  return w
+}
+
 export function layoutStack(blocks: BBlock[], x: number, y: number): number {
   let cursorY = y
   let maxBottom = y
@@ -163,10 +277,10 @@ export function layoutStack(blocks: BBlock[], x: number, y: number): number {
       if (b.children.length > 0) {
         innerBottom = b.children[b.children.length - 1].y + b.children[b.children.length - 1].h
       }
-      b.w = Math.max(measure(b.label), innerW > 0 ? innerW + INDENT : measure(b.label)) + PAD
+      b.w = Math.max(headerWidth(b), innerW > 0 ? innerW + INDENT : headerWidth(b)) + PAD
       b.h = ROW_H + GAP_Y + Math.max(GAP_Y, innerBottom - (cursorY + ROW_H + GAP_Y)) + GAP_Y
     } else {
-      b.w = b.sticky ? measure(b.label) + 20 : measure(b.label)
+      b.w = b.sticky ? measure(b.label) + 20 : headerWidth(b) + PAD
       b.h = ROW_H
     }
     maxBottom = Math.max(maxBottom, b.y + b.h)
@@ -254,6 +368,7 @@ export const COLORS: Record<Cat, number> = {
   function: 0x7c5ce0,
   control: 0xff9f1a,
   statement: 0x0891b2,
+  variables: 0x2fbf71,
   comment: 0xffe9a8,
   error: 0x94a3b8,
 }
@@ -262,6 +377,7 @@ export const BORDER: Record<Cat, number> = {
   function: 0x5a3fc0,
   control: 0xd97e06,
   statement: 0x066a85,
+  variables: 0x1e8f52,
   comment: 0xd9b25a,
   error: 0x64748b,
 }
