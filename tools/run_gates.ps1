@@ -33,6 +33,11 @@ $rtOk = ($LASTEXITCODE -eq 0)
 Add-Gate -Id 'G-ROUNDTRIP' -Pass $rtOk -Metrics @{ output = ($rtOut | Select-Object -Last 1) }
 Pop-Location
 
+# ------------------------------------------------------- G-SYNC-FUZZ (@P0.5)
+# release-only: ~90 s optimized vs many minutes in debug (14k parse+canon rounds)
+cargo run -q --release -p core-parser --bin sync_fuzz_validator 2>&1 | Tee-Object -Variable sfOut | Out-Null
+Add-Gate -Id 'G-SYNC-FUZZ' -Pass ($LASTEXITCODE -eq 0) -Metrics @{ tail = ($sfOut | Select-Object -Last 1) }
+
 # ------------------------------------------------------- G-EDIT-E2E (vitest)
 Push-Location (Join-Path $repo 'app')
 npx vitest run 2>&1 | Tee-Object -Variable e2eOut | Out-Null

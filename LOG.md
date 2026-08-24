@@ -1,6 +1,25 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 23: trigger=resume: finish G-SYNC-FUZZ validator (P0.5 gate, was untracked+red)
+expect: 7 corpus programs x 500 ops x 2 drivers converge byte-identical;
+intermediates parse clean; canonicalization idempotent; gate enforced in runner
+observed: TWO REAL DESIGN BUGS found by red run. (1) whole-line Delete/Move
+cuts removed extra statements from raw-text driver when a line held several
+statements (canonical driver is one-per-line) -> switched to exact node spans
+(statements never own parent braces). (2) Insert/Move anchored at line_start:
+raw text shares a statement's line with `int main(void) {`, so insert-before
+landed at TU scope on driver A (invisible to the compound-statement collector,
+count unchanged) but inside the body on driver B (+1) - explains the uniform
+A=n/B=n+1 divergence signature. Fix: anchor every splice/move at exact node
+offsets. After fix: PASS on seeds 0x5EED..0001, ..0002, 31337 (~93 s release).
+Wired into run_gates.ps1 as ENFORCED (release-only: debug would be ~10x).
+ALL FOURTEEN gates PASS exit 0; PLAN Gate 0.5 marked MET for G-SYNC-FUZZ
+(0.5.1/0.5.2/0.5.4 incremental-sync work remains open).
+state=SUCCESS | next: cursor-semantic map (1.2 residual), then v0.1.0 tag
+```
+
+```
 RUN 22: trigger=D6 view modes + Gate 5 scripted-E2E closeout
 expect: per-tab Blocks/Split/Text with ctrl+1/2/3; split sync-scroll;
 scripted UI gate enforced against release build

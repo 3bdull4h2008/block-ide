@@ -185,8 +185,10 @@ install test only.
 | 0.5.3 | Mystery-block rendering of ERROR/MISSING nodes incl. partial statements | ❌ | Malformed corpus: every file opens editable, zero exceptions |
 | 0.5.4 | Comment anchor persistence through mutations | ❌ | G-COMMENT-SURVIVAL suite |
 
-**Gate 0.5:** ❌ NOT MET. `G-SYNC-FUZZ` (10k-op randomized differential:
-headless text-editor driver vs block-driver must converge to same file).
+**Gate 0.5:** ✅ G-SYNC-FUZZ MET 2026-08-24 (`sync_fuzz_validator`: 10k-op
+randomized differential, text-driver vs block-driver converge byte-identical).
+Steps 0.5.1/0.5.2/0.5.4 (incremental changed-ranges sync, AST-mutation API,
+comment anchors) remain open — see P1.2 residual note.
 
 ---
 
@@ -270,7 +272,7 @@ passes. Laws (adopted from B2S discipline):
 | G-PARSE-PARITY | will enforce @P0 | native vs WASM tree equality |
 | G-ROUNDTRIP | will enforce @P0 | ≥99.5% node-equal corpus round-trip |
 | G-MALFORMED-NOCRASH | will enforce @P0 | malformed corpus opens w/o exception |
-| G-SYNC-FUZZ | will enforce @P0.5 | 10k-op differential convergence |
+| G-SYNC-FUZZ | ENFORCED @P0.5 ✅ (2026-08-24) | 7 programs × 500 ops × 2 drivers (text vs block) converge byte-identical; intermediates error-free; canon idempotent — seeds 0x…0001/0x…0002/31337 green |
 | G-EDIT-E2E | will enforce @P1 | scripted authoring flows |
 | G-RUN-HELLO | ENFORCED @P2 ✅ (2026-08-23) | ≤150 ms run→output (measured 18.5 ms median) |
 | G-DIAG-MAP | ENFORCED @P2 ✅ (2026-08-23) | 100% mapped diagnostics in fixtures |
@@ -313,7 +315,7 @@ cloud project sync · mobile/tablet touch layout.
 | Validator | Purpose | Status |
 |-----------|---------|--------|
 | `roundtrip_validator` | corpus parse→render-model→emit node-equality; failure minimization | ✅ P0 |
-| `sync_fuzz_validator` | randomized edit differential (text-driver vs block-driver) | ❌ P0.5 |
+| `sync_fuzz_validator` | randomized edit differential (text-driver vs block-driver) — exact-node-span ops keep drivers in lockstep across raw/canonical layouts | ✅ P0.5 |
 | `diag_map_validator` | diagnostic-fixture → nodeId coverage (corpus/diag, 7 classes) | ✅ P2 |
 | `sandbox_escape_validator` | runner jailbreak attempts (loop/mem/spawn-tree/thrash) | ✅ P2 |
 | `stage_determinism_validator` | stage.h pixel-identical runs + cooperative quit + clang/tcc parity | ✅ P3 |
