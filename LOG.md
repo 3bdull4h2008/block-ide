@@ -1,6 +1,21 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 26: trigger=v0.1.0 tag milestone (next action from RUN 24/25)
+expect: versions synced at 0.1.0, NSIS installer builds, tag pushed
+obs: FOUND REAL BUG in release path: copytcc used ../../third_party/...
+which from app/ resolves to E:\third_party - installer could not have
+rebuilt since that typo landed; fixed to ../third_party. package.json
+bumped 0.0.0 -> 0.1.0 (workspace + src-tauri already 0.1.0). Installer
+builds clean: block-ide_0.1.0_x64-setup.exe, 2.8 MB, tcc embedded
+(resources staged + hash verified earlier). Gates: full suite green at
+e446772 (RUN 25); delta since = metadata only + beforeBuildCommand re-ran
+tsc/vite/cargo release inside installer build. Committed 21bcea6, pushed
+with annotated tag v0.1.0.
+state=SUCCESS | next: vanilla-Windows install drill (manual, Gate 5 last item)
+```
+
+```
 RUN 25: trigger=user report: [error 2147942632 (0x800700e8)] launching tcc.exe
 expect: diagnose 0x800700e8 (ERROR_NO_DATA, Win32 232) at spawn; make failures
 visible + survivable; no regression in run path
