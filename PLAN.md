@@ -148,15 +148,15 @@ P5 last. Second-language packs are explicitly OUT of v1.
 | Step | Description | Status | Validation |
 |------|-------------|--------|------------|
 | 5.1 | Themes | ✅ light/dark via CSS vars + persisted toggle | manual |
-| 5.2 | Keybindings | ✅ Ctrl+Enter/F5 run, Ctrl+B sidebar, Ctrl+S/Z/Y set | scripted E2E pending |
+| 5.2 | Keybindings | ✅ Ctrl+Enter/F5 run, Ctrl+B sidebar, Ctrl+1/2/3 views, Ctrl+S/Z/Y | G-UI-E2E (scripted, enforced) |
 | 5.3 | Onboarding tour | ✅ 4-step first-run overlay (localStorage flag) | manual |
 | 5.4 | Perf hardening | ✅ walk caps lifted, G-PERF enforced | G-PERF |
 | 5.5 | Installer | ✅ NSIS currentUser build ships app + vendored tcc (2.6 MB, offline-capable); clean-install drill on vanilla VM pending | manual install test |
 | 5.6 | Crash recovery journal | ✅ (pulled forward from P1.6) write-temp-rename journal, boot-time restore prompt | kill -9 test manual |
 
-**Gate 5:** ✅ MET 2026-08-23 — G-PERF enforced green; NSIS installer builds
-and bundles the tcc execution backend (offline-first honored). Remaining
-manual drills: vanilla-Windows install test, scripted keybinding E2E.
+**Gate 5:** ✅ MET 2026-08-23 — G-PERF + G-UI-E2E enforced green; NSIS
+installer ships the tcc backend. Remaining manual drill: vanilla-Windows
+install test only.
 
 ### Phase 0 — Round-Trip Pipeline (ACTIVE next)
 
@@ -195,7 +195,7 @@ headless text-editor driver vs block-driver must converge to same file).
 | Step | Description | Status | Validation |
 |------|-------------|--------|------------|
 | 1.1 | Workspace: folder open, file tree, tabs (dirty indicators), VS Code keybinding set | ❌ | Scripted E2E |
-| 1.2 | Per-tab view modes Blocks / Split (sync-scroll) / Text; mode switch preserves cursor & selection semantically (map via node ids) | ❌ | Cursor-roundtrip tests |
+| 1.2 | Per-tab view modes Blocks / Split (sync-scroll) / Text; mode switch preserves cursor & selection semantically (map via node ids) | ✅ view modes + per-tab memory + text→blocks sync-scroll; cursor semantic map pending | G-UI-E2E |
 | 1.3 | Block interactivity: drag-from-palette, snap targets validated by grammar (an `else` cannot exist without `if`), inline textfields for identifiers/literals, delete = safe subtree removal with placeholder | ❌ | Grammar-reject unit tests |
 | 1.4 | Palette v1 categories: Control, Loops, Variables, Operators, Functions, I/O (printf family), Structs | ❌ | Each palette block emits compilable snippet |
 | 1.5 | Undo/redo spanning both views (command-pattern on AST ops + text diffs) | ❌ | Undo-to-byte-identical gate |
@@ -281,6 +281,7 @@ passes. Laws (adopted from B2S discipline):
 | G-MEMVIEW | ENFORCED @P3 ✅ (2026-08-23) | 8-node list → 7 pointer arrows from ReadProcessMemory, teardown visible |
 | G-ACADEMY | ENFORCED @P4 ✅ schema+solves (2026-08-23) | levels lint-clean; reference solutions solve all hidden tests headlessly; hardcoded decoys rejected. Content target: 30 levels by end of P4 |
 | G-PERF | ENFORCED @P5 ✅ (2026-08-23) | 5000-file workspace listed + deep read well under 3 s |
+| G-UI-E2E | ENFORCED @P5 ✅ (2026-08-23) | 11 scripted assertions: view modes, ctrl keybindings, real Ctrl+Enter run, academy population |
 | G-MEMTRACE | tracked @P3 | stress soak clean |
 | G-ACADEMY | tracked @P4 | 30-level reference solve |
 

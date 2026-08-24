@@ -1,6 +1,23 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 22: trigger=D6 view modes + Gate 5 scripted-E2E closeout
+expect: per-tab Blocks/Split/Text with ctrl+1/2/3; split sync-scroll;
+scripted UI gate enforced against release build
+obs: segmented toolbar control + per-tab view memory + grid re-layout per
+view (blocks: canvas wide; text: editor wide, stage hidden). Sync-scroll
+maps text fraction to world.y. G-UI-E2E NEW ENFORCED GATE: gates script
+launches RELEASE exe w/ CDP, 11 trusted assertions (view toggles, ctrl
+keybindings via Input.dispatchKeyEvent, REAL Ctrl+Enter run through tcc
+backend asserting [exit] in console, academy=30). First run caught stale
+release exe risk - gates now test whatever binary exists; rebuilt release
+before enforcing. ALL THIRTEEN gates PASS exit 0. PLAN 1.2 ✅, 5.2 ✅
+(enforced), Gate 5 fully MET (vanilla install drill = only manual left).
+Pushed 3d6a14c.
+state=SUCCESS | next: cursor-semantic map (1.2 residual), then v0.1.0 tag
+```
+
+```
 RUN 21: trigger=user: snap ghosts + drop sounds + block context menu
 expect: translucent preview at insertion slot; synth blips on pick/drop/
 delete; right-click Duplicate/Delete without pan hijack
