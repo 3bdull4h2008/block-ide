@@ -20,13 +20,14 @@ import {
   type CTreeJSON,
 } from './blocks'
 import { History } from './history'
-import { spliceInsert, spliceMove, applyEdit } from './ops'
+import { spliceInsert, spliceMove, applyEdit, insertTopLevel } from './ops'
 import { pickAnchor, caretOffset, type CaretAnchor } from './caret'
 import {
   PALETTE_GROUPS,
   VARIABLES_COLOR,
   validateSlotValue,
   validateVarName,
+  reporterFits,
   varChips,
   listChips,
   type PaletteItem,
@@ -38,8 +39,12 @@ interface DragPayload {
   snippet?: string
   cat?: string
   move?: { start: number; end: number }
-  /** variable reporter: dropped INTO a slot, not onto the canvas */
+  /** reporter expression: dropped INTO a socket, not onto the canvas */
   slotValue?: string
+  /** which socket shape the reporter fits (Scratch round vs hex) */
+  slotKind?: 'round' | 'bool'
+  /** always splices at file scope (function definitions) */
+  toplevel?: boolean
 }
 
 const SAMPLE = `#include <stdio.h>
@@ -516,17 +521,33 @@ function onDragMove(e: PointerEvent): void {
   if (inside && drag) {
     const w = screenToWorld(e.clientX - r.left, e.clientY - r.top)
 
-    // variable reporter: highlight the slot it would fill (Scratch reporters
-    // drop INTO round inputs, never onto statement stacks)
+    // reporter chips: highlight the matching-shape socket they would fill
+    // (Scratch: round reporters fit round sockets, hex fits hex)
     if (drag.slotValue) {
       const s = slotUnderWorldPoint(w.x, w.y)
       clearSnapGhost()
       dropbar.style.display = 'none'
-      if (s) {
+      if (s && reporterFits(drag.slotKind, s.part.type)) {
         const g = new Graphics()
-        g.roundRect(s.x - 3, s.y - 3, s.w + 6, s.h + 6, 9)
+        const hex = s.part.type === 'bool'
+        const hl = (x: number, y: number, ww: number, hh: number): void => {
+          if (!hex) {
+            g.roundRect(x, y, ww, hh, 9)
+            return
+          }
+          const pt = 9
+          g.moveTo(x + pt, y)
+          g.lineTo(x + ww - pt, y)
+          g.lineTo(x + ww, y + hh / 2)
+          g.lineTo(x + ww - pt, y + hh)
+          g.lineTo(x + pt, y + hh)
+          g.lineTo(x, y + hh / 2)
+          g.closePath()
+        }
+        g.moveTo(0, 0) // no-op keeps Graphics sane before first path
+        hl(s.x - 3, s.y - 3, s.w + 6, s.h + 6)
         g.fill({ color: 0xff8c1a, alpha: 0.25 })
-        g.roundRect(s.x - 3, s.y - 3, s.w + 6, s.h + 6, 9)
+        hl(s.x - 3, s.y - 3, s.w + 6, s.h + 6)
         g.stroke({ width: 3, color: 0xff8c1a })
         snapLayer.addChild(g)
         ghost.style.opacity = '1'
@@ -603,15 +624,30 @@ async function onDragEnd(e: PointerEvent): Promise<void> {
   if (!inside) return
   const w = screenToWorld(e.clientX - r.left, e.clientY - r.top)
 
-  // variable reporter -> slot fill
+  // reporter chips -> shape-checked socket fill
   if (d.slotValue) {
     const s = slotUnderWorldPoint(w.x, w.y)
     if (!s) return
+    if (!reporterFits(d.slotKind, s.part.type)) {
+      blip(200, 0.08, 'square', 0.04)
+      consoleEl.textContent = `that block fits a ${
+        d.slotKind === 'bool' ? 'hex condition' : 'round'
+      } socket — wrong shape here`
+      return
+    }
     const err = commitSlotValue(s, d.slotValue)
     if (err !== null) {
       blip(200, 0.08, 'square', 0.04)
       consoleEl.textContent = err
     }
+    return
+  }
+
+  // function definitions splice at FILE SCOPE (never nested in C)
+  if (d.toplevel) {
+    setSrc(insertTopLevel(src, roots, d.snippet ?? ''))
+    void canonicalize()
+    blip(740, 0.07, 'sine', 0.08)
     return
   }
 
@@ -1241,6 +1277,31 @@ function isReporterChip(item: PaletteItem & { varName?: string }): boolean {
   return item.snippet === ''
 }
 
+/** Operator/function reporter chips: oval (round) or hex (bool) pills that
+ *  drop their EXPRESSION into a matching socket. */
+function makeReporterChip(item: PaletteItem): HTMLDivElement {
+  const el = document.createElement('div')
+  const hex = item.reporter === 'bool'
+  el.className = `pal pal-${item.cat}${hex ? ' pal-hex' : ' pal-reporter'}`
+  el.dataset.cat = item.cat
+  el.textContent = item.name
+  el.title = `Drop into a ${hex ? 'hex condition' : 'round'} socket, then click it to edit the operands`
+  el.addEventListener('pointerdown', (e) => {
+    if (el.classList.contains('locked')) {
+      e.preventDefault()
+      return
+    }
+    e.preventDefault()
+    startHtmlDrag(e, {
+      label: item.name,
+      slotValue: item.name,
+      slotKind: item.reporter,
+      cat: item.cat,
+    })
+  })
+  return el
+}
+
 function makeVarChip(item: PaletteItem & { varName?: string }, list = false): HTMLDivElement {
   const el = document.createElement('div')
   el.className = `pal pal-variables${isReporterChip(item) ? ' pal-reporter' : ''}${list ? ' pal-list' : ''}`
@@ -1254,8 +1315,13 @@ function makeVarChip(item: PaletteItem & { varName?: string }, list = false): HT
     }
     e.preventDefault()
     if (isReporterChip(item)) {
-      // oval reporter: fits INTO slots, never onto the canvas
-      startHtmlDrag(e, { label: item.name, slotValue: item.name, cat: 'variables' })
+      // oval reporter: fits INTO round slots, never onto the canvas
+      startHtmlDrag(e, {
+        label: item.name,
+        slotValue: item.name,
+        slotKind: 'round',
+        cat: 'variables',
+      })
     } else {
       startHtmlDrag(e, { label: item.name, snippet: item.snippet, cat: 'variables' })
     }
@@ -1347,6 +1413,10 @@ function renderPalette(): void {
     return head
   }
   const addChip = (item: PaletteItem): void => {
+    if (item.reporter !== undefined) {
+      paletteEl.appendChild(makeReporterChip(item))
+      return
+    }
     const el = document.createElement('div')
     el.className = `pal pal-${item.cat}`
     el.dataset.cat = item.cat
@@ -1357,7 +1427,12 @@ function renderPalette(): void {
         return
       }
       e.preventDefault()
-      startHtmlDrag(e, { label: item.name, snippet: item.snippet, cat: item.cat })
+      startHtmlDrag(e, {
+        label: item.name,
+        snippet: item.snippet,
+        cat: item.cat,
+        toplevel: item.toplevel,
+      })
     })
     paletteEl.appendChild(el)
   }

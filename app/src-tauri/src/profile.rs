@@ -17,6 +17,7 @@ pub const UNLOCK_RULES: &[(&str, usize)] = &[
     ("statement", 0),
     ("variables", 2),
     ("control", 3),
+    ("operators", 5),
     ("loops", 7),
     ("functions", 12),
     ("structs", 17),

@@ -220,6 +220,26 @@ check(
     String(await ev(`document.getElementById('src').value`)).includes('i < 3'),
 );
 
+// 14. Operators category + shape-checked reporters + define fn
+check(
+  'operators: green section with 14 reporter chips',
+  (await ev(`!!document.querySelector('.pal-group[data-g=\"operators\"]')`)) === true &&
+    (await ev(`document.querySelectorAll('.pal-operators').length`)) === 14,
+);
+const numSlot3 = await ev(`window.__slots().findIndex(s => s.type === 'number')`);
+check(
+  'operators: arithmetic fits round socket',
+  (await ev(`window.__commitSlot(${numSlot3}, 'total + 1')`)) === null,
+);
+check(
+  'operators: comparison refused in round socket',
+  (await ev(`window.__commitSlot(${await ev(`window.__slots().findIndex(s => s.type === 'number')`)}, 'a == b')`)) !== null,
+);
+check(
+  'functions: define fn chip present',
+  (await ev(`Array.from(document.querySelectorAll('.pal')).some(p => p.textContent === 'define fn')`)) === true,
+);
+
 await shot(process.env.TEMP + '\\ui-e2e.png');
 console.log(failures === 0 ? '[G-UI-E2E] PASS' : `[G-UI-E2E] FAIL (${failures})`);
 process.exit(failures === 0 ? 0 : 1);

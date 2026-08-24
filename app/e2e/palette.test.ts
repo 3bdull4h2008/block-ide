@@ -4,11 +4,12 @@ import {
   VARIABLES_COLOR,
   validateSlotValue,
   validateVarName,
+  reporterFits,
   varChips,
   listChips,
 } from '../src/palette'
 import { buildBlocks, harvestVars, layoutStack, flatten } from '../src/blocks'
-import { spliceInsert } from '../src/ops'
+import { spliceInsert, insertTopLevel } from '../src/ops'
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -33,7 +34,11 @@ describe('Scratch palette structure (1.10)', () => {
       expect(g.color).toMatch(/^#[0-9A-Fa-f]{6}$/)
       expect(g.items.length).toBeGreaterThan(0)
       for (const item of g.items) {
-        expect(item.snippet.length).toBeGreaterThan(0)
+        // reporters carry expressions, not splices
+        expect(
+          item.snippet.length > 0 || item.reporter !== undefined,
+          `${g.name}/${item.name}`,
+        ).toBe(true)
         expect(item.cat.length).toBeGreaterThan(0)
       }
     }
@@ -104,6 +109,61 @@ describe('Lists -> C arrays (Scratch data subcategory)', () => {
     expect(validateSlotValue('bool', 'ok')).toBe('ok')
     expect(validateSlotValue('bool', '   ')).toBeNull()
   })
+
+  it('arithmetic expressions fit round sockets; boolean ops do NOT', () => {
+    expect(validateSlotValue('number', 'a + b')).toBe('a + b')
+    expect(validateSlotValue('number', 'total * (2 + 1)')).toBe('total * (2 + 1)')
+    expect(validateSlotValue('number', 'a / b % 3')).toBe('a / b % 3')
+    expect(validateSlotValue('ident', 'a - b')).toBe('a - b')
+    // bare token pairs without operators are junk
+    expect(validateSlotValue('number', 'a b')).toBeNull()
+    // comparison/logic operators are boolean-only (hex sockets)
+    expect(validateSlotValue('number', 'a == b')).toBeNull()
+    expect(validateSlotValue('number', 'a && b')).toBeNull()
+    expect(validateSlotValue('ident', '!x')).toBeNull()
+    expect(validateSlotValue('bool', 'a == b')).toBe('a == b')
+  })
+})
+
+describe('Operators category (Scratch green)', () => {
+  it('exists with round arithmetic + hex comparison/logic reporters', () => {
+    const ops = PALETTE_GROUPS.find((g) => g.name === 'Operators')
+    expect(ops).toBeDefined()
+    expect(ops!.color.toLowerCase()).toBe('#59c059')
+    const round = ops!.items.filter((i) => i.reporter === 'round')
+    const bool = ops!.items.filter((i) => i.reporter === 'bool')
+    expect(round.map((i) => i.name)).toEqual([
+      'a + b',
+      'a - b',
+      'a * b',
+      'a / b',
+      'a % b',
+    ])
+    expect(bool.map((i) => i.name)).toEqual([
+      'a == b',
+      'a != b',
+      'a < b',
+      'a > b',
+      'a <= b',
+      'a >= b',
+      'a && b',
+      'a || b',
+      'not ok',
+    ])
+    for (const i of ops!.items) {
+      expect(reporterFits(i.reporter, i.reporter === 'bool' ? 'bool' : 'number')).toBe(true)
+      expect(reporterFits(i.reporter, i.reporter === 'bool' ? 'number' : 'bool')).toBe(false)
+    }
+  })
+
+  it('define fn is marked toplevel; call chips are statements', () => {
+    const fns = PALETTE_GROUPS.find((g) => g.name === 'Functions')!
+    const def = fns.items.find((i) => i.name === 'define fn')!
+    expect(def.toplevel).toBe(true)
+    for (const i of fns.items) {
+      if (i.name !== 'define fn') expect(i.toplevel).toBeFalsy()
+    }
+  })
 })
 
 describe('variable harvesting from the open file', () => {
@@ -129,5 +189,25 @@ describe('variable harvesting from the open file', () => {
     expect(vars).not.toContain('y')
     expect(vars).toContain('r')
     expect(vars).toContain('p')
+  })
+})
+
+describe('toplevel insert for function definitions', () => {
+  const parseTree = (src: string) =>
+    JSON.parse(execFileSync(ctree('ctree_json.exe'), { input: src, encoding: 'utf8' })).tree
+
+  it('appends after the last top-level block, producing parseable C', () => {
+    const base = `#include <stdio.h>\n\nint main(void) {\n    return 0;\n}\n`
+    const roots = buildBlocks(parseTree(base))
+    layoutStack(roots, 40, 40)
+    const next = insertTopLevel(base, roots, 'int myfn(int x) {\n    return x;\n}')
+    expect(next).toContain('int myfn(int x)')
+    expect(next.indexOf('int myfn')).toBeGreaterThan(next.indexOf('int main'))
+    expect(parseClean(next)).toBe(true)
+  })
+
+  it('handles an empty workspace (EOF insert)', () => {
+    const next = insertTopLevel('', [], 'int solo(void) {\n    return 1;\n}\n')
+    expect(parseClean(next)).toBe(true)
   })
 })

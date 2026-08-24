@@ -1,6 +1,30 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 32: trigger=user: add all functions + math operations (comparison, + - * / etc)
+expect: Scratch Operators category (round arithmetic + hex comparison/logic
+reporters), expanded Functions group, shape-checked reporter drops; gates green
+obs: NEW Operators group (Scratch green #59C059, unlock tier 5): 5 round
+arithmetic reporters (a+b .. a%b) + 9 hex comparison/logic reporters
+(== != < > <= >= && || not) - reporters carry their EXPRESSION as
+slotValue and drop ONLY into matching-shape sockets (reporterFits: round
+-> ident/number, hex -> bool), wrong-shape drops get feedback blip+hint.
+Validator: arithmetic charset (operands + - * / % parens indexing) accepted
+in round sockets; boolean operators (= < > ! &) deliberately EXCLUDED from
+round sockets (Scratch shape split); bare token pairs ('a b') rejected -
+must be single operand or operator-bearing. Functions group: call proc +
+define fn (toplevel flag -> insertTopLevel splices at FILE SCOPE after last
+top-level block; C never nests definitions - unit-tested incl. parse-clean).
+I/O: printf %d + scanf %d chips. TWO GATE FINDS: (1) chip class was
+pal-operators but CSS/gate expected pal-operator - synced; (2) CSS cascade:
+.pal-reporter (variables orange) sat AFTER .pal-operators (equal
+specificity) painting arithmetic ovals orange - operators rule moved below
+with comment. vitest 33/33; ALL FOURTEEN gates PASS exit 0 (33 UI
+assertions); screenshot verified green ovals + hexes in Operators section.
+state=SUCCESS | next: user eyes-on; vanilla install drill (manual, Gate 5)
+```
+
+```
 RUN 31: trigger=continue: boolean hex sockets (last applicable research item)
 expect: control-statement conditions render as Scratch-style hexagonal
 editable sockets; for keeps init/update granular; gates green

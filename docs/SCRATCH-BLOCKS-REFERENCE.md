@@ -88,8 +88,8 @@ content; dragging a value OUT of a slot reverts it to its default.
 | category rail + sections   | sticky rail dots (click = jump, active follows scroll) + colored section headers |
 | stack block                | statement row (notch/tab geometry, already shipped)|
 | C-block                    | control mouth (1.7)                                |
-| reporter oval              | variable chip — drops into ident/number slots      |
-| boolean hex                | hexagonal CONDITION sockets on control headers (1.12): `if ⟨i > 0⟩`, `while ⟨i < 10⟩`, `for (…; ⟨k < 5⟩; …)` — any non-empty C condition accepted |
+| reporter oval              | variable chip + arithmetic reporters (`a + b` … `a % b`) — drop into ident/number sockets |
+| boolean hex                | hexagonal CONDITION sockets on control headers (1.12) + hex comparison/logic reporters (`a == b` … `a || b`, `not`) that drop into them (1.13) |
 | "Make a Variable" dialog   | name prompt; scope N/A (C scoping is the code's job)|
 | `set (v) to (0)`           | `v = 0;`                                           |
 | `change (v) by (1)`        | `v = v + 1;`                                       |

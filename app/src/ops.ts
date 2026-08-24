@@ -46,3 +46,15 @@ export function spliceMove(
 export function applyEdit(b: BBlock, replacement: string): (text: string) => string {
   return (text) => text.slice(0, b.start) + replacement + text.slice(b.headerEnd)
 }
+
+/** Splice at FILE SCOPE — for function definitions, which are not nestable
+ *  in C. Appends after the last top-level block (or EOF when empty). */
+export function insertTopLevel(
+  src: string,
+  rootEnds: { end: number }[],
+  snippet: string,
+): string {
+  if (rootEnds.length === 0) return spliceInsert(src, src.length, snippet)
+  const last = rootEnds[rootEnds.length - 1]
+  return spliceInsert(src, Math.min(last.end, src.length), snippet)
+}

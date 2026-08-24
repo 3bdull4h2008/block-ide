@@ -321,6 +321,24 @@ select:focus-visible,
   background: #ff6680;
 }
 
+.pal.pal-hex {
+  clip-path: polygon(
+    9px 0,
+    calc(100% - 9px) 0,
+    100% 50%,
+    calc(100% - 9px) 100%,
+    9px 100%,
+    0 50%
+  );
+  border-radius: 0;
+  padding-left: 12px;
+  padding-right: 12px;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* variable rename/delete menu (Scratch right-click actions) */
 #var-menu {
   position: fixed;
@@ -353,6 +371,16 @@ select:focus-visible,
   border-radius: 16px;
   background: #ff8c1a;
   min-height: 26px;
+}
+
+/* operator reporters: Scratch Operators green; hex ones get pointed sides.
+   MUST come after .pal-reporter (equal specificity, later wins) so round
+   arithmetic ovals render green, not variables-orange. */
+.pal.pal-operators {
+  background: #59c059;
+}
+.pal.pal-operators.pal-hex {
+  border-radius: 0;
 }
 .pal-functions { background: #7c5ce0; }
 .pal-structs { background: #ec4899; }
