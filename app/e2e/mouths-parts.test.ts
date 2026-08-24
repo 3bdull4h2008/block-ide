@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { buildBlocks, flatten, headerWidth, layoutStack, type BBlock, type CTreeJSON } from '../src/blocks'
+import {
+  buildBlocks,
+  flatten,
+  headerWidth,
+  layoutStack,
+  partWidth,
+  type BBlock,
+  type CTreeJSON,
+} from '../src/blocks'
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -92,11 +100,16 @@ describe('typed inline parts (1.9)', () => {
     expect(SRC.slice(str.start, str.end)).toBe('"hi\\n"')
   })
 
-  it('slot widths never collapse (click target >= 36px)', () => {
+  it('slot widths never collapse (click target >= 36px), text tokens stay compact', () => {
     const roots = render(`int main(void) {\n    x = 0;\n}\n`)
     const stmt = flatten(roots).find((b) => b.nodeKind === 'expression_statement')!
-    expect(headerWidth(stmt)).toBeGreaterThanOrEqual(
-      stmt.parts.reduce((w, p) => w + (p.type === 'text' ? 0 : 36), 90),
-    )
+    const slots = stmt.parts.filter((p) => p.type !== 'text')
+    expect(slots.length).toBe(2)
+    for (const s of slots) expect(partWidth(s)).toBeGreaterThanOrEqual(36)
+    // the `=`/`;` text tokens must be glyph-sized, not 90px floor-inflated
+    const texts = stmt.parts.filter((p) => p.type === 'text')
+    for (const t of texts) expect(partWidth(t)).toBeLessThan(30)
+    // header = padding + parts + gaps, nothing more
+    expect(headerWidth(stmt)).toBeLessThan(220)
   })
 })

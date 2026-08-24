@@ -24,6 +24,12 @@ pub const UNLOCK_RULES: &[(&str, usize)] = &[
 
 impl Profile {
     pub fn path(app: &tauri::AppHandle) -> Option<PathBuf> {
+        // gate runs redirect all local state (BLOCKIDE_DATA_DIR) — see commands::data_root
+        if let Ok(dir) = std::env::var("BLOCKIDE_DATA_DIR") {
+            if !dir.trim().is_empty() {
+                return Some(PathBuf::from(dir).join("profile.json"));
+            }
+        }
         use tauri::Manager;
         app.path()
             .app_data_dir()

@@ -84,6 +84,9 @@ Add-Gate -Id 'G-PERF' -Pass ($LASTEXITCODE -eq 0) -Metrics @{ tail = (($pfOut | 
 $uiPort = 9339
 $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$uiPort"
 $env:WEBVIEW2_USER_DATA_FOLDER = "$env:TEMP\blockide-uie2e-profile"
+# isolate ALL local state (journal/profile) from the user's real data
+$env:BLOCKIDE_DATA_DIR = "$env:TEMP\blockide-gate-data"
+New-Item -ItemType Directory -Force -Path $env:BLOCKIDE_DATA_DIR | Out-Null
 $appExe = Join-Path $repo 'target\release\app.exe'
 if (-not (Test-Path $appExe)) { $appExe = Join-Path $repo 'target\debug\app.exe' }
 $uiProc = Start-Process -FilePath $appExe -PassThru

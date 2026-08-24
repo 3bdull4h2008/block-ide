@@ -589,12 +589,22 @@ pub fn profile_get(app: tauri::AppHandle) -> Result<ProfileOut, String> {
 }
 
 // ------------------------------------------------------- crash journal (1.6)
-fn journal_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+/// Overridable data root so automated gate runs never touch the user's real
+/// profile/journal (Golden Rule 6: kid-safe defaults; tests must be invisible).
+fn data_root(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    if let Ok(dir) = std::env::var("BLOCKIDE_DATA_DIR") {
+        if !dir.trim().is_empty() {
+            return Ok(std::path::PathBuf::from(dir));
+        }
+    }
     use tauri::Manager;
-    let dir = app
-        .path()
+    app.path()
         .app_data_dir()
-        .map_err(|_| "no app data dir".to_string())?;
+        .map_err(|_| "no app data dir".to_string())
+}
+
+fn journal_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = data_root(app)?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir.join("journal.json"))
 }

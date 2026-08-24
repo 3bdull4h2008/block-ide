@@ -1425,13 +1425,18 @@ function journalSchedule(): void {
 async function recoverJournal(): Promise<void> {
   try {
     const j = await invoke<{ path: string; content: string; age_secs: number } | null>('journal_read')
-    if (j && j.content.trim()) {
-      caretAnchor = null
-      src = j.content
-      srcEl.value = src
-      void render(src)
-      consoleEl.textContent = `[recovery] unsaved work from ${Math.round(j.age_secs)}s ago restored${j.path ? ` (${j.path})` : ''} — Ctrl+S to keep it`
+    if (!j || !j.content.trim()) return
+    // template-identical buffers carry no user work — restoring them just
+    // surfaces confusing "unsaved work" banners on every launch
+    if (j.content === SAMPLE || j.content === NEW_TEMPLATE) {
+      void invoke('journal_clear')
+      return
     }
+    caretAnchor = null
+    src = j.content
+    srcEl.value = src
+    void render(src)
+    consoleEl.textContent = `[recovery] unsaved work from ${Math.round(j.age_secs)}s ago restored${j.path ? ` (${j.path})` : ''} — Ctrl+S to keep it`
   } catch {
     /* no journal */
   }

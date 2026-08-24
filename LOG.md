@@ -1,6 +1,26 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 28: trigger=user screenshot: block rows stretch into giant ribbons
+expect: diagnose + fix width blowup; kill phantom recovery banner
+obs: ROOT CAUSE: measure()'s 90px whole-block MIN-WIDTH floor was applied
+PER HEADER PART - every `=`, `+`, `;`, `(` token rendered ~90px and short
+slots ~106px, so rows bloated 3-5x (return row spanned half the canvas).
+Fix: glyphWidth() raw text runs for parts (text = len*8.4+6, slots clamped
+36..240); measure() floor kept only where a whole block needs it. ALSO:
+(1) phantom "[recovery] unsaved work" banner every launch = journal entries
+left by force-killed gate/test app instances; recoverJournal now silently
+clears template-identical buffers (SAMPLE/NEW_TEMPLATE carry no user work);
+stale entry deleted from user app-data. (2) NEW BLOCKIDE_DATA_DIR override
+(commands::data_root + profile::path) so gate runs isolate journal+profile
+from real user data; run_gates sets it for UI-E2E. Width test rewritten to
+the real invariant (slots >=36px, text tokens <30px, header <220). CDP
+screenshot verified compact rows + snug for-mouth. vitest 16/16, ALL
+FOURTEEN gates PASS exit 0.
+state=SUCCESS | next: user eyes-on; vanilla install drill (manual, Gate 5)
+```
+
+```
 RUN 27: trigger=user: loops as mouths + sandbox/campaign split + Scratch-style
 typed inline inputs + more block types (variables palette)
 expect: 1.7 control statements always C-mouths (braced or not, else rows

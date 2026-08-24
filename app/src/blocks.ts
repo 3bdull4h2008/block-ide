@@ -248,11 +248,18 @@ export function measure(label: string): number {
   return w
 }
 
+/** Raw glyph-run width — NO minimum. measure()'s 90 px floor is for whole
+ *  blocks; applying it per header part is why rows used to stretch into
+ *  ribbons around every `=` and `;`. */
+function glyphWidth(s: string): number {
+  return Math.max(6, s.length * CHAR_W)
+}
+
 /** Slots draw as rounded input boxes — wider than their text, with a
  *  minimum click target (Scratch fields never collapse to nothing). */
 export function partWidth(p: BlockPart): number {
-  if (p.type === 'text') return measure(p.text)
-  return Math.max(36, measure(p.text) + 16)
+  if (p.type === 'text') return glyphWidth(p.text) + 6
+  return Math.min(240, Math.max(36, glyphWidth(p.text) + 18))
 }
 
 /** Width of the header row: parts laid out left→right plus padding. */
