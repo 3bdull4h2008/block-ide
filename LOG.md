@@ -1,6 +1,31 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 29: trigger=user: categorize palette by type + Scratch-style variable
+creation; asked for precise Scratch research first
+expect: research doc; palette as category sections; Make-a-Variable spawns
+reporter + set/change chips; reporters drop INTO slots
+obs: RESEARCH committed as docs/SCRATCH-BLOCKS-REFERENCE.md - scratch-blocks
+primaries (Motion #4C97FF ... Control #FFAB19, Variables/data #FF8C1A, My
+Blocks #FF6680), shape taxonomy (hat/stack/C/cap/reporter-oval/boolean-hex),
+input socket types, and the exact variable lifecycle (button -> name+scope
+dialog -> oval reporter + checkbox monitor + dropdown stack blocks; reporters
+replace slot contents; right-click rename/delete; runtime creation
+impossible). Mapped to C: reporter=var chip dropping into ident/number
+slots, set-to -> `v = 0;`, change-by -> `v = v + 1;`, delete leaves code
+untouched (file is truth). NEW palette.ts: PALETTE_GROUPS (Control/Loops/
+Code/Functions/Structs/Notes) + validateVarName (ident regex + C reserved
+words) + varChips. Variables recolored to Scratch orange (was green).
+Slot-drop: DragPayload.slotValue -> drag highlights target slot orange,
+drop splices via commitSlotValue seam. E2E caught REAL BUG: data-var was
+chip LABEL not variable name -> only reporter matched [data-var=score];
+added VarChip.varName. vitest 21/21; ALL FOURTEEN gates PASS exit 0 (24 UI
+assertions); screenshot verified grouped palette + headers.
+state=SUCCESS | next: user eyes-on; var-name harvesting from parsed file
+(follow-up); boolean hex sockets for conditions (v2)
+```
+
+```
 RUN 28: trigger=user screenshot: block rows stretch into giant ribbons
 expect: diagnose + fix width blowup; kill phantom recovery banner
 obs: ROOT CAUSE: measure()'s 90px whole-block MIN-WIDTH floor was applied

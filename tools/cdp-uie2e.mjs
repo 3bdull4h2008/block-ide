@@ -159,6 +159,26 @@ check(
     String(await ev(`document.getElementById('src').value`)).includes('42'),
 );
 
+// 11. Scratch palette: category groups + Make-a-Variable lifecycle
+check(
+  'palette: category group headers rendered',
+  (await ev(`document.querySelectorAll('.pal-group').length`)) >= 6,
+);
+check(
+  'palette: Make a Variable button present',
+  (await ev(`!!document.getElementById('make-var')`)) === true,
+);
+check(
+  'make var: rejects invalid names',
+  (await ev(`window.__makeVar('2bad name')`)) === 'invalid',
+);
+check(
+  'make var: creates reporter + set/change chips',
+  (await ev(`window.__makeVar('score')`)) === null &&
+    (await ev(`!!document.querySelector('.pal-reporter[data-var=\"score\"]')`)) === true &&
+    (await ev(`document.querySelectorAll('.pal[data-var=\"score\"]').length`)) === 3,
+);
+
 await shot(process.env.TEMP + '\\ui-e2e.png');
 console.log(failures === 0 ? '[G-UI-E2E] PASS' : `[G-UI-E2E] FAIL (${failures})`);
 process.exit(failures === 0 ? 0 : 1);

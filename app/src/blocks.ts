@@ -373,9 +373,9 @@ export function hitTestHeader(roots: BBlock[], wx: number, wy: number): BBlock |
  *  each fill for the chunky 3px clay outline. */
 export const COLORS: Record<Cat, number> = {
   function: 0x7c5ce0,
-  control: 0xff9f1a,
+  control: 0xffab19,
   statement: 0x0891b2,
-  variables: 0x2fbf71,
+  variables: 0xff8c1a,
   comment: 0xffe9a8,
   error: 0x94a3b8,
 }
@@ -384,7 +384,7 @@ export const BORDER: Record<Cat, number> = {
   function: 0x5a3fc0,
   control: 0xd97e06,
   statement: 0x066a85,
-  variables: 0x1e8f52,
+  variables: 0xcc6d10,
   comment: 0xd9b25a,
   error: 0x64748b,
 }

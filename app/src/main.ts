@@ -21,6 +21,13 @@ import {
 import { History } from './history'
 import { spliceInsert, spliceMove, applyEdit } from './ops'
 import { pickAnchor, caretOffset, type CaretAnchor } from './caret'
+import {
+  PALETTE_GROUPS,
+  VARIABLES_COLOR,
+  validateVarName,
+  varChips,
+  type PaletteItem,
+} from './palette'
 import './style.css'
 
 interface DragPayload {
@@ -28,6 +35,8 @@ interface DragPayload {
   snippet?: string
   cat?: string
   move?: { start: number; end: number }
+  /** variable reporter: dropped INTO a slot, not onto the canvas */
+  slotValue?: string
 }
 
 const SAMPLE = `#include <stdio.h>
@@ -49,22 +58,6 @@ int main(void) {
     return 0;
 }
 `
-
-const TEMPLATES = [
-  { name: 'for', cat: 'control', snippet: 'for (int i = 0; i < 10; i++) {\n}' },
-  { name: 'if', cat: 'control', snippet: 'if (cond) {\n}' },
-  { name: 'while', cat: 'loops', snippet: 'while (cond) {\n}' },
-  { name: 'new int', cat: 'variables', snippet: 'int value = 0;' },
-  { name: 'set var =', cat: 'variables', snippet: 'value = 0;' },
-  { name: 'change var by', cat: 'variables', snippet: 'value = value + 1;' },
-  { name: 'copy var', cat: 'variables', snippet: 'a = b;' },
-  { name: 'assign +=', cat: 'statement', snippet: 'value = value + 1;' },
-  { name: 'printf', cat: 'statement', snippet: 'printf("hi\\n");' },
-  { name: 'call fn', cat: 'functions', snippet: 'value = myfn(value);' },
-  { name: 'struct field', cat: 'structs', snippet: 'p.x = 0;' },
-  { name: 'return', cat: 'statement', snippet: 'return 0;' },
-  { name: '// note', cat: 'comment', snippet: '// note' },
-]
 
 const srcEl = document.getElementById('src') as HTMLTextAreaElement
 const statusEl = document.getElementById('status') as HTMLSpanElement
@@ -470,6 +463,13 @@ function drawSnapGhost(
   snapLayer.addChild(g, t)
 }
 
+function slotUnderWorldPoint(wx: number, wy: number): SlotHit | null {
+  for (const s of slotHits) {
+    if (wx >= s.x && wx <= s.x + s.w && wy >= s.y && wy <= s.y + s.h) return s
+  }
+  return null
+}
+
 function onDragMove(e: PointerEvent): void {
   ghost.style.left = `${e.clientX + 12}px`
   ghost.style.top = `${e.clientY - 14}px`
@@ -478,6 +478,27 @@ function onDragMove(e: PointerEvent): void {
     e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom
   if (inside && drag) {
     const w = screenToWorld(e.clientX - r.left, e.clientY - r.top)
+
+    // variable reporter: highlight the slot it would fill (Scratch reporters
+    // drop INTO round inputs, never onto statement stacks)
+    if (drag.slotValue) {
+      const s = slotUnderWorldPoint(w.x, w.y)
+      clearSnapGhost()
+      dropbar.style.display = 'none'
+      if (s) {
+        const g = new Graphics()
+        g.roundRect(s.x - 3, s.y - 3, s.w + 6, s.h + 6, 9)
+        g.fill({ color: 0xff8c1a, alpha: 0.25 })
+        g.roundRect(s.x - 3, s.y - 3, s.w + 6, s.h + 6, 9)
+        g.stroke({ width: 3, color: 0xff8c1a })
+        snapLayer.addChild(g)
+        ghost.style.opacity = '1'
+        return
+      }
+      ghost.style.opacity = '0.5'
+      return
+    }
+
     const target = findDropTarget(roots, w.x, w.y)
     if (target && !(drag.move && isInsideRange(target.container, drag.move))) {
       const kids = target.container.children
@@ -533,6 +554,7 @@ function isInsideRange(inner: BBlock, outer: { start: number; end: number }): bo
 async function onDragEnd(e: PointerEvent): Promise<void> {
   window.removeEventListener('pointermove', onDragMove)
   ghost.style.display = 'none'
+  ghost.style.opacity = '1'
   dropbar.style.display = 'none'
   clearSnapGhost()
   const d = drag
@@ -543,6 +565,19 @@ async function onDragEnd(e: PointerEvent): Promise<void> {
     e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom
   if (!inside) return
   const w = screenToWorld(e.clientX - r.left, e.clientY - r.top)
+
+  // variable reporter -> slot fill
+  if (d.slotValue) {
+    const s = slotUnderWorldPoint(w.x, w.y)
+    if (!s) return
+    const err = commitSlotValue(s, d.slotValue)
+    if (err !== null) {
+      blip(200, 0.08, 'square', 0.04)
+      consoleEl.textContent = err
+    }
+    return
+  }
+
   const target = findDropTarget(roots, w.x, w.y)
   if (!target) return
   if (d.move && isInsideRange(target.container, d.move)) return
@@ -1168,20 +1203,106 @@ hostEl.addEventListener(
   { passive: false },
 )
 
-for (const tpl of TEMPLATES) {
+// ------------------------------------------------------- Scratch palette
+// Category sections with colored headers (docs/SCRATCH-BLOCKS-REFERENCE.md);
+// the Variables section owns the Make-a-Variable flow and per-variable chips.
+const knownVars: string[] = JSON.parse(localStorage.getItem('blockide-vars') ?? '[]')
+
+function saveVars(): void {
+  localStorage.setItem('blockide-vars', JSON.stringify(knownVars))
+}
+
+function makeVarChip(item: PaletteItem & { varName?: string }): HTMLDivElement {
   const el = document.createElement('div')
-  el.className = `pal pal-${tpl.cat}`
-  el.dataset.cat = tpl.cat
-  el.textContent = tpl.name
+  const isReporter = item.snippet === ''
+  el.className = `pal pal-variables${isReporter ? ' pal-reporter' : ''}`
+  el.dataset.cat = 'variables'
+  el.dataset.var = item.varName ?? item.name
+  el.textContent = item.name
   el.addEventListener('pointerdown', (e) => {
     if (el.classList.contains('locked')) {
       e.preventDefault()
       return
     }
     e.preventDefault()
-    startHtmlDrag(e, { label: tpl.name, snippet: tpl.snippet, cat: tpl.cat })
+    if (isReporter) {
+      // oval reporter: fits INTO slots, never onto the canvas
+      startHtmlDrag(e, { label: item.name, slotValue: item.name, cat: 'variables' })
+    } else {
+      startHtmlDrag(e, { label: item.name, snippet: item.snippet, cat: 'variables' })
+    }
   })
-  paletteEl.appendChild(el)
+  el.addEventListener('contextmenu', (e) => {
+    // Scratch: right-click a variable reporter -> delete
+    e.preventDefault()
+    const varName = item.varName ?? item.name
+    const idx = knownVars.indexOf(varName)
+    if (idx >= 0 && window.confirm(`Delete variable "${varName}"? (code is untouched)`)) {
+      knownVars.splice(idx, 1)
+      saveVars()
+      renderPalette()
+    }
+  })
+  return el
+}
+
+function renderPalette(): void {
+  paletteEl.innerHTML = ''
+  for (const g of PALETTE_GROUPS) {
+    const head = document.createElement('div')
+    head.className = 'pal-group'
+    head.dataset.g = g.name.toLowerCase()
+    head.textContent = g.name
+    head.style.background = g.color
+    if (g.name === 'Notes') head.style.color = '#6b4d00'
+    paletteEl.appendChild(head)
+    for (const item of g.items) {
+      const el = document.createElement('div')
+      el.className = `pal pal-${item.cat}`
+      el.dataset.cat = item.cat
+      el.textContent = item.name
+      el.addEventListener('pointerdown', (e) => {
+        if (el.classList.contains('locked')) {
+          e.preventDefault()
+          return
+        }
+        e.preventDefault()
+        startHtmlDrag(e, { label: item.name, snippet: item.snippet, cat: item.cat })
+      })
+      paletteEl.appendChild(el)
+    }
+  }
+
+  // Variables section: Scratch's Make-a-Variable + per-variable chips
+  const vhead = document.createElement('div')
+  vhead.className = 'pal-group'
+  vhead.dataset.g = 'variables'
+  vhead.textContent = 'Variables'
+  vhead.style.background = VARIABLES_COLOR
+  paletteEl.appendChild(vhead)
+
+  const mk = document.createElement('button')
+  mk.id = 'make-var'
+  mk.dataset.cat = 'variables' // lock-gated with the section in academy mode
+  mk.textContent = 'Make a Variable'
+  mk.addEventListener('click', () => {
+    if (mk.classList.contains('locked')) return
+    const raw = window.prompt('Variable name:', 'score')
+    if (raw === null) return
+    const name = validateVarName(raw)
+    if (name === null) {
+      consoleEl.textContent = `"${raw}" is not a valid C variable name`
+      blip(200, 0.08, 'square', 0.04)
+      return
+    }
+    if (!knownVars.includes(name)) knownVars.push(name)
+    saveVars()
+    renderPalette()
+    blip(740, 0.07, 'sine', 0.06)
+  })
+  paletteEl.appendChild(mk)
+  for (const v of knownVars) for (const chip of varChips(v)) paletteEl.appendChild(makeVarChip(chip))
+  renderPaletteLocks()
 }
 
 // ---------------------------------------------------------------- academy
@@ -1334,11 +1455,20 @@ document.getElementById('check-btn')?.addEventListener('click', async () => {
   if (!s) return 'no such slot'
   return commitSlotValue(s, v)
 }
+;(window as unknown as { __makeVar?: unknown }).__makeVar = (raw: string) => {
+  const name = validateVarName(raw)
+  if (name === null) return 'invalid'
+  if (!knownVars.includes(name)) knownVars.push(name)
+  saveVars()
+  renderPalette()
+  return null
+}
 
 void refreshProfile()
 void refreshLevels()
 void recoverJournal()
 setMode(appMode) // apply persisted sandbox/academy split (D7)
+renderPalette() // Scratch-style grouped palette (1.10)
 
 // ------------------------------------------------------- semantic caret map
 // P1.2 residual: cursor survives Blocks/Split/Text switches by anchoring to

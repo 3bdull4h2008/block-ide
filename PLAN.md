@@ -205,6 +205,7 @@ comment anchors) remain open — see P1.2 residual note.
 | 1.7 | Loop/control statements ALWAYS render as Scratch C-mouths containing their blocks — braced or braceless (clang-format never adds braces), else-clauses included as sibling rows; header label excludes body text (old label bug: whole body collapsed into one fat block) | ✅ field-based bodies + else_clause unwrap (RUN 27) | vitest mouths suite |
 | 1.8 | D7 mode split realized: Sandbox (palette fully unlocked, academy chrome hidden) vs Academy campaign; persisted choice in toolbar segmented control | ✅ data-mode + CSS + lock bypass (RUN 27) | G-UI-E2E mode assertions |
 | 1.9 | Scratch-style inline typed inputs: header parts = text chunks + ident/number/string slots; click-to-edit overlay w/ per-type validation (idents/numbers regex, strings auto-quote); Variables palette category (new int / set var / change var / copy var) + unlock tier | ✅ parts pipeline + slot editor + cat (RUN 27) | vitest parts suite; G-UI-E2E slot commit/reject |
+| 1.10 | Scratch-faithful palette: colored category section headers (scratch-blocks primaries; see docs/SCRATCH-BLOCKS-REFERENCE.md); Make-a-Variable flow (validated C ident, localStorage-persisted) spawning per-variable oval reporter (drops INTO slots w/ orange highlight) + set/change stack chips; right-click deletes variable | ✅ palette.ts + slot-drop (RUN 29) | vitest palette suite; G-UI-E2E groups+make-var |
 
 **Gate 1:** ❌ NOT MET. `G-EDIT-E2E` scripted flows (build fizzbuzz entirely
 in blocks; fix injected bug found via blocks only).
