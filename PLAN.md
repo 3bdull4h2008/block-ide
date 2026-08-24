@@ -197,7 +197,7 @@ comment anchors) remain open — see P1.2 residual note.
 | Step | Description | Status | Validation |
 |------|-------------|--------|------------|
 | 1.1 | Workspace: folder open, file tree, tabs (dirty indicators), VS Code keybinding set | ❌ | Scripted E2E |
-| 1.2 | Per-tab view modes Blocks / Split (sync-scroll) / Text; mode switch preserves cursor & selection semantically (map via node ids) | ✅ view modes + per-tab memory + text→blocks sync-scroll; cursor semantic map pending | G-UI-E2E |
+| 1.2 | Per-tab view modes Blocks / Split (sync-scroll) / Text; mode switch preserves cursor & selection semantically (map via node ids) | ✅ view modes + per-tab memory + sync-scroll + semantic caret map (kind+text/id tiers — caret.ts; RUN 24) | G-UI-E2E incl. cursor round-trip |
 | 1.3 | Block interactivity: drag-from-palette, snap targets validated by grammar (an `else` cannot exist without `if`), inline textfields for identifiers/literals, delete = safe subtree removal with placeholder | ❌ | Grammar-reject unit tests |
 | 1.4 | Palette v1 categories: Control, Loops, Variables, Operators, Functions, I/O (printf family), Structs | ❌ | Each palette block emits compilable snippet |
 | 1.5 | Undo/redo spanning both views (command-pattern on AST ops + text diffs) | ❌ | Undo-to-byte-identical gate |

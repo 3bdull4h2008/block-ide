@@ -174,11 +174,20 @@ pub fn run_poll() -> Result<Option<RunOut>, String> {
         None => None,
         Some((r, _)) => r.poll(),
     };
-    Ok(taken.map(|o| RunOut {
-        stdout: o.stdout,
-        stderr: o.stderr,
-        exit: o.exit,
-        timed_out: o.timed_out,
+    Ok(taken.map(|res| match res {
+        Ok(o) => RunOut {
+            stdout: o.stdout,
+            stderr: o.stderr,
+            exit: o.exit,
+            timed_out: o.timed_out,
+        },
+        // launch/supervision failure: surface it instead of spinning forever
+        Err(e) => RunOut {
+            stdout: String::new(),
+            stderr: format!("[launch] {e}"),
+            exit: -1,
+            timed_out: false,
+        },
     }))
 }
 

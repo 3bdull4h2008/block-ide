@@ -19,6 +19,9 @@ export interface CTreeJSON {
 export type Cat = 'function' | 'control' | 'statement' | 'comment' | 'error'
 
 export interface BBlock {
+  /** Stable node id from the parse — the semantic anchor for cursor mapping
+   *  and diagnostics; survives re-layouts, changes when code is edited. */
+  id: number
   nodeKind: string
   label: string
   cat: Cat
@@ -94,6 +97,7 @@ function toBlock(n: CNodeJSON): BBlock {
   const compound = findCompound(n)
   const container = compound !== null && n.kind !== 'comment'
   return {
+    id: n.id,
     nodeKind: n.kind,
     label:
       cat === 'error'

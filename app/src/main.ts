@@ -18,6 +18,7 @@ import {
 } from './blocks'
 import { History } from './history'
 import { spliceInsert, spliceMove, applyEdit } from './ops'
+import { pickAnchor, caretOffset, type CaretAnchor } from './caret'
 import './style.css'
 
 interface DragPayload {
@@ -535,6 +536,7 @@ hostEl.addEventListener('dblclick', (e) => {
   const w = screenToWorld(me.offsetX, me.offsetY)
   const hit = hitTestHeader(roots, w.x, w.y)
   if (!hit || hit.sticky) return
+  anchorToBlock(hit)
   const replacement = window.prompt('Edit statement:', hit.label)
   if (replacement === null) return
   setSrc(applyEdit(hit, replacement)(src))
@@ -812,6 +814,7 @@ hostEl.addEventListener('contextmenu', (e) => {
   }
   e.preventDefault()
   ctxBlock = hit
+  anchorToBlock(hit)
   ctxMenu.innerHTML =
     '<div class="mi" data-act="dup">Duplicate</div><div class="mi danger" data-act="del">Delete</div>'
   ctxMenu.style.display = 'block'
@@ -883,6 +886,7 @@ async function openTab(rel: string): Promise<void> {
 function activateTab(rel: string): void {
   if (activePath === rel) return
   hist.reset()
+  caretAnchor = null // different buffer — old node ids are meaningless here
   activePath = rel
   src = fileCache.get(rel) ?? ''
   srcEl.value = src
@@ -1092,6 +1096,7 @@ document.getElementById('level-load')?.addEventListener('click', async () => {
   if (!id) return
   try {
     const l = await invoke<{ starter: string; hints: string[] }>('academy_load', { levelId: id })
+    caretAnchor = null
     setSrc(l.starter)
     hints = l.hints
     hintTier = 0
@@ -1153,6 +1158,41 @@ void refreshProfile()
 void refreshLevels()
 void recoverJournal()
 
+// ------------------------------------------------------- semantic caret map
+// P1.2 residual: cursor survives Blocks/Split/Text switches by anchoring to
+// the deepest node under the caret (node id + edge), re-derived from the
+// current parse on every restore — never a raw byte offset.
+let caretAnchor: CaretAnchor | null = null
+
+function captureCaret(): void {
+  if (viewMode !== 'text' && viewMode !== 'split') return
+  caretAnchor = pickAnchor(roots, srcEl.selectionStart ?? 0)
+}
+
+function restoreCaret(): void {
+  const a = caretAnchor
+  if (!a) return
+  const pos = caretOffset(roots, src.length, a)
+  srcEl.focus({ preventScroll: true })
+  srcEl.setSelectionRange(pos, pos)
+  // keep the caret line in the middle of the viewport
+  const line = src.slice(0, pos).split('\n').length - 1
+  const lh = parseFloat(getComputedStyle(srcEl).lineHeight || '19') || 19
+  srcEl.scrollTop = Math.max(0, line * lh - srcEl.clientHeight / 2)
+}
+
+srcEl.addEventListener('keyup', captureCaret)
+srcEl.addEventListener('mouseup', captureCaret)
+srcEl.addEventListener('input', captureCaret)
+srcEl.addEventListener('focus', captureCaret)
+
+/** Anchor the caret to a block the user interacted with (edit/menu) and,
+ *  when the text pane is visible, highlight its span there too. */
+function anchorToBlock(b: BBlock): void {
+  caretAnchor = { id: b.id, edge: 'start', offset: b.start }
+  if (viewMode === 'split') srcEl.setSelectionRange(b.start, Math.min(b.end, b.start + 512))
+}
+
 // ------------------------------------------------------------- view modes
 type ViewMode = 'split' | 'blocks' | 'text'
 const viewBtns = Array.from(document.querySelectorAll<HTMLButtonElement>('.vm'))
@@ -1161,10 +1201,12 @@ let viewMode: ViewMode = 'split'
 const tabViews = new Map<string, ViewMode>()
 
 function setView(v: ViewMode): void {
+  if (viewMode === 'text' || viewMode === 'split') captureCaret()
   viewMode = v
   appEl.dataset.view = v
   viewBtns.forEach((b) => b.classList.toggle('active', b.dataset.view === v))
   window.dispatchEvent(new Event('resize'))
+  if (v === 'text' || v === 'split') requestAnimationFrame(restoreCaret)
   if (activePath) tabViews.set(activePath, v)
 }
 
@@ -1202,6 +1244,7 @@ async function recoverJournal(): Promise<void> {
   try {
     const j = await invoke<{ path: string; content: string; age_secs: number } | null>('journal_read')
     if (j && j.content.trim()) {
+      caretAnchor = null
       src = j.content
       srcEl.value = src
       void render(src)

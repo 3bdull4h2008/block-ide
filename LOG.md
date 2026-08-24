@@ -1,6 +1,46 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 25: trigger=user report: [error 2147942632 (0x800700e8)] launching tcc.exe
+expect: diagnose 0x800700e8 (ERROR_NO_DATA, Win32 232) at spawn; make failures
+visible + survivable; no regression in run path
+obs: tcc.exe verified intact (hash match vs third_party; 23 KB is true size).
+Could NOT reproduce (fresh launches + 3x consecutive runs all green) - but
+audit exposed TWO REAL DEFECTS in the launch seam. (1) run_job spawned tcc
+(console subsystem) from a GUI process WITHOUT CREATE_NO_WINDOW: Windows
+allocates a fresh console per run (flicker) and child CRT init can transiently
+fail with ERROR_NO_DATA against a dying parent console - matches the reported
+HRESULT exactly. Fix: CREATE_NO_WINDOW + one transparent 60 ms retry.
+(2) spawn_inspectable did outcome.ok(), DISCARDING launch errors -> UI spins
+"running..." forever on any launch failure. Fix: InspectableRun.poll() now
+returns Option<Result<RunOutcome,String>>; run_poll maps Err to
+[launch] stderr + exit -1; memview_validator updated to Result shape.
+Workspace tests + ALL FOURTEEN gates PASS exit 0.
+state=SUCCESS | next: v0.1.0 tag (1.2 residual closed in RUN 24)
+```
+
+```
+RUN 24: trigger=P1.2 residual: cursor-semantic map for Blocks/Split/Text
+expect: caret survives view switches anchored to a node, not a byte offset;
+scripted G-UI-E2E coverage; unit tests for the mapping
+obs: NEW caret.ts pure module: pickAnchor/caretOffset. KEY FINDING mid-build:
+canonical node ids are DENSE PRE-ORDER PER PARSE (canonical.rs), so any edit
+recycles ids and id-first resolution FALSELY lands on unrelated nodes
+(vitest caught it: pos 54 vs expected 72). Tier order fixed to kind+text
+twins -> exact id (single-parse case only) -> nearest surviving edge;
+deletion test forces tier-3 via impossible id (id-gone is unassertable).
+main.ts: capture on keyup/mouseup/input/focus + inside setView; restore via
+rAF after switching to text/split incl. scroll-to-line; anchors reset on tab/
+level/journal buffer swaps; block dblclick/contextmenu anchor back into text.
+blocks.ts carries node id now. G-UI-E2E gained cursor round-trip assertion
+(ctrl+1 then ctrl+3, caret must land back inside its statement); also bumped
+ctrl+enter poll 10s->20s: gate runs right after G-PERF disk churn and tcc
+cold compile can exceed 10 s (first full-suite failure reproduced standalone,
+passed in isolation -> load-timing). vitest 10/10, ALL FOURTEEN gates PASS.
+state=SUCCESS | next: user eyes-on; tcc launch error triage (user report)
+```
+
+```
 RUN 23: trigger=resume: finish G-SYNC-FUZZ validator (P0.5 gate, was untracked+red)
 expect: 7 corpus programs x 500 ops x 2 drivers converge byte-identical;
 intermediates parse clean; canonicalization idempotent; gate enforced in runner

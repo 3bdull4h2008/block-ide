@@ -4,6 +4,7 @@
 //! "compile + run" seam; the Tauri app and validators both call into here.
 
 use std::os::windows::io::AsRawHandle;
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -242,6 +243,11 @@ fn run_job(
         .current_dir(run_dir())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    // tcc is a console-subsystem binary spawned from a GUI process: without
+    // this flag Windows allocates a fresh console per run (flicker) and the
+    // child's CRT init can transiently fail against a dying parent console
+    // with ERROR_NO_DATA (os error 232). NUL-piped stdio needs no console.
+    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     if stdin_text.is_empty() {
         cmd.stdin(Stdio::null());
     } else {
@@ -250,7 +256,18 @@ fn run_job(
     for (k, v) in extra_env {
         cmd.env(k, v);
     }
-    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+    // One transparent retry: launch failures of this class are transient
+    // (handle/console teardown races), leave nothing behind, and a second
+    // attempt costs 60 ms once instead of a stuck spinner.
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(first) => {
+            thread::sleep(Duration::from_millis(60));
+            cmd.spawn().map_err(|e| {
+                format!("launch failed: {e} (first attempt: {first})")
+            })?
+        }
+    };
     if let Some(j) = &job {
         j.assign(&child);
     }
@@ -398,7 +415,7 @@ pub fn run_c(src: &str, timeout_ms: u64) -> Result<RunOutcome, String> {
 /// A supervised run whose memory can be inspected while it lives.
 pub struct InspectableRun {
     pub pid: u32,
-    done: Arc<Mutex<Option<RunOutcome>>>,
+    done: Arc<Mutex<Option<Result<RunOutcome, String>>>>,
     finished: Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -410,7 +427,7 @@ pub fn spawn_inspectable(
 ) -> Result<InspectableRun, String> {
     let p = prepare(src, trace_mem)?;
     clear_hard_stop();
-    let done: Arc<Mutex<Option<RunOutcome>>> = Arc::new(Mutex::new(None));
+    let done: Arc<Mutex<Option<Result<RunOutcome, String>>>> = Arc::new(Mutex::new(None));
     let finished = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let done2 = done.clone();
     let fin2 = finished.clone();
@@ -421,8 +438,15 @@ pub fn spawn_inspectable(
             *pid_for_thread.lock().unwrap() = Some(pid);
         };
         // prepare() ran on the caller thread; program/args/envs move in.
-        let outcome = run_job(&p.program, &p.args, &p.envs, timeout_ms, "", Some(&mut cb));
-        *done2.lock().unwrap() = outcome.ok();
+        // Launch errors are PRESERVED (not .ok()-dropped) so the UI can show
+        *done2.lock().unwrap() = Some(run_job(
+            &p.program,
+            &p.args,
+            &p.envs,
+            timeout_ms,
+            "",
+            Some(&mut cb),
+        ));
         fin2.store(true, std::sync::atomic::Ordering::Relaxed);
     });
     // wait briefly for the spawn callback so callers get a real pid
@@ -443,8 +467,9 @@ pub fn spawn_inspectable(
 }
 
 impl InspectableRun {
-    /// Some(outcome) once the run finished (consumed on read).
-    pub fn poll(&self) -> Option<RunOutcome> {
+    /// Some(Ok(outcome)) once the run finished; Some(Err(reason)) when the
+    /// program could not be launched/supervised (consumed on read).
+    pub fn poll(&self) -> Option<Result<RunOutcome, String>> {
         self.done.lock().unwrap().take()
     }
 

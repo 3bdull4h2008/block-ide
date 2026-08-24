@@ -132,10 +132,11 @@ fn main() {
     }
     loop {
         match run.poll() {
-            Some(o) => {
+            Some(Ok(o)) => {
                 outcome = Some(o);
                 break;
             }
+            Some(Err(e)) => panic!("run failed: {e}"),
             None if Instant::now() > t_end => break,
             None => std::thread::sleep(Duration::from_millis(25)),
         }

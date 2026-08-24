@@ -1,7 +1,8 @@
 // G-UI-E2E: scripted end-to-end checks against a running app (Gate 5).
 // Usage: node cdp-uie2e.mjs <port>
 // Asserts: default split view; view toggles hide/show panes; Ctrl+1/2/3;
-// Ctrl+Enter runs the program through the real backend; academy populated.
+// cursor-semantic map across view switches; Ctrl+Enter runs through the
+// real backend; academy populated.
 import { writeFileSync } from 'node:fs';
 
 const port = process.argv[2];
@@ -77,18 +78,51 @@ await send('Input.dispatchKeyEvent', { type: 'keyUp', key: '2', code: 'Digit2', 
 await new Promise((r) => setTimeout(r, 200));
 check('ctrl+2 -> split', (await ev(`document.getElementById('app').dataset.view`)) === 'split');
 
-// 5. Ctrl+Enter runs hello through the real backend
+// 5. cursor-semantic map: caret anchored to a statement survives blocks round-trip
+await ev(`document.querySelector('.vm[data-view=\"text\"]').click()`);
+await new Promise((r) => setTimeout(r, 250));
+await ev(`
+  (() => {
+    const s = document.getElementById('src');
+    const idx = s.value.indexOf('return 0;');
+    s.focus();
+    s.setSelectionRange(idx + 4, idx + 4);
+    return idx;
+  })()`);
+await send('Input.dispatchKeyEvent', { type: 'keyDown', key: '1', code: 'Digit1', windowsVirtualKeyCode: 49, modifiers: 2 });
+await send('Input.dispatchKeyEvent', { type: 'keyUp', key: '1', code: 'Digit1', windowsVirtualKeyCode: 49, modifiers: 2 });
+await new Promise((r) => setTimeout(r, 250));
+await send('Input.dispatchKeyEvent', { type: 'keyDown', key: '3', code: 'Digit3', windowsVirtualKeyCode: 51, modifiers: 2 });
+await send('Input.dispatchKeyEvent', { type: 'keyUp', key: '3', code: 'Digit3', windowsVirtualKeyCode: 51, modifiers: 2 });
+await new Promise((r) => setTimeout(r, 350));
+check(
+  'cursor map: caret returns to its statement after blocks round-trip',
+  await ev(`
+    (() => {
+      const s = document.getElementById('src');
+      if (document.activeElement !== s) return false;
+      const rs = s.value.indexOf('return 0;');
+      const p = s.selectionStart;
+      return p >= rs && p <= rs + 'return 0;'.length;
+    })()`),
+);
+
+// 6. Ctrl+Enter runs hello through the real backend
 await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, modifiers: 2 });
 await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, modifiers: 2 });
 let ran = false;
-for (let i = 0; i < 40 && !ran; i++) {
+let lastConsole = '';
+// 20 s budget: this gate runs right after G-PERF's 5000-file churn, and tcc
+// cold-compiles under whatever disk load that leaves behind.
+for (let i = 0; i < 80 && !ran; i++) {
   await new Promise((r) => setTimeout(r, 250));
-  const txt = (await ev(`document.getElementById('console').textContent`)) ?? '';
-  ran = String(txt).includes('[exit');
+  lastConsole = String((await ev(`document.getElementById('console').textContent`)) ?? '');
+  ran = lastConsole.includes('[exit');
 }
 check('ctrl+enter: program ran (exit line in console)', ran);
+if (!ran) console.log(`  console was: ${lastConsole.trim().slice(0, 200)}`);
 
-// 6. academy levels populated
+// 7. academy levels populated
 check('academy: 30 levels', (await ev(`document.querySelectorAll('#level-select option').length`)) === 30);
 
 await shot(process.env.TEMP + '\\ui-e2e.png');
