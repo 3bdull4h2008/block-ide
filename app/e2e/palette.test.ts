@@ -99,6 +99,10 @@ describe('Lists -> C arrays (Scratch data subcategory)', () => {
     expect(validateSlotValue('number', 'x=1')).toBeNull()
     expect(validateSlotValue('ident', 'a b')).toBeNull()
     expect(validateSlotValue('string', 'hi')).toBe('"hi"')
+    // boolean hex sockets: any non-empty condition, empty rejected
+    expect(validateSlotValue('bool', 'x < 5')).toBe('x < 5')
+    expect(validateSlotValue('bool', 'ok')).toBe('ok')
+    expect(validateSlotValue('bool', '   ')).toBeNull()
   })
 })
 

@@ -203,6 +203,23 @@ check(
   (await ev(`!!document.querySelector('.pal[data-var=\"total\"]')`)) === true,
 );
 
+// 13. boolean hex sockets: conditions are editable hex slots
+const slotsAll = await ev(`window.__slots()`);
+check(
+  'hex sockets: for-condition is a bool slot',
+  Array.isArray(slotsAll) && slotsAll.some((s) => s.type === 'bool' && s.text === 'i < 5'),
+);
+const boolIdx = await ev(`window.__slots().findIndex(s => s.type === 'bool')`);
+check(
+  'hex socket: empty condition rejected',
+  (await ev(`window.__commitSlot(${boolIdx}, '')`)) !== null,
+);
+check(
+  'hex socket: condition edit commits + parses',
+  (await ev(`window.__commitSlot(${await ev(`window.__slots().findIndex(s => s.type === 'bool')`)}, 'i < 3')`)) === null &&
+    String(await ev(`document.getElementById('src').value`)).includes('i < 3'),
+);
+
 await shot(process.env.TEMP + '\\ui-e2e.png');
 console.log(failures === 0 ? '[G-UI-E2E] PASS' : `[G-UI-E2E] FAIL (${failures})`);
 process.exit(failures === 0 ? 0 : 1);

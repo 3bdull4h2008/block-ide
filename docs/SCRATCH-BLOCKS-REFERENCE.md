@@ -89,7 +89,7 @@ content; dragging a value OUT of a slot reverts it to its default.
 | stack block                | statement row (notch/tab geometry, already shipped)|
 | C-block                    | control mouth (1.7)                                |
 | reporter oval              | variable chip — drops into ident/number slots      |
-| boolean hex                | future (conditions v2)                             |
+| boolean hex                | hexagonal CONDITION sockets on control headers (1.12): `if ⟨i > 0⟩`, `while ⟨i < 10⟩`, `for (…; ⟨k < 5⟩; …)` — any non-empty C condition accepted |
 | "Make a Variable" dialog   | name prompt; scope N/A (C scoping is the code's job)|
 | `set (v) to (0)`           | `v = 0;`                                           |
 | `change (v) by (1)`        | `v = v + 1;`                                       |

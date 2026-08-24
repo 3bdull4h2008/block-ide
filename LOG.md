@@ -1,6 +1,25 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 31: trigger=continue: boolean hex sockets (last applicable research item)
+expect: control-statement conditions render as Scratch-style hexagonal
+editable sockets; for keeps init/update granular; gates green
+obs: conditionSlot() extracts the condition FIELD per control kind -
+if/while/switch wrap it in parenthesized_expression so the slot spans the
+INNER expression (parens render as text around the hex); for/do expose bare
+expression nodes (slot = node span). Slot splices into the token stream at
+byte order; buildHeader gained a MERGE BARRIER across the condition span
+(the two for-`;` tokens otherwise merge into "; ;" before the slot lands -
+vitest caught it). Rendering: hexagon path w/ 9px points, min width 48.
+Validation: any non-empty condition accepted (C expressions too varied for
+lexical checks; Rule 5 keeps broken code editable - parser+diags surface
+real errors). vitest 28/28 (new bool-sockets suite incl. byte-exact splice
+edit); ALL FOURTEEN gates PASS exit 0 (30 UI assertions incl. hex
+commit/reject); screenshot verified hex socket in for header.
+state=SUCCESS | next: user eyes-on; vanilla install drill (manual, Gate 5)
+```
+
+```
 RUN 30: trigger=user: apply ALL remaining research to the project
 expect: category rail, variable harvesting, rename action, Lists->arrays,
 reporters fit any round socket; gates green

@@ -379,6 +379,34 @@ function drawBlock(b: BBlock): void {
         t.x = cx
         t.y = b.y + (ROW_H - t.height) / 2
         header.push(t)
+      } else if (p.type === 'bool') {
+        // Scratch boolean socket: hexagonal, pointed ends
+        const w = partWidth(p)
+        const y0 = b.y + 6
+        const h = ROW_H - 12
+        const pt = 9
+        const box = new Graphics()
+        box.moveTo(cx + pt, y0)
+        box.lineTo(cx + w - pt, y0)
+        box.lineTo(cx + w, y0 + h / 2)
+        box.lineTo(cx + w - pt, y0 + h)
+        box.lineTo(cx + pt, y0 + h)
+        box.lineTo(cx, y0 + h / 2)
+        box.closePath()
+        box.fill({ color: 0xf6fbff })
+        box.moveTo(cx + pt, y0)
+        box.lineTo(cx + w - pt, y0)
+        box.lineTo(cx + w, y0 + h / 2)
+        box.lineTo(cx + w - pt, y0 + h)
+        box.lineTo(cx + pt, y0 + h)
+        box.lineTo(cx, y0 + h / 2)
+        box.closePath()
+        box.stroke({ width: 2, color: edge, alpha: 0.5 })
+        const t = new Text({ text: p.text, style: darkLabel })
+        t.x = cx + (w - t.width) / 2
+        t.y = b.y + (ROW_H - t.height) / 2
+        header.push(box, t)
+        slotHits.push({ block: b, part: p, x: cx, y: y0, w, h })
       } else {
         const box = new Graphics()
         box.roundRect(cx, b.y + 6, w, ROW_H - 12, 7)

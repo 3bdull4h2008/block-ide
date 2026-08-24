@@ -19,8 +19,9 @@ export interface CTreeJSON {
 export type Cat = 'function' | 'control' | 'statement' | 'variables' | 'comment' | 'error'
 
 /** One renderable chunk of a block header: literal text or an editable,
- *  type-constrained input slot (Scratch-style rounded field). */
-export type PartType = 'text' | 'ident' | 'number' | 'string'
+ *  type-constrained input slot (Scratch-style rounded field). `bool` renders
+ *  as a hexagonal socket (Scratch's boolean input shape). */
+export type PartType = 'text' | 'ident' | 'number' | 'string' | 'bool'
 export interface BlockPart {
   type: PartType
   /** display text (strings keep their quotes); byte range refers to src */
@@ -120,9 +121,31 @@ function partTypeOf(kind: string): PartType {
   return SLOT_KINDS[kind] ?? 'text'
 }
 
+/** The control statement's condition as a HEX slot (Scratch boolean socket).
+ *  if/while/switch wrap their condition in a parenthesized_expression (parens
+ *  included) — the slot spans the INNER expression so the '(' ')' tokens
+ *  render as text around it. for/do expose a bare expression node. */
+function conditionSlot(n: CNodeJSON): { part: BlockPart; node: CNodeJSON } | null {
+  const cond = n.children.find((c) => c.field === 'condition')
+  if (!cond) return null
+  if (cond.kind === 'parenthesized_expression' && cond.children.length >= 3) {
+    const inner = cond.children.slice(1, -1)
+    const text = collapse(inner.map(leafText).join(' '))
+    if (text.length === 0) return null
+    return {
+      part: { type: 'bool', text, start: inner[0].start, end: inner[inner.length - 1].end },
+      node: cond,
+    }
+  }
+  const text = collapse(leafText(cond))
+  if (text.length === 0) return null
+  return { part: { type: 'bool', text, start: cond.start, end: cond.end }, node: cond }
+}
+
 function buildHeader(
   n: CNodeJSON,
   skip: Set<CNodeJSON>,
+  barrier?: { start: number; end: number },
 ): { parts: BlockPart[]; label: string } {
   const raw = headerLeaves(n, skip).map((m) => ({
     type: partTypeOf(m.kind),
@@ -136,7 +159,12 @@ function buildHeader(
   for (const p of raw) {
     if (p.text.length === 0) continue
     const last = parts[parts.length - 1]
-    if (p.type === 'text' && last !== undefined && last.type === 'text') {
+    const crossesBarrier =
+      barrier !== undefined &&
+      last !== undefined &&
+      last.end <= barrier.start &&
+      p.start >= barrier.end
+    if (p.type === 'text' && last !== undefined && last.type === 'text' && !crossesBarrier) {
       last.text += ' ' + p.text
       last.end = p.end
     } else {
@@ -187,10 +215,17 @@ function toBlock(n: CNodeJSON): BBlock {
     }
   }
   const skip = new Set<CNodeJSON>(bodies)
-  const { parts, label } =
+  const cond = CONTROL_KINDS.has(n.kind) ? conditionSlot(n) : null
+  if (cond) skip.add(cond.node)
+  let { parts, label } =
     cat === 'error' || cat === 'comment'
       ? { parts: [] as BlockPart[], label: '' }
-      : buildHeader(n, skip)
+      : buildHeader(n, skip, cond ? { start: cond.part.start, end: cond.part.end } : undefined)
+  // hex condition socket splices into the token stream at byte order
+  if (cond) {
+    parts = [...parts, cond.part].sort((a, b) => a.start - b.start)
+    label = collapse(parts.map((p) => p.text).join(' '))
+  }
   return {
     id: n.id,
     nodeKind: n.kind,
@@ -285,9 +320,11 @@ function glyphWidth(s: string): number {
 }
 
 /** Slots draw as rounded input boxes — wider than their text, with a
- *  minimum click target (Scratch fields never collapse to nothing). */
+ *  minimum click target (Scratch fields never collapse to nothing).
+ *  Boolean sockets are hexagonal and need extra room for the points. */
 export function partWidth(p: BlockPart): number {
   if (p.type === 'text') return glyphWidth(p.text) + 6
+  if (p.type === 'bool') return Math.min(260, Math.max(48, glyphWidth(p.text) + 26))
   return Math.min(240, Math.max(36, glyphWidth(p.text) + 18))
 }
 

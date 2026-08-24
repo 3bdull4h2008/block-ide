@@ -113,12 +113,16 @@ export const INDEXED_IDENT = /^[A-Za-z_][A-Za-z0-9_]*(\[\d+\])?$/
 const NUMERIC = /^[+-]?(\d+\.?\d*|\.\d+)$/
 
 /** Scratch socket rules, C-typed: reporters (vars AND list elements) fit any
- *  round socket; number sockets also take literals; strings auto-quote. */
+ *  round socket; number sockets also take literals; strings auto-quote.
+ *  Boolean sockets take any non-empty condition text — C expressions are too
+ *  varied for lexical validation, and broken code must stay editable
+ *  (Golden Rule 5); the parser + diagnostics surface real errors. */
 export function validateSlotValue(type: string, raw: string): string | null {
   const v = raw.trim()
   if (v.length === 0) return null
   if (type === 'ident') return INDEXED_IDENT.test(v) ? v : null
   if (type === 'number') return NUMERIC.test(v) || INDEXED_IDENT.test(v) ? v : null
+  if (type === 'bool') return v
   if (type === 'string') {
     return /^".*"$/s.test(v) ? v : `"${v.replace(/"/g, '\\"')}"`
   }

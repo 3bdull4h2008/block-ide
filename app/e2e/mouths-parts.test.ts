@@ -60,7 +60,8 @@ describe('loop C-mouths (1.7)', () => {
     expect(loop.container).toBe(true)
     expect(loop.children.length).toBe(1)
     expect(loop.children[0].nodeKind).toBe('expression_statement')
-    expect(loop.label).toBe('while ( t > 0 )')
+    // condition renders as a hex socket — no parens in the label
+    expect(loop.label).toBe('while t > 0')
   })
 
   it('else clauses appear as siblings inside the if-mouth', () => {
