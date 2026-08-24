@@ -1,6 +1,7 @@
-//! core-parser: canonical text ⇄ AST ⇄ blocks pipeline for C.
+//! core-parser: canonical text ⇄ AST ⇄ blocks pipeline for C and the C++
+//! subset (PLAN.md D3 amendment 2026-08-25).
 //!
-//! Rule 2 (PLAN.md): one parser, pinned — tree-sitter-c.
+//! Rule 2 (PLAN.md): one parser family, pinned — tree-sitter-c / tree-sitter-cpp.
 //! This crate owns: parsing, error detection, S-expression debug rendering,
 //! and verbatim CST emission.
 
@@ -11,18 +12,63 @@ pub mod diagmap;
 pub mod emitter;
 pub mod toolchain;
 pub use canonical::{
-    canonicalize, ctree_has_errors, parse_canonical, CNode, CTree,
+    canonicalize, ctree_has_errors, parse_canonical, parse_canonical_lang, CNode, CTree,
 };
 pub use diagmap::{
     map_diags, map_offset, parse_clang_diags, MappedDiag, RawDiag,
 };
-pub use emitter::{canonical_source, clang_format, reflow};
+pub use emitter::{canonical_source, canonical_source_lang, clang_format, reflow};
+
+/// Source language of a buffer. C++ is a SUBSET pack: same canonical model,
+/// same blocks pipeline; exotic C++ nodes render as editable mystery blocks.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Lang {
+    #[default]
+    C,
+    Cpp,
+}
+
+impl Lang {
+    pub fn from_opt(s: Option<&str>) -> Lang {
+        match s.map(|v| v.to_ascii_lowercase()).as_deref() {
+            Some("cpp") | Some("c++") => Lang::Cpp,
+            _ => Lang::C,
+        }
+    }
+
+    /// File-extension detection: .cpp/.cc/.cxx/.hpp/.hh/.hxx are C++.
+    pub fn from_path(p: &str) -> Lang {
+        let lower = p.to_ascii_lowercase();
+        let ext = lower.rsplit('.').next().unwrap_or("");
+        match ext {
+            "cpp" | "cc" | "cxx" | "c++" | "hpp" | "hh" | "hxx" | "ipp" => Lang::Cpp,
+            _ => Lang::C,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Lang::C => "c",
+            Lang::Cpp => "cpp",
+        }
+    }
+}
+
+/// Parse source with the grammar for `lang`. Returns None only if the
+/// grammar failed to load.
+pub fn parse_c_lang(src: &str, lang: Lang) -> Option<Tree> {
+    let mut parser = Parser::new();
+    let grammar = match lang {
+        Lang::C => tree_sitter_c::LANGUAGE.into(),
+        Lang::Cpp => tree_sitter_cpp::LANGUAGE.into(),
+    };
+    parser.set_language(&grammar).ok()?;
+    parser.parse(src, None)
+}
 
 /// Parse C source. Returns None only if the grammar failed to load.
 pub fn parse_c(src: &str) -> Option<Tree> {
-    let mut parser = Parser::new();
-    parser.set_language(&tree_sitter_c::LANGUAGE.into()).ok()?;
-    parser.parse(src, None)
+    parse_c_lang(src, Lang::C)
 }
 
 /// True if the tree contains ERROR or MISSING nodes.

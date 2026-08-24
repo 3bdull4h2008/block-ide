@@ -142,7 +142,12 @@ pub fn canonicalize(tree: &Tree, src: &str) -> CTree {
 
 /// Convenience: parse then canonicalize in one call.
 pub fn parse_canonical(src: &str) -> Option<CTree> {
-    let tree = crate::parse_c(src)?;
+    parse_canonical_lang(src, crate::Lang::C)
+}
+
+/// Language-aware variant (C++ subset pack, D3 amendment).
+pub fn parse_canonical_lang(src: &str, lang: crate::Lang) -> Option<CTree> {
+    let tree = crate::parse_c_lang(src, lang)?;
     Some(canonicalize(&tree, src))
 }
 
@@ -152,6 +157,64 @@ pub fn ctree_has_errors(tree: &CTree) -> bool {
         n.kind == "ERROR" || n.missing || n.children.iter().any(|c| rec(c))
     }
     rec(&tree.root)
+}
+
+#[cfg(test)]
+mod cpp_tests {
+    use super::*;
+
+    const CPP: &str = r#"#include <iostream>
+
+class Greeter {
+public:
+    void greet(int times) {
+        for (int i = 0; i < times; i++) {
+            std::cout << "hi\n";
+        }
+    }
+};
+
+int main() {
+    Greeter g;
+    g.greet(2);
+    return 0;
+}
+"#;
+
+    #[test]
+    fn cpp_parses_clean_with_dense_ids() {
+        let ct = crate::parse_canonical_lang(CPP, crate::Lang::Cpp).expect("cpp parse");
+        assert!(!ctree_has_errors(&ct));
+        let mut ids = Vec::new();
+        fn walk(n: &CNode, ids: &mut Vec<u32>) {
+            ids.push(n.id);
+            for c in &n.children {
+                walk(c, ids);
+            }
+        }
+        walk(&ct.root, &mut ids);
+        assert_eq!(ids, (0..ids.len() as u32).collect::<Vec<_>>());
+        // the class renders as a container (compound found)
+        fn find<'a>(n: &'a CNode, kind: &str) -> Option<&'a CNode> {
+            if n.kind == kind {
+                return Some(n);
+            }
+            n.children.iter().find_map(|c| find(c, kind))
+        }
+        assert!(find(&ct.root, "class_specifier").is_some());
+    }
+
+    #[test]
+    fn cpp_language_flag_selects_cpp_grammar() {
+        // the language must ride with the file, not be guessed
+        let cpp = crate::parse_canonical_lang("class X {};", crate::Lang::Cpp).expect("cpp");
+        assert!(!ctree_has_errors(&cpp));
+        let as_c = crate::parse_canonical_lang("class X {};", crate::Lang::C).expect("c");
+        let cpp_kinds = format!("{:?}", cpp.root);
+        // only the C++ grammar produces a class_specifier node
+        assert!(cpp_kinds.contains("class_specifier"));
+        assert!(!format!("{:?}", as_c.root).contains("class_specifier"));
+    }
 }
 
 #[cfg(test)]

@@ -98,9 +98,18 @@ fn vendor_include_dir() -> PathBuf {
 /// Run `clang -fsyntax-only` over `src`; returns raw compiler stderr.
 /// The source is staged as `main.c` so diagnostics reference a stable stem.
 pub fn syntax_check_stderr(src: &str) -> Result<String, String> {
+    syntax_check_stderr_lang(src, crate::Lang::C)
+}
+
+/// Language-aware variant: C++ sources stage as `main.cpp` so the clang
+/// driver compiles/links as C++ and diagnostics reference the right stem.
+pub fn syntax_check_stderr_lang(src: &str, lang: crate::Lang) -> Result<String, String> {
     let dir = std::env::temp_dir().join("blockide-syntax");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let cpath = dir.join("main.c");
+    let cpath = dir.join(match lang {
+        crate::Lang::C => "main.c",
+        crate::Lang::Cpp => "main.cpp",
+    });
     std::fs::write(&cpath, src).map_err(|e| e.to_string())?;
     let out = clang_command()?
         .arg("-O0")

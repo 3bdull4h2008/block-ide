@@ -240,6 +240,13 @@ check(
   (await ev(`Array.from(document.querySelectorAll('.pal')).some(p => p.textContent === 'define fn')`)) === true,
 );
 
+// 15. C++ subset pack: language rides with the file extension
+check(
+  'cpp: extension detection',
+  (await ev(`window.__langOf('main.cpp') === 'cpp' && window.__langOf('main.cc') === 'cpp' && window.__langOf('main.c') === 'c'`)) === true,
+);
+check('cpp: default buffer is C', (await ev(`window.__activeLang()`)) === 'c');
+
 await shot(process.env.TEMP + '\\ui-e2e.png');
 console.log(failures === 0 ? '[G-UI-E2E] PASS' : `[G-UI-E2E] FAIL (${failures})`);
 process.exit(failures === 0 ? 0 : 1);

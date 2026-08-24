@@ -176,7 +176,7 @@ function buildHeader(
 
 function categorize(kind: string): Cat {
   if (kind === 'ERROR' || kind === 'MISSING') return 'error'
-  if (kind === 'function_definition') return 'function'
+  if (kind === 'function_definition' || kind === 'namespace_definition') return 'function'
   if (CONTROL_KINDS.has(kind)) return 'control'
   if (kind === 'comment') return 'comment'
   if (

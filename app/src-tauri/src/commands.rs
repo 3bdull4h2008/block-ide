@@ -1,7 +1,11 @@
-use core_parser::CTree;
+use core_parser::{CTree, Lang};
 use serde::{Deserialize, Serialize};
 use std::path::{Component, PathBuf};
 use std::sync::{Arc, Mutex};
+
+fn lang_of(s: Option<&str>) -> Lang {
+    Lang::from_opt(s)
+}
 
 #[derive(Serialize)]
 pub struct ParseOut {
@@ -10,15 +14,16 @@ pub struct ParseOut {
 }
 
 #[tauri::command]
-pub fn parse_c(src: String) -> Result<ParseOut, String> {
-    let tree = core_parser::parse_canonical(&src).ok_or("grammar failed to load")?;
+pub fn parse_c(src: String, lang: Option<String>) -> Result<ParseOut, String> {
+    let tree =
+        core_parser::parse_canonical_lang(&src, lang_of(lang.as_deref())).ok_or("grammar failed to load")?;
     let has_errors = core_parser::ctree_has_errors(&tree);
     Ok(ParseOut { tree, has_errors })
 }
 
 #[tauri::command]
-pub fn canonicalize_c(src: String) -> Result<String, String> {
-    core_parser::canonical_source(&src)
+pub fn canonicalize_c(src: String, lang: Option<String>) -> Result<String, String> {
+    core_parser::canonical_source_lang(&src, lang_of(lang.as_deref()))
 }
 
 #[derive(Serialize)]
@@ -33,10 +38,11 @@ pub struct DiagOut {
 }
 
 #[tauri::command]
-pub fn diag_c(src: String) -> Result<Vec<DiagOut>, String> {
-    let stderr = core_parser::toolchain::syntax_check_stderr(&src)?;
-    let raws = core_parser::parse_clang_diags(&stderr, "main.c");
-    let ct = core_parser::parse_canonical(&src).ok_or("grammar failed to load")?;
+pub fn diag_c(src: String, lang: Option<String>) -> Result<Vec<DiagOut>, String> {
+    let l = lang_of(lang.as_deref());
+    let stderr = core_parser::toolchain::syntax_check_stderr_lang(&src, l)?;
+    let raws = core_parser::parse_clang_diags(&stderr, &format!("main.{}", l.as_str()));
+    let ct = core_parser::parse_canonical_lang(&src, l).ok_or("grammar failed to load")?;
     Ok(core_parser::map_diags(&src, &ct, &raws)
         .into_iter()
         .map(|m| DiagOut {
@@ -80,7 +86,7 @@ pub fn list_c_files(root: String) -> Result<Vec<String>, String> {
                     continue;
                 }
                 walk(&p, base, depth + 1, out);
-            } else if name.ends_with(".c") {
+            } else if is_source_file(&name) {
                 if let Ok(rel) = p.strip_prefix(base) {
                     out.push(rel.to_string_lossy().replace('\\', "/"));
                 }
@@ -91,6 +97,14 @@ pub fn list_c_files(root: String) -> Result<Vec<String>, String> {
     walk(&PathBuf::from(&root), &root, 0, &mut out);
     out.sort();
     Ok(out)
+}
+
+/// C and the C++ subset pack share the workspace (.c/.cpp/.cc/.cxx + headers).
+fn is_source_file(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    [".c", ".cpp", ".cc", ".cxx", ".hpp", ".hh"]
+        .iter()
+        .any(|ext| lower.ends_with(ext))
 }
 
 #[tauri::command]
@@ -147,10 +161,15 @@ fn stage_reader() -> &'static Mutex<Option<runner::stage::StageReader>> {
 /// poll with `run_poll`. `trace_mem` prepends memtrace.h to the staged copy
 /// (disk file untouched).
 #[tauri::command]
-pub fn run_start(src: String, trace_mem: Option<bool>) -> Result<(), String> {
+pub fn run_start(src: String, trace_mem: Option<bool>, lang: Option<String>) -> Result<(), String> {
     let trace = trace_mem.unwrap_or(false);
-    let run = runner::spawn_inspectable(&src, RUN_TIMEOUT_MS, trace)
-        .map_err(|e| e.replace("child never spawned", "program failed to launch"))?;
+    let run = runner::spawn_inspectable_lang(
+        &src,
+        RUN_TIMEOUT_MS,
+        trace,
+        lang_of(lang.as_deref()),
+    )
+    .map_err(|e| e.replace("child never spawned", "program failed to launch"))?;
     let pid = run.pid;
     let run = Arc::new(run);
     *inspect_run().lock().map_err(|e| e.to_string())? = Some((run, pid));

@@ -138,36 +138,49 @@ pub struct Prepared {
 }
 
 pub fn prepare(src: &str, trace_mem: bool) -> Result<Prepared, String> {
+    prepare_lang(src, trace_mem, core_parser::Lang::C)
+}
+
+/// Language-aware staging (C++ subset pack, D3 amendment). tcc is C-ONLY —
+/// C++ always routes to the clang backend (staged as `.cpp`, driver infers
+/// C++ and links the C++ runtime). Memory tracing is C-only in v1: the
+/// interposed header is a C header; the flag is ignored for C++ sources.
+pub fn prepare_lang(
+    src: &str,
+    trace_mem: bool,
+    lang: core_parser::Lang,
+) -> Result<Prepared, String> {
     // Content-addressed staging: two Prepared values must never share a
     // staged file (an academy validator holds several at once).
     let tag = format!("{:016x}", fnv1a(src.as_bytes()));
     let dir = run_dir();
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let staged = if trace_mem {
+    let ext = match lang {
+        core_parser::Lang::C => "c",
+        core_parser::Lang::Cpp => "cpp",
+    };
+    let staged = if trace_mem && lang == core_parser::Lang::C {
         format!("#include \"memtrace.h\"\n{src}")
     } else {
         src.to_string()
     };
     let inc = format!("-I{}", stage::include_dir().display());
-    Ok(match tcc_path() {
-        Some(tcc) => {
-            let cpath = stage_source_as(&staged, &format!("main-{tag}.c"))?;
-            Prepared {
-                program: tcc,
-                args: vec![
-                    "-run".to_string(),
-                    inc,
-                    cpath.display().to_string(),
-                ],
-                envs: if trace_mem {
-                    vec![("BLOCKIDE_MEMTRACE", "1")]
-                } else {
-                    vec![]
-                },
-            }
-        }
-        None => {
-            let cpath = stage_source_as(&staged, &format!("main-{tag}.c"))?;
+    let cpath = stage_source_as(&staged, &format!("main-{tag}.{ext}"))?;
+    match (lang, tcc_path()) {
+        (core_parser::Lang::C, Some(tcc)) => Ok(Prepared {
+            program: tcc,
+            args: vec![
+                "-run".to_string(),
+                inc,
+                cpath.display().to_string(),
+            ],
+            envs: if trace_mem {
+                vec![("BLOCKIDE_MEMTRACE", "1")]
+            } else {
+                vec![]
+            },
+        }),
+        _ => {
             let exe = dir.join(format!("prog-{tag}.exe"));
             let marker = dir.join(format!("prog-{tag}.hash"));
             let cached = std::fs::read_to_string(&marker)
@@ -177,6 +190,7 @@ pub fn prepare(src: &str, trace_mem: bool) -> Result<Prepared, String> {
                 let mut cc = core_parser::toolchain::clang_command()?;
                 let out = cc
                     .arg("-O0")
+                    .arg("-fno-color-diagnostics")
                     .arg(&inc)
                     .arg(&cpath)
                     .arg("-o")
@@ -189,17 +203,17 @@ pub fn prepare(src: &str, trace_mem: bool) -> Result<Prepared, String> {
                 }
                 std::fs::write(&marker, &tag).map_err(|e| e.to_string())?;
             }
-            Prepared {
+            Ok(Prepared {
                 program: exe,
                 args: vec![],
-                envs: if trace_mem {
+                envs: if trace_mem && lang == core_parser::Lang::C {
                     vec![("BLOCKIDE_MEMTRACE", "1")]
                 } else {
                     vec![]
                 },
-            }
+            })
         }
-    })
+    }
 }
 
 /// Stage text under an explicit filename in the jail dir.
@@ -393,7 +407,17 @@ pub fn build_and_run_opts(
     timeout_ms: u64,
     trace_mem: bool,
 ) -> Result<RunOutcome, String> {
-    run_prepared(&prepare(src, trace_mem)?, timeout_ms, "")
+    build_and_run_lang(src, timeout_ms, trace_mem, core_parser::Lang::C)
+}
+
+/// Language-aware compile+run (C++ routes to the clang backend).
+pub fn build_and_run_lang(
+    src: &str,
+    timeout_ms: u64,
+    trace_mem: bool,
+    lang: core_parser::Lang,
+) -> Result<RunOutcome, String> {
+    run_prepared(&prepare_lang(src, trace_mem, lang)?, timeout_ms, "")
 }
 
 /// Execute a prepared program with stdin text (used by the academy runner).
@@ -412,6 +436,38 @@ pub fn run_c(src: &str, timeout_ms: u64) -> Result<RunOutcome, String> {
     build_and_run(src, timeout_ms)
 }
 
+#[cfg(test)]
+mod cpp_backend_tests {
+    use super::*;
+
+    const CPP_HELLO: &str = r#"#include <iostream>
+
+int main() {
+    std::cout << "cpp-hello" << std::endl;
+    return 0;
+}
+"#;
+
+    #[test]
+    #[ignore = "requires local clang + MSVC env; verified per-run via `cargo test -- --ignored`"]
+    fn cpp_runs_via_clang_backend() {
+        // tcc must NEVER be selected for C++ (C-only compiler)
+        let out = build_and_run_lang(CPP_HELLO, 30_000, false, core_parser::Lang::Cpp)
+            .expect("cpp compile+run");
+        assert_eq!(out.exit, 0, "stderr: {}", out.stderr);
+        assert!(out.stdout.contains("cpp-hello"), "stdout: {}", out.stdout);
+    }
+
+    #[test]
+    fn cpp_never_selects_tcc() {
+        // the staging decision is checkable WITHOUT a toolchain: a C++
+        // Prepared must always be the clang-produced exe, never tcc -run
+        let p = prepare_lang(CPP_HELLO, false, core_parser::Lang::Cpp).expect("prepare");
+        assert!(p.program.extension().and_then(|e| e.to_str()) == Some("exe"));
+        assert!(p.args.is_empty(), "tcc -run args leaked into C++ backend");
+    }
+}
+
 /// A supervised run whose memory can be inspected while it lives.
 pub struct InspectableRun {
     pub pid: u32,
@@ -425,7 +481,17 @@ pub fn spawn_inspectable(
     timeout_ms: u64,
     trace_mem: bool,
 ) -> Result<InspectableRun, String> {
-    let p = prepare(src, trace_mem)?;
+    spawn_inspectable_lang(src, timeout_ms, trace_mem, core_parser::Lang::C)
+}
+
+/// Language-aware inspectable spawn (C++ routes to clang automatically).
+pub fn spawn_inspectable_lang(
+    src: &str,
+    timeout_ms: u64,
+    trace_mem: bool,
+    lang: core_parser::Lang,
+) -> Result<InspectableRun, String> {
+    let p = prepare_lang(src, trace_mem, lang)?;
     clear_hard_stop();
     let done: Arc<Mutex<Option<Result<RunOutcome, String>>>> = Arc::new(Mutex::new(None));
     let finished = Arc::new(std::sync::atomic::AtomicBool::new(false));

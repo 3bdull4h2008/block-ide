@@ -1,12 +1,14 @@
-//! Prints {tree, hasErrors} JSON for C source given on stdin.
+//! Prints {tree, hasErrors} JSON for C/C++ source given on stdin.
 //! Bridge for headless E2E tests of the frontend block model.
+//! Language: argv[1] == "cpp" selects tree-sitter-cpp (default C).
 
 use std::io::Read;
 
 fn main() {
+    let lang = core_parser::Lang::from_opt(std::env::args().nth(1).as_deref());
     let mut src = String::new();
     std::io::stdin().read_to_string(&mut src).expect("read stdin");
-    let tree = match core_parser::parse_canonical(&src) {
+    let tree = match core_parser::parse_canonical_lang(&src, lang) {
         Some(t) => t,
         None => {
             eprintln!("grammar failed");

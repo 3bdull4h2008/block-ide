@@ -1,6 +1,32 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 33: trigger=user: add C++ language
+expect: C++ subset pack per D3 amendment - parse/render/diag/run .cpp files;
+tcc never selected for C++; gates green
+obs: D3 AMENDED (user request supersedes the v1 deferral). core-parser:
+Lang enum (from_path: .cpp/.cc/.cxx/.hpp/.hh) + tree-sitter-cpp 0.23.4
+(vendored via Cargo.lock); parse_c_lang/parse_canonical_lang/
+canonical_source_lang/syntax_check_stderr_lang - C++ stages as main.cpp so
+the clang driver infers C++ and diags reference the right stem; clang-format
+already language-agnostic (style-file). runner: prepare_lang routes C++ to
+the clang exe backend ALWAYS (tcc is C-only, D4 untouched); memtrace stays
+C-only v1 (C header). commands: lang param on parse_c/canonicalize_c/
+diag_c/run_start; list_c_files includes cpp family. frontend: activeLang
+rides with activeTab (CPP_RE), cpp new-file template (iostream), status
+shows (C)/(CPP), namespace_definition -> function cat. TEST FINDS:
+(1) C grammar quietly accepts `class X {};` w/o error nodes - the
+language MUST ride with the file (asserted grammar-selection instead of
+C-rejection); (2) class renders as a DECLARATION-mouth (wraps
+class_specifier, same rule as C structs) - test matched reality. VERIFIED
+END-TO-END: cpp_runs_via_clang_backend (--ignored, real clang+MSVC):
+iostream program compiled, ran, printed cpp-hello, exit 0. rust 21/21 +
+2 cpp, vitest 35/35, ALL FOURTEEN gates PASS exit 0 (35 UI assertions).
+state=SUCCESS | next: user eyes-on cpp in app (open folder w/ .cpp);
+vanilla install drill (manual, Gate 5)
+```
+
+```
 RUN 32: trigger=user: add all functions + math operations (comparison, + - * / etc)
 expect: Scratch Operators category (round arithmetic + hex comparison/logic
 reporters), expanded Functions group, shape-checked reporter drops; gates green

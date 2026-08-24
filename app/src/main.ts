@@ -131,6 +131,13 @@ const savedCache = new Map<string, string>()
 const fileCache = new Map<string, string>()
 let files: string[] = []
 
+// C++ subset pack (D3 amendment): language rides with the FILE (.cpp/.cc/...)
+const CPP_RE = /\.(cpp|cc|cxx|hpp|hh)$/i
+function langOf(path: string | null): 'c' | 'cpp' {
+  return path && CPP_RE.test(path) ? 'cpp' : 'c'
+}
+let activeLang: 'c' | 'cpp' = 'c'
+
 let src = SAMPLE
 let roots: BBlock[] = []
 let rendering = false
@@ -167,7 +174,10 @@ async function render(source: string): Promise<void> {
   if (rendering) return
   rendering = true
   try {
-    const out = await invoke<{ tree: CTreeJSON; has_errors: boolean }>('parse_c', { src: source })
+    const out = await invoke<{ tree: CTreeJSON; has_errors: boolean }>('parse_c', {
+      src: source,
+      lang: activeLang,
+    })
     roots = buildBlocks(out.tree)
     layoutStack(roots, 40, 40)
     // palette's variable section reflects the program's own data
@@ -181,7 +191,9 @@ async function render(source: string): Promise<void> {
     for (const b of roots) drawBlock(b)
     world.addChild(overlay)
     world.addChild(snapLayer)
-    statusEl.textContent = out.has_errors ? 'parsed with errors' : 'parsed clean'
+    statusEl.textContent = out.has_errors
+      ? `parsed with errors (${activeLang.toUpperCase()})`
+      : `parsed clean (${activeLang.toUpperCase()})`
     statusEl.className = out.has_errors ? 'warn' : 'ok'
   } catch (e) {
     statusEl.textContent = String(e)
@@ -193,7 +205,7 @@ async function render(source: string): Promise<void> {
 
 async function canonicalize(): Promise<void> {
   try {
-    const clean = await invoke<string>('canonicalize_c', { src })
+    const clean = await invoke<string>('canonicalize_c', { src, lang: activeLang })
     if (clean !== src) setSrc(clean, 'op')
   } catch {
     /* keep as-is */
@@ -228,7 +240,7 @@ function drawDiagOverlay(ds: Diag[]): void {
 
 async function refreshDiags(): Promise<void> {
   try {
-    const ds = await invoke<Diag[]>('diag_c', { src })
+    const ds = await invoke<Diag[]>('diag_c', { src, lang: activeLang })
     drawDiagOverlay(ds)
     if (ds.length > 0) {
       consoleEl.textContent =
@@ -897,7 +909,7 @@ async function startRun(): Promise<void> {
   const tracing = memTraceEl.checked
   lastMemState = { boxes: [], edges: [], live: false }
   memListEl.style.display = tracing ? 'block' : 'none'
-  await invoke('run_start', { src, traceMem: tracing })
+  await invoke('run_start', { src, traceMem: tracing, lang: activeLang })
   if (tracing) {
     void invoke<boolean>('mem_attach').then((ok) => {
       if (ok) startMemPoll()
@@ -1131,6 +1143,7 @@ function activateTab(rel: string): void {
   hist.reset()
   caretAnchor = null // different buffer — old node ids are meaningless here
   activePath = rel
+  activeLang = langOf(rel)
   src = fileCache.get(rel) ?? ''
   srcEl.value = src
   void render(src)
@@ -1150,6 +1163,14 @@ document.getElementById('open-folder')?.addEventListener('click', async () => {
   consoleEl.textContent = `workspace: ${dir}`
 })
 
+const CPP_TEMPLATE = `#include <iostream>
+
+int main() {
+    std::cout << "hi\\n";
+    return 0;
+}
+`
+
 document.getElementById('new-file')?.addEventListener('click', async () => {
   if (!workspace) {
     consoleEl.textContent = 'open a folder first'
@@ -1157,8 +1178,9 @@ document.getElementById('new-file')?.addEventListener('click', async () => {
   }
   const name = window.prompt('New file name:', 'main.c')
   if (!name) return
-  const rel = name.endsWith('.c') ? name : name + '.c'
-  await invoke('write_file', { root: workspace, rel, content: NEW_TEMPLATE })
+  const rel = /\.[a-z]+$/i.test(name) ? name : name + '.c'
+  const content = CPP_RE.test(rel) ? CPP_TEMPLATE : NEW_TEMPLATE
+  await invoke('write_file', { root: workspace, rel, content })
   await refreshFiles()
   await openTab(rel)
 })
@@ -1698,6 +1720,8 @@ document.getElementById('check-btn')?.addEventListener('click', async () => {
   renderPalette()
   return null
 }
+;(window as unknown as { __langOf?: unknown }).__langOf = (path: string) => langOf(path)
+;(window as unknown as { __activeLang?: unknown }).__activeLang = () => activeLang
 
 void refreshProfile()
 void refreshLevels()

@@ -166,7 +166,13 @@ pub fn reflow(ctree: &CTree) -> String {
 
 /// Full canonical pipeline: parse → reflow → clang-format.
 pub fn canonical_source(src: &str) -> Result<String, String> {
-    let ct = crate::parse_canonical(src).ok_or("grammar failed to load")?;
+    canonical_source_lang(src, crate::Lang::C)
+}
+
+/// Language-aware variant (C++ subset pack, D3 amendment). clang-format is
+/// language-agnostic here (style-file driven), so only parsing differs.
+pub fn canonical_source_lang(src: &str, lang: crate::Lang) -> Result<String, String> {
+    let ct = crate::parse_canonical_lang(src, lang).ok_or("grammar failed to load")?;
     let raw = reflow(&ct);
     clang_format(&raw)
 }
