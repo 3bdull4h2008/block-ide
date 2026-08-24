@@ -11,6 +11,8 @@ import {
   BORDER,
   PAD,
   ROW_H,
+  INDENT,
+  measure,
   type BBlock,
   type CTreeJSON,
 } from './blocks'
@@ -21,6 +23,7 @@ import './style.css'
 interface DragPayload {
   label: string
   snippet?: string
+  cat?: string
   move?: { start: number; end: number }
 }
 
@@ -72,6 +75,7 @@ const world = new Container()
 app.stage.addChild(world)
 const overlay = new Container()
 app.stage.addChild(overlay)
+const snapLayer = new Container()
 
 interface Diag {
   line: number
@@ -90,6 +94,29 @@ const ghost = document.createElement('div')
 ghost.id = 'ghost'
 ghost.style.display = 'none'
 document.body.appendChild(ghost)
+
+// ------------------------------------------------------------- tiny sounds
+// Synthesized Web Audio blips - no assets, offline-first. The context is
+// created lazily on the first user gesture (autoplay policy).
+let actx: AudioContext | null = null
+function blip(freq: number, dur = 0.06, type: OscillatorType = 'sine', gain = 0.07): void {
+  try {
+    actx ??= new AudioContext()
+    if (actx.state === 'suspended') void actx.resume()
+    const o = actx.createOscillator()
+    const g = actx.createGain()
+    o.type = type
+    o.frequency.value = freq
+    g.gain.setValueAtTime(gain, actx.currentTime)
+    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + dur)
+    o.connect(g)
+    g.connect(actx.destination)
+    o.start()
+    o.stop(actx.currentTime + dur)
+  } catch {
+    /* audio is best-effort */
+  }
+}
 
 let workspace: string | null = null
 let activePath: string | null = null
@@ -128,6 +155,7 @@ async function render(source: string): Promise<void> {
     world.removeChildren()
     for (const b of roots) drawBlock(b)
     world.addChild(overlay)
+    world.addChild(snapLayer)
     statusEl.textContent = out.has_errors ? 'parsed with errors' : 'parsed clean'
     statusEl.className = out.has_errors ? 'warn' : 'ok'
   } catch (e) {
@@ -337,8 +365,58 @@ function startHtmlDrag(e: PointerEvent, payload: DragPayload): void {
   ghost.style.display = 'block'
   ghost.style.left = `${e.clientX + 12}px`
   ghost.style.top = `${e.clientY - 14}px`
+  blip(520, 0.05, 'triangle', 0.05)
   window.addEventListener('pointermove', onDragMove)
   window.addEventListener('pointerup', onDragEnd, { once: true })
+}
+
+function catColor(cat: string | undefined, fallback = COLORS.statement): number {
+  switch (cat) {
+    case 'control':
+    case 'loops':
+      return COLORS.control
+    case 'functions':
+      return COLORS.function
+    case 'structs':
+      return 0xec4899
+    case 'comment':
+      return COLORS.comment
+    default:
+      return fallback
+  }
+}
+
+function clearSnapGhost(): void {
+  snapLayer.removeChildren()
+}
+
+function drawSnapGhost(
+  gx: number,
+  gy: number,
+  w: number,
+  h: number,
+  cat: string | undefined,
+  label: string,
+): void {
+  const fill = catColor(cat)
+  const g = new Graphics()
+  g.roundRect(gx, gy, w, Math.max(ROW_H, h), 9)
+  g.fill({ color: fill, alpha: 0.3 })
+  g.roundRect(gx, gy, w, Math.max(ROW_H, h), 9)
+  g.stroke({ width: 2, color: fill, alpha: 0.65 })
+  const t = new Text({
+    text: label,
+    style: {
+      fontFamily: "'Baloo 2', 'Segoe UI', sans-serif",
+      fontSize: 13,
+      fontWeight: '600',
+      fill: '#ffffff',
+    },
+  })
+  t.alpha = 0.55
+  t.x = gx + PAD
+  t.y = gy + (ROW_H - t.height) / 2
+  snapLayer.addChild(g, t)
 }
 
 function onDragMove(e: PointerEvent): void {
@@ -358,15 +436,43 @@ function onDragMove(e: PointerEvent): void {
           : kids.length > 0
             ? kids[kids.length - 1].y + kids[kids.length - 1].h + TD
             : target.container.y + ROW_H
-      const r = hostEl.getBoundingClientRect()
+      const rr = hostEl.getBoundingClientRect()
       dropbar.style.display = 'block'
-      dropbar.style.left = `${r.left + (target.container.x + 4) * world.scale.x + world.x}px`
-      dropbar.style.top = `${r.top + (y - 3) * world.scale.y + world.y}px`
+      dropbar.style.left = `${rr.left + (target.container.x + 4) * world.scale.x + world.x}px`
+      dropbar.style.top = `${rr.top + (y - 3) * world.scale.y + world.y}px`
       dropbar.style.width = `${Math.max(0, (target.container.w - 8) * world.scale.x)}px`
+
+      // translucent snap preview at the exact insertion slot
+      clearSnapGhost()
+      const d = drag
+      let bw: number
+      let bh: number
+      let cat: string | undefined
+      if (d.move) {
+        const src = flatten(roots).find(
+          (b) => b.start === d.move!.start && b.end === d.move!.end,
+        )
+        bw = src?.w ?? 120
+        bh = src?.h ?? ROW_H
+        cat = src?.cat
+      } else {
+        bw = Math.max(90, measure(d.label))
+        bh = ROW_H
+        cat = d.cat
+      }
+      drawSnapGhost(
+        target.container.x + INDENT,
+        y,
+        bw,
+        bh,
+        cat ?? (drag.move ? undefined : 'statement'),
+        drag.label,
+      )
       return
     }
   }
   dropbar.style.display = 'none'
+  clearSnapGhost()
 }
 
 function isInsideRange(inner: BBlock, outer: { start: number; end: number }): boolean {
@@ -377,6 +483,7 @@ async function onDragEnd(e: PointerEvent): Promise<void> {
   window.removeEventListener('pointermove', onDragMove)
   ghost.style.display = 'none'
   dropbar.style.display = 'none'
+  clearSnapGhost()
   const d = drag
   drag = null
   if (!d) return
@@ -397,6 +504,8 @@ async function onDragEnd(e: PointerEvent): Promise<void> {
     next = spliceInsert(text, target.offset, d.snippet ?? '')
   }
   if (next === null) return
+  blip(740, 0.07, 'sine', 0.08)
+  setTimeout(() => blip(980, 0.05, 'sine', 0.05), 60)
   setSrc(next)
   void canonicalize()
 }
@@ -406,12 +515,17 @@ function attachHeaderEvents(
   b: BBlock,
 ): void {
   obj.on('pointerdown', (e) => {
-    const pe = e as { global: { x: number; y: number }; stopPropagation?: () => void }
+    const pe = e as {
+      global: { x: number; y: number }
+      button?: number
+      stopPropagation?: () => void
+    }
+    if (pe.button !== undefined && pe.button !== 0) return // right-click opens menu
     pe.stopPropagation?.()
     const r = hostEl.getBoundingClientRect()
     startHtmlDrag(
       { clientX: r.left + pe.global.x, clientY: r.top + pe.global.y } as PointerEvent,
-      { label: b.label || b.nodeKind, move: { start: b.start, end: b.end } },
+      { label: b.label || b.nodeKind, cat: b.cat, move: { start: b.start, end: b.end } },
     )
   })
 }
@@ -676,6 +790,63 @@ stopBtn.addEventListener('click', () => {
   void invoke('stage_stop')
 })
 
+// ------------------------------------------------------------ context menu
+const ctxMenu = document.createElement('div')
+ctxMenu.id = 'ctx-menu'
+ctxMenu.style.display = 'none'
+document.body.appendChild(ctxMenu)
+let ctxBlock: BBlock | null = null
+
+function hideCtxMenu(): void {
+  ctxMenu.style.display = 'none'
+  ctxBlock = null
+}
+
+hostEl.addEventListener('contextmenu', (e) => {
+  const me = e as MouseEvent
+  const w = screenToWorld(me.offsetX, me.offsetY)
+  const hit = hitTestHeader(roots, w.x, w.y)
+  if (!hit || hit.sticky) {
+    hideCtxMenu()
+    return
+  }
+  e.preventDefault()
+  ctxBlock = hit
+  ctxMenu.innerHTML =
+    '<div class="mi" data-act="dup">Duplicate</div><div class="mi danger" data-act="del">Delete</div>'
+  ctxMenu.style.display = 'block'
+  ctxMenu.style.left = `${Math.min(me.clientX, window.innerWidth - 170)}px`
+  ctxMenu.style.top = `${Math.min(me.clientY, window.innerHeight - 90)}px`
+  blip(420, 0.04, 'triangle', 0.04)
+})
+
+ctxMenu.addEventListener('click', async (e) => {
+  const act = (e.target as HTMLElement).dataset?.act
+  const b = ctxBlock
+  hideCtxMenu()
+  if (!act || !b) return
+  if (act === 'dup') {
+    const slice = src.slice(b.start, b.end)
+    setSrc(src.slice(0, b.end) + '\n' + slice + src.slice(b.end))
+    void canonicalize()
+    blip(740, 0.07, 'sine', 0.08)
+  } else if (act === 'del') {
+    const lineStart = src.lastIndexOf('\n', b.start - 1) + 1
+    let end = b.end
+    if (src[end] === '\n') end++
+    setSrc(src.slice(0, lineStart) + src.slice(end))
+    void canonicalize()
+    blip(170, 0.12, 'square', 0.06)
+  }
+})
+
+window.addEventListener('pointerdown', (e) => {
+  if (!ctxMenu.contains(e.target as Node)) hideCtxMenu()
+})
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') hideCtxMenu()
+})
+
 
 // ------------------------------------------------------------- workspace/tabs
 async function refreshFiles(): Promise<void> {
@@ -800,8 +971,10 @@ let lastY = 0
 app.stage.eventMode = 'static'
 app.stage.hitArea = app.screen
 app.stage.on('pointerdown', (e) => {
-  const r = hostEl.getBoundingClientRect()
-  const w = screenToWorld(e.global.x - r.left, e.global.y - r.top)
+  if ((e as { button?: number }).button !== undefined && (e as { button?: number }).button !== 0)
+    return
+  // e.global is already canvas-relative — do NOT subtract the host rect
+  const w = screenToWorld(e.global.x, e.global.y)
   if (hitTestHeader(roots, w.x, w.y)) return
   panning = true
   lastX = e.global.x
@@ -842,7 +1015,7 @@ for (const tpl of TEMPLATES) {
       return
     }
     e.preventDefault()
-    startHtmlDrag(e, { label: tpl.name, snippet: tpl.snippet })
+    startHtmlDrag(e, { label: tpl.name, snippet: tpl.snippet, cat: tpl.cat })
   })
   paletteEl.appendChild(el)
 }
@@ -957,6 +1130,14 @@ document.getElementById('check-btn')?.addEventListener('click', async () => {
     consoleEl.textContent = String(e)
   }
 })
+
+// debug/verification hooks (harmless in production)
+;(window as unknown as { __hitAt?: unknown }).__hitAt = (cx: number, cy: number): string | null => {
+  const r = hostEl.getBoundingClientRect()
+  const w = screenToWorld(cx - r.left, cy - r.top)
+  const hit = hitTestHeader(roots, w.x, w.y)
+  return hit ? hit.label || hit.nodeKind : null
+}
 
 void refreshProfile()
 void refreshLevels()

@@ -132,7 +132,7 @@ const CHAR_W = 8.4
 export const PAD = 14
 export const ROW_H = 34
 const GAP_Y = 10
-const INDENT = 30
+export const INDENT = 30
 
 const widthCache = new Map<string, number>()
 

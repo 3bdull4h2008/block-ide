@@ -643,3 +643,38 @@ select:focus-visible,
 label {
   cursor: pointer;
 }
+
+#ctx-menu {
+  position: fixed;
+  z-index: 1500;
+  min-width: 150px;
+  background: var(--bg-panel);
+  border: var(--clay-border) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-clay);
+  overflow: hidden;
+  padding: 4px;
+}
+
+#ctx-menu .mi {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-family: 'Baloo 2', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  cursor: pointer;
+  transition: background var(--press);
+}
+
+#ctx-menu .mi:hover {
+  background: var(--accent-soft);
+}
+
+#ctx-menu .mi.danger {
+  color: var(--warn);
+}
+
+#ctx-menu .mi.danger:hover {
+  background: rgba(229, 72, 77, 0.12);
+}
