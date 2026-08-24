@@ -1,6 +1,33 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 30: trigger=user: apply ALL remaining research to the project
+expect: category rail, variable harvesting, rename action, Lists->arrays,
+reporters fit any round socket; gates green
+obs: (1) STICKY RAIL: colored dots above palette, click smooth-scrolls to
+section, active dot follows scroll (Scratch's category rail, horizontal
+for our 216px sidebar). (2) HARVESTING: harvestVars() walks declaration
+nodes (init/array/pointer declarator identifiers) - locals+globals+arrays
+appear as chips automatically; function names/params/struct fields excluded
+(unit-tested); palette rebuilds only when the harvested set CHANGES (join
+compare) and preserves scrollTop. (3) RENAME+DELETE via right-click menu
+(Scratch parity); file-declared vars refuse menu with a hint (file is
+truth). (4) LISTS: Make a List -> C arrays; chips = element reporter
+`name[0]` + `int name[10];` + `name[0] = 0;` (all parse-tested); known
+lists persist (blockide-lists), file-indexed vars auto-sprout list chips.
+(5) SOCKET RULES: validateSlotValue moved to palette.ts - number sockets
+now accept literals AND reporters (`total`, `grid[0]`) per Scratch's
+round-socket taxonomy; ident sockets accept indexed idents. GATE FIX: old
+"number refuses identifier" assertion contradicted the research - replaced
+with junk-rejection + reporter-acceptance checks (re-fetch slot index after
+each mutating commit - commits re-render). Screenshot race fixed in shot
+script: wait for REAL readiness (src filled + blocksShape + palette) not
+fixed sleep - top-level pixi await made 2.2s captures race cold boots.
+vitest 25/25; ALL FOURTEEN gates PASS exit 0 (27 UI assertions).
+state=SUCCESS | next: user eyes-on; boolean hex sockets (conditions v2)
+```
+
+```
 RUN 29: trigger=user: categorize palette by type + Scratch-style variable
 creation; asked for precise Scratch research first
 expect: research doc; palette as category sections; Make-a-Variable spawns

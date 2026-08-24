@@ -150,12 +150,21 @@ const slots = await ev(`window.__slots()`);
 check('slots: number slot present in sample', Array.isArray(slots) && slots.some((s) => s.type === 'number'));
 const numIdx = await ev(`window.__slots().findIndex(s => s.type === 'number')`);
 check(
-  'slot reject: number field refuses identifier',
-  (await ev(`window.__commitSlot(${numIdx}, 'abc')`)) !== null,
+  'slot reject: number field refuses non-expression junk',
+  (await ev(`window.__commitSlot(${numIdx}, 'x=1')`)) !== null &&
+    (await ev(`window.__commitSlot(${numIdx}, 'a b')`)) !== null,
+);
+check(
+  'slot accept: number field takes literals AND reporters (Scratch round sockets)',
+  (await ev(`window.__commitSlot(${numIdx}, '7')`)) === null,
+);
+check(
+  'slot accept: ident field takes list element reporter',
+  (await ev(`window.__commitSlot(${await ev(`window.__slots().findIndex(s => s.type === 'number')`)}, 'grid[0]')`)) === null,
 );
 check(
   'slot commit: number field accepts 42',
-  (await ev(`window.__commitSlot(${numIdx}, '42')`)) === null &&
+  (await ev(`window.__commitSlot(${await ev(`window.__slots().findIndex(s => s.type === 'number')`)}, '42')`)) === null &&
     String(await ev(`document.getElementById('src').value`)).includes('42'),
 );
 
@@ -177,6 +186,21 @@ check(
   (await ev(`window.__makeVar('score')`)) === null &&
     (await ev(`!!document.querySelector('.pal-reporter[data-var=\"score\"]')`)) === true &&
     (await ev(`document.querySelectorAll('.pal[data-var=\"score\"]').length`)) === 3,
+);
+
+// 12. category rail + Lists (C arrays) + harvested variables
+check(
+  'palette rail: category dots rendered',
+  (await ev(`document.querySelectorAll('#pal-rail .rail-dot').length`)) >= 7,
+);
+check(
+  'make list: creates element reporter + declare/set chips',
+  (await ev(`window.__makeList('grid')`)) === null &&
+    (await ev(`document.querySelectorAll('.pal-list[data-var=\"grid\"]').length`)) === 3,
+);
+check(
+  'harvest: file variables appear as chips (total from sample)',
+  (await ev(`!!document.querySelector('.pal[data-var=\"total\"]')`)) === true,
 );
 
 await shot(process.env.TEMP + '\\ui-e2e.png');

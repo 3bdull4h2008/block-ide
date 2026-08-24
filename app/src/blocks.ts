@@ -231,6 +231,35 @@ export function buildBlocks(tree: CTreeJSON): BBlock[] {
   return stackFrom(tree.root)
 }
 
+/** Variables DECLARED in the current file (Scratch-faithful: the palette's
+ *  variable section reflects the program's own data). Collects identifiers
+ *  that act as declarators under `declaration` nodes — function names,
+ *  parameters, and struct fields use different node kinds and are excluded. */
+export function harvestVars(root: CNodeJSON): string[] {
+  const out = new Set<string>()
+  const fromDeclarator = (m: CNodeJSON): void => {
+    if (m.kind === 'identifier') {
+      if (m.text !== null && m.text.length > 0) out.add(m.text)
+      return
+    }
+    if (
+      m.kind === 'init_declarator' ||
+      m.kind === 'array_declarator' ||
+      m.kind === 'pointer_declarator'
+    ) {
+      for (const c of m.children) fromDeclarator(c)
+    }
+  }
+  const visit = (n: CNodeJSON): void => {
+    if (n.kind === 'declaration') {
+      for (const c of n.children) fromDeclarator(c)
+    }
+    for (const c of n.children) visit(c)
+  }
+  visit(root)
+  return [...out]
+}
+
 const CHAR_W = 8.4
 export const PAD = 14
 export const ROW_H = 34

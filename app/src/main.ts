@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import {
   buildBlocks,
+  harvestVars,
   layoutStack,
   findDropTarget,
   hitTestHeader,
@@ -24,8 +25,10 @@ import { pickAnchor, caretOffset, type CaretAnchor } from './caret'
 import {
   PALETTE_GROUPS,
   VARIABLES_COLOR,
+  validateSlotValue,
   validateVarName,
   varChips,
+  listChips,
   type PaletteItem,
 } from './palette'
 import './style.css'
@@ -162,6 +165,12 @@ async function render(source: string): Promise<void> {
     const out = await invoke<{ tree: CTreeJSON; has_errors: boolean }>('parse_c', { src: source })
     roots = buildBlocks(out.tree)
     layoutStack(roots, 40, 40)
+    // palette's variable section reflects the program's own data
+    const nextHarvest = harvestVars(out.tree.root)
+    if (nextHarvest.join('\u0000') !== harvestedVars.join('\u0000')) {
+      harvestedVars = nextHarvest
+      renderPalette()
+    }
     world.removeChildren()
     slotHits = []
     for (const b of roots) drawBlock(b)
@@ -619,24 +628,9 @@ function attachHeaderEvents(
 // ----------------------------------------------------- inline slot editor
 // Scratch-style: click a typed field inside a block, type a replacement,
 // Enter/blur commits through the same text-splice seam as every other edit.
-const SLOT_PATTERNS: Record<string, RegExp> = {
-  ident: /^[A-Za-z_][A-Za-z0-9_]*$/,
-  number: /^[+-]?(\d+\.?\d*|\.\d+)$/,
-}
-
-function validateSlot(type: string, value: string): string | null {
-  const v = value.trim()
-  if (v.length === 0) return 'empty'
-  if (type === 'ident') return SLOT_PATTERNS.ident.test(v) ? v : null
-  if (type === 'number') return SLOT_PATTERNS.number.test(v) ? v : null
-  if (type === 'string') {
-    return /^".*"$/s.test(v) ? v : `"${v.replace(/"/g, '\\"')}"`
-  }
-  return null // text parts are not editable slots
-}
-
+// Socket rules live in palette.ts (reporters fit any round socket).
 function commitSlotValue(s: SlotHit, raw: string): string | null {
-  const final = validateSlot(s.part.type, raw)
+  const final = validateSlotValue(s.part.type, raw)
   if (final === null) {
     return `${s.part.type} slot rejects ${JSON.stringify(raw)}`
   }
@@ -1204,18 +1198,24 @@ hostEl.addEventListener(
 )
 
 // ------------------------------------------------------- Scratch palette
-// Category sections with colored headers (docs/SCRATCH-BLOCKS-REFERENCE.md);
-// the Variables section owns the Make-a-Variable flow and per-variable chips.
+// Category rail + colored sections (docs/SCRATCH-BLOCKS-REFERENCE.md);
+// Variables section owns Make-a-Variable / Make-a-List and per-var chips.
 const knownVars: string[] = JSON.parse(localStorage.getItem('blockide-vars') ?? '[]')
+const knownLists: string[] = JSON.parse(localStorage.getItem('blockide-lists') ?? '[]')
+let harvestedVars: string[] = [] // declared in the open file (file is truth)
 
 function saveVars(): void {
   localStorage.setItem('blockide-vars', JSON.stringify(knownVars))
+  localStorage.setItem('blockide-lists', JSON.stringify(knownLists))
 }
 
-function makeVarChip(item: PaletteItem & { varName?: string }): HTMLDivElement {
+function isReporterChip(item: PaletteItem & { varName?: string }): boolean {
+  return item.snippet === ''
+}
+
+function makeVarChip(item: PaletteItem & { varName?: string }, list = false): HTMLDivElement {
   const el = document.createElement('div')
-  const isReporter = item.snippet === ''
-  el.className = `pal pal-variables${isReporter ? ' pal-reporter' : ''}`
+  el.className = `pal pal-variables${isReporterChip(item) ? ' pal-reporter' : ''}${list ? ' pal-list' : ''}`
   el.dataset.cat = 'variables'
   el.dataset.var = item.varName ?? item.name
   el.textContent = item.name
@@ -1225,7 +1225,7 @@ function makeVarChip(item: PaletteItem & { varName?: string }): HTMLDivElement {
       return
     }
     e.preventDefault()
-    if (isReporter) {
+    if (isReporterChip(item)) {
       // oval reporter: fits INTO slots, never onto the canvas
       startHtmlDrag(e, { label: item.name, slotValue: item.name, cat: 'variables' })
     } else {
@@ -1233,53 +1233,132 @@ function makeVarChip(item: PaletteItem & { varName?: string }): HTMLDivElement {
     }
   })
   el.addEventListener('contextmenu', (e) => {
-    // Scratch: right-click a variable reporter -> delete
+    // Scratch: right-click a variable reporter -> rename/delete
     e.preventDefault()
     const varName = item.varName ?? item.name
-    const idx = knownVars.indexOf(varName)
-    if (idx >= 0 && window.confirm(`Delete variable "${varName}"? (code is untouched)`)) {
-      knownVars.splice(idx, 1)
-      saveVars()
-      renderPalette()
+    if (!knownVars.includes(varName) && !knownLists.includes(varName)) {
+      consoleEl.textContent = `"${varName}" is declared in the file — rename or delete it in the code`
+      return
     }
+    openVarMenu(e, varName)
   })
   return el
 }
 
+// rename/delete menu (Scratch's variable right-click actions)
+const varMenu = document.createElement('div')
+varMenu.id = 'var-menu'
+varMenu.style.display = 'none'
+document.body.appendChild(varMenu)
+let varMenuTarget: string | null = null
+
+function openVarMenu(e: MouseEvent, varName: string): void {
+  varMenuTarget = varName
+  varMenu.innerHTML = `<div class="mi" data-act="rename">Rename</div><div class="mi danger" data-act="delete">Delete</div>`
+  varMenu.style.display = 'block'
+  varMenu.style.left = `${Math.min(e.clientX, window.innerWidth - 150)}px`
+  varMenu.style.top = `${Math.min(e.clientY, window.innerHeight - 80)}px`
+}
+
+varMenu.addEventListener('click', (e) => {
+  const act = (e.target as HTMLElement).dataset?.act
+  const old = varMenuTarget
+  hideVarMenu()
+  if (!act || !old) return
+  if (act === 'rename') {
+    const raw = window.prompt(`Rename "${old}" to:`, old)
+    if (raw === null) return
+    const next = validateVarName(raw)
+    if (next === null || knownVars.includes(next) || knownLists.includes(next)) {
+      consoleEl.textContent = `cannot rename to "${raw}"`
+      blip(200, 0.08, 'square', 0.04)
+      return
+    }
+    if (knownVars.includes(old)) knownVars[knownVars.indexOf(old)] = next
+    if (knownLists.includes(old)) knownLists[knownLists.indexOf(old)] = next
+    saveVars()
+    blip(740, 0.06, 'sine', 0.05)
+  } else if (act === 'delete') {
+    if (!window.confirm(`Delete "${old}"? (code is untouched)`)) return
+    const vi = knownVars.indexOf(old)
+    if (vi >= 0) knownVars.splice(vi, 1)
+    const li = knownLists.indexOf(old)
+    if (li >= 0) knownLists.splice(li, 1)
+    saveVars()
+    blip(170, 0.1, 'square', 0.05)
+  }
+  renderPalette()
+})
+
+function hideVarMenu(): void {
+  varMenu.style.display = 'none'
+  varMenuTarget = null
+}
+window.addEventListener('pointerdown', (e) => {
+  if (!varMenu.contains(e.target as Node)) hideVarMenu()
+})
+
 function renderPalette(): void {
+  const st = paletteEl.scrollTop
   paletteEl.innerHTML = ''
-  for (const g of PALETTE_GROUPS) {
+
+  // Scratch's category rail: colored dots, click jumps to the section
+  const rail = document.createElement('div')
+  rail.id = 'pal-rail'
+  const dots: { dot: HTMLSpanElement; name: string }[] = []
+  paletteEl.appendChild(rail)
+
+  const addGroupHeader = (name: string, color: string): HTMLDivElement => {
     const head = document.createElement('div')
     head.className = 'pal-group'
-    head.dataset.g = g.name.toLowerCase()
-    head.textContent = g.name
-    head.style.background = g.color
-    if (g.name === 'Notes') head.style.color = '#6b4d00'
+    head.dataset.g = name.toLowerCase()
+    head.textContent = name
+    head.style.background = color
+    if (name === 'Notes') head.style.color = '#6b4d00'
     paletteEl.appendChild(head)
-    for (const item of g.items) {
-      const el = document.createElement('div')
-      el.className = `pal pal-${item.cat}`
-      el.dataset.cat = item.cat
-      el.textContent = item.name
-      el.addEventListener('pointerdown', (e) => {
-        if (el.classList.contains('locked')) {
-          e.preventDefault()
-          return
-        }
+    return head
+  }
+  const addChip = (item: PaletteItem): void => {
+    const el = document.createElement('div')
+    el.className = `pal pal-${item.cat}`
+    el.dataset.cat = item.cat
+    el.textContent = item.name
+    el.addEventListener('pointerdown', (e) => {
+      if (el.classList.contains('locked')) {
         e.preventDefault()
-        startHtmlDrag(e, { label: item.name, snippet: item.snippet, cat: item.cat })
-      })
-      paletteEl.appendChild(el)
-    }
+        return
+      }
+      e.preventDefault()
+      startHtmlDrag(e, { label: item.name, snippet: item.snippet, cat: item.cat })
+    })
+    paletteEl.appendChild(el)
   }
 
-  // Variables section: Scratch's Make-a-Variable + per-variable chips
-  const vhead = document.createElement('div')
-  vhead.className = 'pal-group'
-  vhead.dataset.g = 'variables'
-  vhead.textContent = 'Variables'
-  vhead.style.background = VARIABLES_COLOR
-  paletteEl.appendChild(vhead)
+  for (const g of PALETTE_GROUPS) {
+    const head = addGroupHeader(g.name, g.color)
+    const dot = document.createElement('span')
+    dot.className = 'rail-dot'
+    dot.title = g.name
+    dot.style.background = g.color
+    dot.addEventListener('click', () =>
+      paletteEl.scrollTo({ top: head.offsetTop - 26, behavior: 'smooth' }),
+    )
+    rail.appendChild(dot)
+    dots.push({ dot, name: g.name })
+    for (const item of g.items) addChip(item)
+  }
+
+  // ---- Variables section (Scratch data category) ----
+  const vhead = addGroupHeader('Variables', VARIABLES_COLOR)
+  const vdot = document.createElement('span')
+  vdot.className = 'rail-dot'
+  vdot.title = 'Variables'
+  vdot.style.background = VARIABLES_COLOR
+  vdot.addEventListener('click', () =>
+    paletteEl.scrollTo({ top: vhead.offsetTop - 26, behavior: 'smooth' }),
+  )
+  rail.appendChild(vdot)
+  dots.push({ dot: vdot, name: 'Variables' })
 
   const mk = document.createElement('button')
   mk.id = 'make-var'
@@ -1301,7 +1380,52 @@ function renderPalette(): void {
     blip(740, 0.07, 'sine', 0.06)
   })
   paletteEl.appendChild(mk)
-  for (const v of knownVars) for (const chip of varChips(v)) paletteEl.appendChild(makeVarChip(chip))
+
+  const allVars = [...new Set([...knownVars, ...harvestedVars])]
+  for (const v of allVars) for (const chip of varChips(v)) paletteEl.appendChild(makeVarChip(chip))
+
+  // ---- Lists subcategory (Scratch Lists -> C arrays) ----
+  const mkList = document.createElement('button')
+  mkList.id = 'make-list'
+  mkList.dataset.cat = 'variables'
+  mkList.textContent = 'Make a List'
+  mkList.addEventListener('click', () => {
+    if (mkList.classList.contains('locked')) return
+    const raw = window.prompt('List name (C array):', 'grid')
+    if (raw === null) return
+    const name = validateVarName(raw)
+    if (name === null) {
+      consoleEl.textContent = `"${raw}" is not a valid C array name`
+      blip(200, 0.08, 'square', 0.04)
+      return
+    }
+    if (!knownLists.includes(name)) knownLists.push(name)
+    saveVars()
+    renderPalette()
+    blip(740, 0.07, 'sine', 0.06)
+  })
+  paletteEl.appendChild(mkList)
+
+  // list chips: user-created lists always; file-indexed vars discovered live
+  const listVars = new Set<string>(knownLists)
+  for (const v of allVars) {
+    if (src.includes(`${v}[`)) listVars.add(v)
+  }
+  for (const v of listVars) {
+    for (const chip of listChips(v)) paletteEl.appendChild(makeVarChip(chip, true))
+  }
+
+  // active rail dot follows scroll
+  paletteEl.onscroll = () => {
+    let active = dots[0]?.name
+    for (const d of dots) {
+      const head = paletteEl.querySelector(`.pal-group[data-g="${d.name.toLowerCase()}"]`) as HTMLElement | null
+      if (head && head.offsetTop - 30 <= paletteEl.scrollTop) active = d.name
+    }
+    for (const d of dots) d.dot.classList.toggle('active', d.name === active)
+  }
+
+  paletteEl.scrollTop = st
   renderPaletteLocks()
 }
 
@@ -1459,6 +1583,14 @@ document.getElementById('check-btn')?.addEventListener('click', async () => {
   const name = validateVarName(raw)
   if (name === null) return 'invalid'
   if (!knownVars.includes(name)) knownVars.push(name)
+  saveVars()
+  renderPalette()
+  return null
+}
+;(window as unknown as { __makeList?: unknown }).__makeList = (raw: string) => {
+  const name = validateVarName(raw)
+  if (name === null) return 'invalid'
+  if (!knownLists.includes(name)) knownLists.push(name)
   saveVars()
   renderPalette()
   return null

@@ -96,3 +96,31 @@ export function varChips(name: string): VarChip[] {
     { name: `change ${name} + 1`, varName: name, cat: 'variables', snippet: `${name} = ${name} + 1;` },
   ]
 }
+
+/** Scratch Lists map to C arrays: declare, set an item, and an element
+ *  reporter `name[0]` that drops into slots. */
+export function listChips(name: string): VarChip[] {
+  return [
+    { name: `${name}[0]`, varName: name, cat: 'variables', snippet: '' }, // element reporter
+    { name: `new list ${name}[10]`, varName: name, cat: 'variables', snippet: `int ${name}[10];` },
+    { name: `set ${name}[0] = 0`, varName: name, cat: 'variables', snippet: `${name}[0] = 0;` },
+  ]
+}
+
+// ------------------------------------------------- slot value validation
+/** identifier, optionally indexed: `total` or `score[0]` (list element) */
+export const INDEXED_IDENT = /^[A-Za-z_][A-Za-z0-9_]*(\[\d+\])?$/
+const NUMERIC = /^[+-]?(\d+\.?\d*|\.\d+)$/
+
+/** Scratch socket rules, C-typed: reporters (vars AND list elements) fit any
+ *  round socket; number sockets also take literals; strings auto-quote. */
+export function validateSlotValue(type: string, raw: string): string | null {
+  const v = raw.trim()
+  if (v.length === 0) return null
+  if (type === 'ident') return INDEXED_IDENT.test(v) ? v : null
+  if (type === 'number') return NUMERIC.test(v) || INDEXED_IDENT.test(v) ? v : null
+  if (type === 'string') {
+    return /^".*"$/s.test(v) ? v : `"${v.replace(/"/g, '\\"')}"`
+  }
+  return null // text parts are not editable slots
+}

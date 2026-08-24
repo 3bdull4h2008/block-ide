@@ -85,7 +85,7 @@ content; dragging a value OUT of a slot reverts it to its default.
 
 | Scratch concept            | Block-IDE equivalent                              |
 |----------------------------|---------------------------------------------------|
-| category rail + sections   | palette group headers, Scratch primaries per group |
+| category rail + sections   | sticky rail dots (click = jump, active follows scroll) + colored section headers |
 | stack block                | statement row (notch/tab geometry, already shipped)|
 | C-block                    | control mouth (1.7)                                |
 | reporter oval              | variable chip — drops into ident/number slots      |
@@ -94,5 +94,7 @@ content; dragging a value OUT of a slot reverts it to its default.
 | `set (v) to (0)`           | `v = 0;`                                           |
 | `change (v) by (1)`        | `v = v + 1;`                                       |
 | reporter into slot         | replaces the slot's byte-range via the text splice seam |
-| delete variable            | removes chip; code untouched (file is truth — Rule 1)|
+| rename/delete variable     | right-click menu; code untouched (file is truth — Rule 1)|
+| variables "for this sprite"| palette also HARVESTS variables declared in the open file (declaration nodes) |
+| Lists subcategory          | Make a List -> C arrays: `int name[10];`, `name[0] = 0;`, element reporter `name[0]` (fits any round socket) |
 | monitor/checkbox           | out of scope v1 (no interpreter; memory viz covers "watching" in P3) |
