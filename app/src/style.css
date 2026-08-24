@@ -563,6 +563,72 @@ select:focus-visible,
   font-size: 12px;
 }
 
+#view-modes {
+  display: inline-flex;
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+
+#view-modes .vm {
+  min-height: 24px;
+  padding: 2px 12px;
+  font-size: 12px;
+  background: transparent;
+  color: var(--fg-dim);
+  box-shadow: none;
+  border-radius: 8px;
+}
+
+#view-modes .vm:hover {
+  color: var(--fg);
+  filter: none;
+  background: rgba(8, 145, 178, 0.15);
+}
+
+#view-modes .vm.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 0 rgba(21, 94, 117, 0.3);
+}
+
+/* ---- view modes (D6): blocks / split / text ---- */
+
+#app[data-view='blocks'] {
+  grid-template-columns: 216px 1.4fr 1fr;
+}
+
+#app[data-view='blocks'] #main-col {
+  display: none;
+}
+
+#app[data-view='blocks'] #canvas-host {
+  grid-column: 2 / 3;
+}
+
+#app[data-view='blocks'] #console {
+  grid-column: 2 / 3;
+}
+
+#app[data-view='blocks'] #stage-wrap {
+  grid-column: 3 / 4;
+}
+
+#app[data-view='text'] {
+  grid-template-columns: 216px 1fr;
+}
+
+#app[data-view='text'] #canvas-host,
+#app[data-view='text'] #stage-wrap {
+  display: none;
+}
+
+#app[data-view='text'] #main-col,
+#app[data-view='text'] #console {
+  grid-column: 2 / 3;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition-duration: 0.01ms !important;

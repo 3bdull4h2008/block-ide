@@ -75,6 +75,19 @@ Add-Gate -Id 'G-ACADEMY' -Pass ($LASTEXITCODE -eq 0) -Metrics @{ tail = ($acOut 
 cargo test -q -p app --test perf 2>&1 | Tee-Object -Variable pfOut | Out-Null
 Add-Gate -Id 'G-PERF' -Pass ($LASTEXITCODE -eq 0) -Metrics @{ tail = (($pfOut | Select-String 'G-PERF') | Select-Object -Last 1) }
 
+# ------------------------------------------------------- G-UI-E2E (@P5)
+$uiPort = 9339
+$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$uiPort"
+$env:WEBVIEW2_USER_DATA_FOLDER = "$env:TEMP\blockide-uie2e-profile"
+$appExe = Join-Path $repo 'target\release\app.exe'
+if (-not (Test-Path $appExe)) { $appExe = Join-Path $repo 'target\debug\app.exe' }
+$uiProc = Start-Process -FilePath $appExe -PassThru
+Start-Sleep -Seconds 8
+node (Join-Path $repo 'tools\cdp-uie2e.mjs') $uiPort 2>&1 | Tee-Object -Variable ueOut | Out-Null
+$uiExit = $LASTEXITCODE
+if (-not $uiProc.HasExited) { Stop-Process -Id $uiProc.Id -Force -ErrorAction SilentlyContinue }
+Add-Gate -Id 'G-UI-E2E' -Pass ($uiExit -eq 0) -Metrics @{ tail = ($ueOut | Select-String 'G-UI-E2E') }
+
 # ------------------------------------------------------------ report + verdict
 $report = [ordered]@{
     runAt  = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')

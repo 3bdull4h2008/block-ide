@@ -888,6 +888,7 @@ function activateTab(rel: string): void {
   srcEl.value = src
   void render(src)
   markDirty()
+  setView(tabViews.get(rel) ?? 'split')
 }
 
 document.getElementById('open-folder')?.addEventListener('click', async () => {
@@ -961,6 +962,15 @@ srcEl.addEventListener('input', () => {
   src = srcEl.value
   void render(src)
   markDirty()
+})
+srcEl.addEventListener('scroll', () => {
+  if (viewMode !== 'split') return
+  const max = srcEl.scrollHeight - srcEl.clientHeight
+  if (max <= 0) return
+  const f = srcEl.scrollTop / max
+  let maxY = 40
+  for (const b of flatten(roots)) maxY = Math.max(maxY, b.y + b.h)
+  world.y = 48 - f * Math.max(0, maxY + 80 - 48)
 })
 srcEl.addEventListener('blur', () => void canonicalize())
 
@@ -1143,6 +1153,25 @@ void refreshProfile()
 void refreshLevels()
 void recoverJournal()
 
+// ------------------------------------------------------------- view modes
+type ViewMode = 'split' | 'blocks' | 'text'
+const viewBtns = Array.from(document.querySelectorAll<HTMLButtonElement>('.vm'))
+const appEl = document.getElementById('app') as HTMLDivElement
+let viewMode: ViewMode = 'split'
+const tabViews = new Map<string, ViewMode>()
+
+function setView(v: ViewMode): void {
+  viewMode = v
+  appEl.dataset.view = v
+  viewBtns.forEach((b) => b.classList.toggle('active', b.dataset.view === v))
+  window.dispatchEvent(new Event('resize'))
+  if (activePath) tabViews.set(activePath, v)
+}
+
+viewBtns.forEach((b) =>
+  b.addEventListener('click', () => setView(b.dataset.view as ViewMode)),
+)
+
 // ------------------------------------------------------- theme + keybinds
 const themeBtn = document.getElementById('theme-toggle') as HTMLButtonElement
 
@@ -1201,6 +1230,17 @@ window.addEventListener('keydown', (e) => {
     const sb = document.getElementById('sidebar') as HTMLElement
     sb.style.display = sb.style.display === 'none' ? 'flex' : 'none'
     window.dispatchEvent(new Event('resize'))
+    return
+  }
+  if (e.ctrlKey && e.key === '1') {
+    e.preventDefault()
+    setView('blocks')
+  } else if (e.ctrlKey && e.key === '2') {
+    e.preventDefault()
+    setView('split')
+  } else if (e.ctrlKey && e.key === '3') {
+    e.preventDefault()
+    setView('text')
   }
 })
 
