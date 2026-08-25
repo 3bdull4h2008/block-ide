@@ -12,36 +12,48 @@ pub mod diagmap;
 pub mod emitter;
 pub mod toolchain;
 pub use canonical::{
-    canonicalize, ctree_has_errors, parse_canonical, parse_canonical_lang, CNode, CTree,
+    canonicalize, canonicalize_lang, ctree_has_errors, parse_canonical, parse_canonical_lang,
+    CNode, CTree,
 };
 pub use diagmap::{
     map_diags, map_offset, parse_clang_diags, MappedDiag, RawDiag,
 };
 pub use emitter::{canonical_source, canonical_source_lang, clang_format, reflow};
 
-/// Source language of a buffer. C++ is a SUBSET pack: same canonical model,
-/// same blocks pipeline; exotic C++ nodes render as editable mystery blocks.
+/// Source language of a buffer. C++ is a SUBSET pack; Python/JavaScript/Rust
+/// are multi-language packs (D11): same canonical model, per-language
+/// grammars, palettes, and backends. Exotic nodes render as editable
+/// mystery blocks (Rule 5).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Lang {
     #[default]
     C,
     Cpp,
+    Python,
+    JavaScript,
+    Rust,
 }
 
 impl Lang {
     pub fn from_opt(s: Option<&str>) -> Lang {
         match s.map(|v| v.to_ascii_lowercase()).as_deref() {
             Some("cpp") | Some("c++") => Lang::Cpp,
+            Some("python") | Some("py") => Lang::Python,
+            Some("javascript") | Some("js") => Lang::JavaScript,
+            Some("rust") | Some("rs") => Lang::Rust,
             _ => Lang::C,
         }
     }
 
-    /// File-extension detection: .cpp/.cc/.cxx/.hpp/.hh/.hxx are C++.
+    /// File-extension detection per language pack.
     pub fn from_path(p: &str) -> Lang {
         let lower = p.to_ascii_lowercase();
         let ext = lower.rsplit('.').next().unwrap_or("");
         match ext {
             "cpp" | "cc" | "cxx" | "c++" | "hpp" | "hh" | "hxx" | "ipp" => Lang::Cpp,
+            "py" | "pyw" => Lang::Python,
+            "js" | "mjs" | "cjs" => Lang::JavaScript,
+            "rs" => Lang::Rust,
             _ => Lang::C,
         }
     }
@@ -50,7 +62,36 @@ impl Lang {
         match self {
             Lang::C => "c",
             Lang::Cpp => "cpp",
+            Lang::Python => "python",
+            Lang::JavaScript => "javascript",
+            Lang::Rust => "rust",
         }
+    }
+
+    /// Staged-file extension for the backend (compile or interpret).
+    pub fn file_ext(self) -> &'static str {
+        match self {
+            Lang::C => "c",
+            Lang::Cpp => "cpp",
+            Lang::Python => "py",
+            Lang::JavaScript => "js",
+            Lang::Rust => "rs",
+        }
+    }
+
+    /// Languages whose diagnostics map onto blocks via clang (v1: C family).
+    pub fn has_clang_diags(self) -> bool {
+        matches!(self, Lang::C | Lang::Cpp)
+    }
+}
+
+fn grammar(lang: Lang) -> Option<tree_sitter::Language> {
+    match lang {
+        Lang::C => Some(tree_sitter_c::LANGUAGE.into()),
+        Lang::Cpp => Some(tree_sitter_cpp::LANGUAGE.into()),
+        Lang::Python => Some(tree_sitter_python::LANGUAGE.into()),
+        Lang::JavaScript => Some(tree_sitter_javascript::LANGUAGE.into()),
+        Lang::Rust => Some(tree_sitter_rust::LANGUAGE.into()),
     }
 }
 
@@ -58,11 +99,7 @@ impl Lang {
 /// grammar failed to load.
 pub fn parse_c_lang(src: &str, lang: Lang) -> Option<Tree> {
     let mut parser = Parser::new();
-    let grammar = match lang {
-        Lang::C => tree_sitter_c::LANGUAGE.into(),
-        Lang::Cpp => tree_sitter_cpp::LANGUAGE.into(),
-    };
-    parser.set_language(&grammar).ok()?;
+    parser.set_language(&grammar(lang)?).ok()?;
     parser.parse(src, None)
 }
 

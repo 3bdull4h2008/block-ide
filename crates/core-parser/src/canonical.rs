@@ -28,6 +28,9 @@ pub struct CTree {
     pub root: CNode,
     /// Source bytes after the root node ends (trailing whitespace).
     pub tail: String,
+    /// Language pack the tree was parsed with (frontend block maps key on it).
+    #[serde(default)]
+    pub lang: String,
 }
 
 impl CTree {
@@ -83,6 +86,11 @@ fn rec_emit(node: &CNode, out: &mut String) {
 
 /// Build the canonical tree. Ids increase in document order starting at 0.
 pub fn canonicalize(tree: &Tree, src: &str) -> CTree {
+    canonicalize_lang(tree, src, crate::Lang::C)
+}
+
+/// Language-aware variant — stamps CTree.lang for the frontend block maps.
+pub fn canonicalize_lang(tree: &Tree, src: &str, lang: crate::Lang) -> CTree {
     struct St {
         next_id: u32,
     }
@@ -137,7 +145,11 @@ pub fn canonicalize(tree: &Tree, src: &str) -> CTree {
         &mut St { next_id: 0 },
     );
     let tail = src[pos..].to_string();
-    CTree { root, tail }
+    CTree {
+        root,
+        tail,
+        lang: lang.as_str().to_string(),
+    }
 }
 
 /// Convenience: parse then canonicalize in one call.
@@ -148,7 +160,7 @@ pub fn parse_canonical(src: &str) -> Option<CTree> {
 /// Language-aware variant (C++ subset pack, D3 amendment).
 pub fn parse_canonical_lang(src: &str, lang: crate::Lang) -> Option<CTree> {
     let tree = crate::parse_c_lang(src, lang)?;
-    Some(canonicalize(&tree, src))
+    Some(canonicalize_lang(&tree, src, lang))
 }
 
 /// Error detection directly on a canonical tree.

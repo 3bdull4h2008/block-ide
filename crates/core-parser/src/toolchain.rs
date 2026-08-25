@@ -103,12 +103,18 @@ pub fn syntax_check_stderr(src: &str) -> Result<String, String> {
 
 /// Language-aware variant: C++ sources stage as `main.cpp` so the clang
 /// driver compiles/links as C++ and diagnostics reference the right stem.
+/// Python/JavaScript/Rust diagnostics do NOT flow through clang (D11 v1:
+/// they surface via run stderr) — returns empty stderr for them.
 pub fn syntax_check_stderr_lang(src: &str, lang: crate::Lang) -> Result<String, String> {
     let dir = std::env::temp_dir().join("blockide-syntax");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let cpath = dir.join(match lang {
         crate::Lang::C => "main.c",
         crate::Lang::Cpp => "main.cpp",
+        // D11 v1: non-clang languages surface errors via run stderr
+        crate::Lang::Python | crate::Lang::JavaScript | crate::Lang::Rust => {
+            return Ok(String::new());
+        }
     });
     std::fs::write(&cpath, src).map_err(|e| e.to_string())?;
     let out = clang_command()?

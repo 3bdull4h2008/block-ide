@@ -1,4 +1,4 @@
-# Scratch 3.0 Block System — Precise Reference (for Block-IDE fidelity)
+# Scratch 3.0 Block System — Precise Reference (for Cade fidelity)
 
 Sources: Scratch Wiki (Block Categories, Variable), scratch-blocks source
 colours (via scratch-modding docs + scratchblocks color threads), CS50
@@ -81,9 +81,9 @@ content; dragging a value OUT of a slot reverts it to its default.
    globals are visible everywhere. Cloud variables (server-stored) exist
    for published projects only.
 
-## 6. Block-IDE mapping decisions (C semantics, Scratch UX)
+## 6. Cade mapping decisions (C semantics, Scratch UX)
 
-| Scratch concept            | Block-IDE equivalent                              |
+| Scratch concept            | Cade equivalent                              |
 |----------------------------|---------------------------------------------------|
 | category rail + sections   | sticky rail dots (click = jump, active follows scroll) + colored section headers |
 | stack block                | statement row (notch/tab geometry, already shipped)|

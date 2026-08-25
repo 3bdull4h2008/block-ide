@@ -155,10 +155,7 @@ pub fn prepare_lang(
     let tag = format!("{:016x}", fnv1a(src.as_bytes()));
     let dir = run_dir();
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let ext = match lang {
-        core_parser::Lang::C => "c",
-        core_parser::Lang::Cpp => "cpp",
-    };
+    let ext = lang.file_ext();
     let staged = if trace_mem && lang == core_parser::Lang::C {
         format!("#include \"memtrace.h\"\n{src}")
     } else {
@@ -166,9 +163,9 @@ pub fn prepare_lang(
     };
     let inc = format!("-I{}", stage::include_dir().display());
     let cpath = stage_source_as(&staged, &format!("main-{tag}.{ext}"))?;
-    match (lang, tcc_path()) {
-        (core_parser::Lang::C, Some(tcc)) => Ok(Prepared {
-            program: tcc,
+    match lang {
+        core_parser::Lang::C if tcc_path().is_some() => Ok(Prepared {
+            program: tcc_path().expect("tcc checked above"),
             args: vec![
                 "-run".to_string(),
                 inc,
@@ -180,6 +177,59 @@ pub fn prepare_lang(
                 vec![]
             },
         }),
+        core_parser::Lang::Python => {
+            let py = python_path().ok_or_else(|| {
+                "Python not found on this computer — install it from python.org, then try again"
+                    .to_string()
+            })?;
+            Ok(Prepared {
+                program: PathBuf::from(py),
+                args: vec![cpath.display().to_string()],
+                envs: vec![],
+            })
+        }
+        core_parser::Lang::JavaScript => {
+            let node = node_path().ok_or_else(|| {
+                "Node.js not found on this computer — install it from nodejs.org, then try again"
+                    .to_string()
+            })?;
+            Ok(Prepared {
+                program: PathBuf::from(node),
+                args: vec![cpath.display().to_string()],
+                envs: vec![],
+            })
+        }
+        core_parser::Lang::Rust => {
+            let rustc = rustc_path().ok_or_else(|| {
+                "Rust not found on this computer — install it from rustup.rs, then try again"
+                    .to_string()
+            })?;
+            let exe = dir.join(format!("prog-{tag}.exe"));
+            let marker = dir.join(format!("prog-{tag}.hash"));
+            let cached = std::fs::read_to_string(&marker)
+                .map(|m| m == tag)
+                .unwrap_or(false);
+            if !(exe.is_file() && cached) {
+                let out = Command::new(rustc)
+                    .arg("-O0")
+                    .arg(&cpath)
+                    .arg("-o")
+                    .arg(&exe)
+                    .current_dir(&dir)
+                    .output()
+                    .map_err(|e| e.to_string())?;
+                if !out.status.success() || !exe.is_file() {
+                    return Err(String::from_utf8_lossy(&out.stderr).into_owned());
+                }
+                std::fs::write(&marker, &tag).map_err(|e| e.to_string())?;
+            }
+            Ok(Prepared {
+                program: exe,
+                args: vec![],
+                envs: vec![],
+            })
+        }
+        // C without tcc, or C++: clang backend (driver infers language)
         _ => {
             let exe = dir.join(format!("prog-{tag}.exe"));
             let marker = dir.join(format!("prog-{tag}.hash"));
@@ -383,6 +433,38 @@ pub fn tcc_path() -> Option<PathBuf> {
         .join("tcc")
         .join("tcc")
         .join("tcc.exe"))
+}
+
+// ------------------------------------------------ D11 interpreter detection
+// Same seam pattern as clang detection: PATH probe with a version flag.
+// The probe requires a SUCCESSFUL exit — the Windows Store `python` alias
+// spawns fine but exits nonzero when Python is not actually installed.
+fn probe(candidates: &[&str], version_flag: &str) -> Option<String> {
+    for c in candidates {
+        if Command::new(c)
+            .arg(version_flag)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+        {
+            return Some(c.to_string());
+        }
+    }
+    None
+}
+
+pub fn python_path() -> Option<String> {
+    probe(&["python", "py", "python3"], "--version")
+}
+
+pub fn node_path() -> Option<String> {
+    probe(&["node", "node.exe"], "--version")
+}
+
+pub fn rustc_path() -> Option<String> {
+    probe(&["rustc"], "--version")
 }
 
 /// Execute a compiled binary (clang backend).

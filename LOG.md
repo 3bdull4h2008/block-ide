@@ -1,6 +1,20 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 36: trigger=user: rename project to "Cade"
+expect: user-visible branding renamed everywhere; nothing breaks
+obs: renamed window title, tab title, splash h1, toolbar wordmark, tour
+welcome, style header, docs, branding README; tauri productName block-ide
+-> Cade (installer becomes Cade_0.1.0_x64-setup.exe). IDENTIFIERS KEPT:
+com.blockide.dev app-id (renaming orphans the user's profile/journal data
+dir), BLOCKIDE_* env vars, blockide-* storage keys + temp dirs, crate
+names, repo folder — invisible to users, renaming = pure risk. PLAN title
+Rev 2 + D12 decision row records the rename + the kept-identifiers rule.
+Historical receipts keep the old name (history, not branding).
+state=SUCCESS | next: multi-language packs (D11, in flight) + stdin/var-type fixes
+```
+
+```
 RUN 35: trigger=user: per-language bricks/panel, namespace blocks instead of
 std blocks, blocks depending on other blocks, NO splash timer, Blender-like
 recent files

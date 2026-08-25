@@ -2033,7 +2033,7 @@ window.addEventListener('keydown', (e) => {
 
 // --------------------------------------------------------- onboarding tour
 const TOUR_STEPS: [string, string][] = [
-  ['Welcome to Block-IDE', 'Real C code on disk is the truth. Blocks are a live view of it — break either one and they stay in sync.'],
+  ['Welcome to Cade', 'Real code on disk is the truth. Blocks are a live view of it — break either one and they stay in sync.'],
   ['Drag & edit blocks', 'Drag chips from the palette into loops or main. Double-click any block to edit its text. Drag a block to move it.'],
   ['Run & see', 'Ctrl+Enter runs your program. Output lands in the console, graphics in the Stage below, memory boxes appear when you tick "memory".'],
   ['Learn in the Academy', 'Pick a level in the sidebar, press Load, solve it, then Check to earn XP. New block kinds unlock as you go.'],

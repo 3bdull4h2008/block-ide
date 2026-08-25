@@ -1,6 +1,12 @@
-# Block-IDE Build Plan (Unified, 2026-08-23; Revision 1)
+# Cade Build Plan (Unified, 2026-08-23; Revision 2)
 
-> Single authoritative plan for the Block-IDE project (`E:\block-ide`).
+> Single authoritative plan for the Cade project (`E:\block-ide`).
+> **RENAMED 2026-08-25 (user): Block-IDE → Cade.** User-visible branding is
+> renamed everywhere (window title, splash, toolbar, installer, docs);
+> internal identifiers (BLOCKIDE_* env vars, blockide-* storage keys/dirs,
+> crate names, repo folder) intentionally stay — renaming them would orphan
+> saved profiles/journals for zero user value. Historical RUN receipts keep
+> the old name (they are history, not branding).
 > Supersedes all prior notes, chat decisions, and scratch plans — content from
 > those is preserved here. Follow phases in order unless the ladder marks a
 > track as parallel-safe. Never claim a feature works while it round-trips
@@ -306,6 +312,7 @@ passes. Laws (adopted from B2S discipline):
 | D2 | Shell | Tauri (Rust) first; Electron fallback only if OS-webview blockers appear |
 | D3 | Language scope | **AMENDED 2026-08-25 (user request): C++ SUBSET pack added** — language rides with the file extension (.cpp/.cc/.cxx/.hpp/.hh); tree-sitter-cpp parsing into the SAME canonical model; execution via clang++ backend (tcc stays C-only, D4 untouched); diagnostics via clang -x driver-inferred C++; classes/structs/namespaces render as containers, exotic C++ nodes stay editable mystery blocks (Rule 5). Templates/metaprogramming have no special block UI — they render from the tree like everything else. Academy remains C-authored (levels are C). |
 | D11 | **AMENDED 2026-08-25 (user request): MULTI-LANGUAGE PACKS — Python, JavaScript, Rust join C/C++.** Rationale: each has a tree-sitter grammar crate + an on-machine toolchain (python/py launcher, node, rustc) detectable at runtime like clang. Per language: own grammar, own palette (Control/Loops/Code chips + split logic operators — python uses and/or/not), own sample, own backend (interpreters run staged files in the same job-object jail; rustc compiles then runs). Block renderer is language-generic: per-lang BODY-container kind (compound_statement / block / statement_block) + control-kind map. Diagnostics block-mapping stays clang-only (C/C++) in v1 — other languages surface errors via run stderr. Missing toolchain = friendly console message (detection seam, no vendoring). Extensions: .py, .js/.mjs, .rs. Splash gains 5 language cards; recents/samples follow. |
+| D12 | **RENAMED 2026-08-25 (user): project is "Cade"** (was Block-IDE). User-visible branding only; internal identifiers unchanged (see header note). |
 | D4 | Compiler bundle | **DECIDED 2026-08-23:** tcc 0.9.27 win64 vendored to `third_party/tcc/` as default EXECUTION backend via `tcc -run` (hello-world run→output median **18.5 ms** vs clang path ~170 ms). clang stays diagnostic authority (`diag_c`) + fallback backend. Gate criterion met with 8× headroom. |
 | D5 | Truth model | File-on-disk is truth; no persisted block graphs |
 | D6 | Views | Per-tab Blocks/Split/Text toggle — never force all-or-nothing |
