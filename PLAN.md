@@ -15,6 +15,7 @@
 > **One-line thesis:** a Scratch-style block editor for real programming
 > languages, starting with C, where **the `.c` file is the single source of
 > truth** and blocks are a live, bidirectional projection of its syntax tree.
+> Working queue of code-scan improvements: docs/IMPROVEMENT-PLAN.md.
 
 ---
 

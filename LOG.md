@@ -1,6 +1,29 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 42: trigger=user: scan the code and plan improvements
+expect: evidence-cited improvement plan, prioritized, gate-tied
+obs: scanned main.ts (2581 lines), blocks/palette/history/ops/caret,
+commands.rs (835), runner/lib.rs, gates tooling, capabilities, package
+scripts. CONFIRMED FINDINGS with line evidence: render() silently drops
+overlapping parses -> canvas/text desync risk (main.ts:280); sanitize_abs
+weaker than workspace guard (no RootDir/Prefix); dead run_c tauri command
+(UI only calls run_start); full Pixi rebuild per keystroke (= open P0.5.1);
+python/node/rustc PATH probes re-spawn per run (runner lib.rs:489+, Windows
+Store stub ~100-300ms); setTitle IPC per edit via markDirty; unbounded
+fileCache/savedCache/tabViews; Tab key moves FOCUS out of textarea (no
+handler - text-mode editor broken for indentation); zero CI/.github; no
+eslint/prettier/test script; installer+version frozen at v0.1.0.
+VERIFIED-NOT-BUGS: academy_check keeps its own 10s deadline (interactive
+timeout change safe); history capped+coalesced; wheel zoom exists;
+content-addressed staging + rustc hash-cache solid. Wrote
+docs/IMPROVEMENT-PLAN.md: P0 x3 / P1 x5 / P2 x8 / P3 x6 big rocks, each
+with fix approach + acceptance, plus suggested session order. PLAN header
+now points at it as the working queue. Docs-only receipt - no gates run.
+state=SUCCESS | next: P0 sweep session (#1 render race, #8 Tab key, #2/#3)
+```
+
+```
 RUN 41: trigger=user: remove autosave, New File without open folder, make
 saving/loading commercial-grade
 expect: explicit-save model (D13); standalone docs; guards + Save As +
