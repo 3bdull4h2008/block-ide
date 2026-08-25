@@ -1,5 +1,32 @@
 import { Application, Container, Graphics, Text } from 'pixi.js'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke as tauriInvoke } from '@tauri-apps/api/core'
+
+// IPC observability (temporary diagnostics, RUN 43): count calls/pending per
+// command so hangs are attributable from the page itself.
+const ipcStats: Record<string, { calls: number; pending: number; errs: number }> = {}
+;(window as unknown as { __ipc?: unknown }).__ipc = ipcStats
+const ipcLog: string[] = []
+;(window as unknown as { __ipcLog?: unknown }).__ipcLog = ipcLog
+function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  const rec = (ipcStats[cmd] ??= { calls: 0, pending: 0, errs: 0 })
+  rec.calls++
+  rec.pending++
+  const t0 = Math.round(performance.now())
+  ipcLog.push(`+${t0}ms call ${cmd}`)
+  const p = tauriInvoke<T>(cmd, args)
+  p.then(
+    () => {
+      rec.pending--
+      ipcLog.push(`+${Math.round(performance.now())}ms ok   ${cmd} (${Math.round(performance.now()) - t0}ms)`)
+    },
+    () => {
+      rec.pending--
+      rec.errs++
+      ipcLog.push(`+${Math.round(performance.now())}ms ERR  ${cmd}`)
+    },
+  )
+  return p
+}
 import { open as openDialog, save as saveDialog, ask } from '@tauri-apps/plugin-dialog'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import {
@@ -240,7 +267,6 @@ main();
 
 let src = SAMPLE
 let roots: BBlock[] = []
-let rendering = false
 const hist = new History()
 
 /** Editable slot hit-boxes in world coords, rebuilt on every render. */
@@ -268,22 +294,29 @@ function markDirty(): void {
 // advance hook; real user actions fire events — never timers.
 const tourHooks: { advance?: (ev: 'edit' | 'run' | 'check') => void } = {}
 
-function setSrc(next: string, kind: 'op' | 'type' = 'op'): void {
+function setSrc(next: string, kind: 'op' | 'type' = 'op'): Promise<void> {
   hist.push(src, kind)
   src = next
   srcEl.value = next
-  void render(next)
+  const p = render(next)
   markDirty()
+  return p
 }
 
+// Latest-wins rendering (IMPROVEMENT-PLAN #1): edits that land while a parse
+// is in flight bump the generation; the stale render aborts instead of
+// painting an older program than the textarea shows, and the finally-clause
+// re-renders the newest buffer so nothing is ever silently skipped.
+let renderGen = 0
+
 async function render(source: string): Promise<void> {
-  if (rendering) return
-  rendering = true
+  const gen = ++renderGen
   try {
     const out = await invoke<{ tree: CTreeJSON; has_errors: boolean }>('parse_c', {
       src: source,
       lang: activeLang,
     })
+    if (gen !== renderGen) return // superseded — a newer parse owns the canvas
     roots = buildBlocks(out.tree)
     layoutStack(roots, 40, 40)
     // palette reflects the program: harvested vars + node kinds/includes
@@ -328,17 +361,34 @@ async function render(source: string): Promise<void> {
       : `parsed clean (${activeLang.toUpperCase()})`
     statusEl.className = out.has_errors ? 'warn' : 'ok'
   } catch (e) {
+    if (gen !== renderGen) return
     statusEl.textContent = String(e)
     statusEl.className = 'warn'
   } finally {
-    rendering = false
+    if (gen === renderGen) {
+      const newest = srcEl.value
+      if (newest !== source && newest === src) void render(newest)
+    }
   }
 }
 
 async function canonicalize(): Promise<void> {
   try {
     const clean = await invoke<string>('canonicalize_c', { src, lang: activeLang })
-    if (clean !== src) setSrc(clean, 'op')
+    if (clean !== src) {
+      // Formatting rewrites the buffer UNDER the user — map the caret onto
+      // the freshly parsed tree WITHOUT stealing focus from wherever they went.
+      const anchor = pickAnchor(roots, srcEl.selectionStart ?? 0)
+      await setSrc(clean)
+      requestAnimationFrame(() => {
+        try {
+          const pos = Math.max(0, Math.min(src.length, caretOffset(roots, src.length, anchor)))
+          srcEl.setSelectionRange(pos, pos)
+        } catch {
+          /* anchor no longer resolvable — leave caret */
+        }
+      })
+    }
   } catch {
     /* keep as-is */
   }
@@ -1084,7 +1134,18 @@ async function startRun(): Promise<void> {
   const tracing = memTraceEl.checked
   lastMemState = { boxes: [], edges: [], live: false }
   memListEl.style.display = tracing ? 'block' : 'none'
-  await invoke('run_start', { src, traceMem: tracing, lang: activeLang })
+  // Launch failures must be LOUD and RECOVERABLE — never an eternal spinner.
+  try {
+    await invoke('run_start', { src, traceMem: tracing, lang: activeLang })
+    ;(window as unknown as { __runStarted?: boolean }).__runStarted = true
+  } catch (e) {
+    running = false
+    stopBtn.style.display = 'none'
+    consoleInputRow.style.display = 'none'
+    consoleEl.textContent = `[launch] ${String(e)}`
+    blip(200, 0.1, 'square', 0.05)
+    return
+  }
   if (tracing) {
     void invoke<boolean>('mem_attach').then((ok) => {
       if (ok) startMemPoll()
@@ -1098,7 +1159,10 @@ async function startRun(): Promise<void> {
     requestAnimationFrame(loop)
   })
   clearInterval(pollTimer)
+  ;(window as unknown as { __polls?: number }).__polls = 0
   pollTimer = window.setInterval(() => {
+    ;(window as unknown as { __polls?: number }).__polls =
+      ((window as unknown as { __polls?: number }).__polls ?? 0) + 1
     void invoke<unknown>('run_poll')
       .then((r) => {
         if (r) {
@@ -1111,7 +1175,13 @@ async function startRun(): Promise<void> {
           reportLeaks()
         }
       })
-      .catch(() => {})
+      .catch((e) => {
+        running = false
+        clearInterval(pollTimer)
+        stopBtn.style.display = 'none'
+        consoleInputRow.style.display = 'none'
+        consoleEl.textContent = `[poll] ${String(e)}`
+      })
   }, 120)
 }
 
@@ -1572,6 +1642,75 @@ srcEl.addEventListener('scroll', () => {
   world.y = 48 - f * Math.max(0, maxY + 80 - 48)
 })
 srcEl.addEventListener('blur', () => void canonicalize())
+
+// ------------------------------------------- text editor key handling (#8)
+// Tab must indent code, NEVER steal focus; Shift+Tab outdents (selection or
+// line); Enter keeps the previous line's indentation and expands braces /
+// python colons — the basics a "real editor" is judged by.
+function editTextArea(next: string, caret: number): void {
+  srcEl.value = next
+  srcEl.setSelectionRange(caret, caret)
+  srcEl.dispatchEvent(new Event('input'))
+}
+
+srcEl.addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab' && e.key !== 'Enter') return
+  const start = srcEl.selectionStart ?? 0
+  const end = srcEl.selectionEnd ?? 0
+  const value = srcEl.value
+  if (e.key === 'Tab') {
+    e.preventDefault()
+    if (start === end) {
+      if (e.shiftKey) {
+        // outdent the current line by up to two spaces
+        const lineStart = value.lastIndexOf('\n', start - 1) + 1
+        const cut = Math.min(2, /^ {1,2}/.exec(value.slice(lineStart))?.[0].length ?? 0)
+        if (cut > 0) editTextArea(value.slice(0, lineStart) + value.slice(lineStart + cut), Math.max(lineStart, start - cut))
+      } else {
+        editTextArea(value.slice(0, start) + '  ' + value.slice(end), start + 2)
+      }
+      return
+    }
+    // selection spans lines: indent/outdent every touched line
+    const lineStart = value.lastIndexOf('\n', start - 1) + 1
+    const nlAt = value.indexOf('\n', end)
+    const lineEnd = nlAt === -1 ? value.length : nlAt
+    const block = value.slice(lineStart, lineEnd)
+    const shiftedBlock = e.shiftKey
+      ? block.replace(/^ {1,2}/gm, '')
+      : block.replace(/^/gm, '  ')
+    const firstDelta =
+      shiftedBlock.split('\n')[0].length - block.split('\n')[0].length
+    editTextArea(
+      value.slice(0, lineStart) + shiftedBlock + value.slice(lineEnd),
+      Math.max(lineStart, start + firstDelta),
+    )
+    return
+  }
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    const pos = start
+    const lineStart = value.lastIndexOf('\n', pos - 1) + 1
+    const prevLine = value.slice(lineStart, pos).trimEnd()
+    let indent = /^[ \t]*/.exec(prevLine)?.[0] ?? ''
+    const opens = trimmedEndsWithOpener(prevLine)
+    if (opens) indent += '    '
+    if (opens && value[pos] === '}') {
+      // brace-expand: {\n<indent+4>\n<indent>}
+      editTextArea(
+        value.slice(0, pos) + '\n' + indent + '\n' + indent.slice(0, -4) + value.slice(pos),
+        pos + 1 + indent.length,
+      )
+      return
+    }
+    editTextArea(value.slice(0, pos) + '\n' + indent + value.slice(end), pos + 1 + indent.length)
+  }
+})
+
+function trimmedEndsWithOpener(line: string): boolean {
+  const t = line.trimEnd()
+  return t.endsWith('{') || t.endsWith(':')
+}
 
 // ------------------------------------------------------------------ pan/zoom
 let panning = false
@@ -2235,6 +2374,8 @@ document.getElementById('check-btn')?.addEventListener('click', async () => {
 }
 ;(window as unknown as { __langOf?: unknown }).__langOf = (path: string) => langOf(path)
 ;(window as unknown as { __activeLang?: unknown }).__activeLang = () => activeLang
+;(window as unknown as { __labels?: unknown }).__labels = () => flatten(roots).map((b) => b.label)
+;(window as unknown as { __runState?: unknown }).__runState = () => ({ running, polls: (window as unknown as { __polls?: number }).__polls })
 
 void refreshProfile()
 void refreshLevels()

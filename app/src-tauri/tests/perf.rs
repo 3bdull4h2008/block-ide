@@ -25,12 +25,12 @@ fn opens_5k_file_project_under_3s() {
 
     // warm-up walk (untimed): the gate metric is steady-state open time,
     // not cold-cache penalty right after other validators churned the disk
-    let warm = app_lib::commands::list_c_files(dir.to_string_lossy().into_owned()).expect("warm");
+    let warm = tauri::async_runtime::block_on(app_lib::commands::list_c_files(dir.to_string_lossy().into_owned())).expect("warm");
     assert_eq!(warm.len(), 5000);
 
     let t0 = Instant::now();
     let files =
-        app_lib::commands::list_c_files(dir.to_string_lossy().into_owned()).expect("walk");
+        tauri::async_runtime::block_on(app_lib::commands::list_c_files(dir.to_string_lossy().into_owned())).expect("walk");
     let walk_elapsed = t0.elapsed();
 
     assert_eq!(files.len(), 5000, "expected exactly 5000 .c files");
@@ -43,7 +43,7 @@ fn opens_5k_file_project_under_3s() {
     // deep read through the path guard stays fast too
     let deep_rel = files.last().unwrap().clone();
     let t1 = Instant::now();
-    let content = app_lib::commands::read_file(dir.to_string_lossy().into_owned(), deep_rel)
+    let content = tauri::async_runtime::block_on(app_lib::commands::read_file(dir.to_string_lossy().into_owned(), deep_rel))
         .expect("read");
     assert!(content.contains("int main"));
     assert!(t1.elapsed() < Duration::from_millis(100));

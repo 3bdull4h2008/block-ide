@@ -8,6 +8,9 @@ param(
 # from $LASTEXITCODE only.
 $ErrorActionPreference = 'Continue'
 $repo = Split-Path -Parent $PSScriptRoot
+# stray app.exe instances (from crashed/killed earlier runs) hold binary
+# locks and break cargo relinking -> phantom G-PERF/G-BUILD failures
+Get-Process app -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 $gatesDir = Join-Path $repo 'build\gates'
 New-Item -ItemType Directory -Force -Path $gatesDir | Out-Null
 $results = [System.Collections.Generic.List[object]]::new()
@@ -81,6 +84,15 @@ cargo test -q -p app --test perf 2>&1 | Tee-Object -Variable pfOut | Out-Null
 Add-Gate -Id 'G-PERF' -Pass ($LASTEXITCODE -eq 0) -Metrics @{ tail = (($pfOut | Select-String 'G-PERF') | Select-Object -Last 1) }
 
 # ------------------------------------------------------- G-UI-E2E (@P5)
+# The release exe EMBEDS the frontend at compile time — rebuild dist + binary
+# so this gate always exercises the CURRENT code, never a stale binary.
+Push-Location (Join-Path $repo 'app')
+npm run build 2>&1 | Tee-Object -Variable uiBuildOut | Out-Null
+if ($LASTEXITCODE -ne 0) { Add-Gate -Id 'G-UI-E2E' -Pass $false -Metrics @{ tail = 'frontend build failed' } }
+Pop-Location
+if ($LASTEXITCODE -eq 0) {
+    cargo build --release -p app 2>&1 | Out-Null
+}
 $uiPort = 9339
 $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$uiPort"
 $env:WEBVIEW2_USER_DATA_FOLDER = "$env:TEMP\blockide-uie2e-profile"

@@ -15,10 +15,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
-            commands::parse_c,
-            commands::canonicalize_c,
-            commands::run_c,
-            commands::run_start,
+commands::parse_c,
+commands::canonicalize_c,
+commands::run_start,
             commands::run_stdin,
             commands::run_poll,
             commands::mem_attach,

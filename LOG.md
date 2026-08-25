@@ -1,6 +1,39 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 43: trigger=user: execute improvement-plan P0 sweep (#1 render race,
+#8 Tab key, #2 sanitize_abs, #3 dead run_c)
+expect: all four fixed with gate coverage; suite green
+obs: FOUND A BIGGER FISH MID-SWEEP. (0) MAIN-THREAD STARVATION: while
+validating #1 in-suite, new assertions failed with eternal 'running…' +
+dead IPC; ipcLog instrumentation proved Tauri v2 runs SYNC commands ON THE
+MAIN THREAD - parse/diag executed serially (6959+6960ms for ~10ms work) and
+a blur-triggered canonicalize_c froze every later command. FIX: all 26
+commands -> async fn (off main thread); perf.rs direct calls wrapped in
+tauri::async_runtime::block_on. The exact hang sequence now completes
+(exit 0). Explains historic ctrl+enter flakes. (1) RENDER RACE: latest-wins
+renderGen token; stale renders abort post-await; finally re-renders newest
+buffer. Gate: two rapid comment edits must BOTH appear on canvas (__labels
+hook). (2) TAB KEY: indent/outdent (caret+selection+line-wise), Enter
+auto-indent with brace/colon expansion. Gate: Tab keeps focus + inserts.
+(3) sanitize_abs: prefix-aware walk rejects ParentDir anywhere/drive-relative
+forms; 10 inline test cases green. (4) run_c command deleted. BONUS FINDS:
+(a) comment stickies AND error mystery blocks rendered BLANK since the
+sticky era (label hardcoded '') - now leafText raw text per Rule 5 +
+comments.test.ts; (b) main.ts carried COMMITTED double-mojibake (PS5.1 ANSI
+write relic) - byte-exact cp1252<->utf8 round-trip restored all glyphs;
+(c) canonicalize rewrote buffer under the caret on blur - caret now
+re-mapped onto formatted tree without focus steal; (d) run_start/poll
+errors were swallowed into eternal spinner - now [launch]/[poll] console
+surfaces + state reset; (e) gates rebuild dist+release before UI-E2E and
+sweep stray app.exe locks - tested binary can never be stale again.
+tsc clean; vitest 43/43 (+comments suite); ALL FOURTEEN gates PASS exit 0
+(50 UI assertions).
+state=SUCCESS | next: P1 batch (#5 toolchain probe cache, #6 title throttle,
+#7 cache eviction, #9 tab close buttons)
+```
+
+```
 RUN 42: trigger=user: scan the code and plan improvements
 expect: evidence-cited improvement plan, prioritized, gate-tied
 obs: scanned main.ts (2581 lines), blocks/palette/history/ops/caret,

@@ -291,7 +291,9 @@ function toBlock(n: CNodeJSON): BBlock {
   if (cond) skip.add(cond.node)
   let { parts, label } =
     cat === 'error' || cat === 'comment'
-      ? { parts: [] as BlockPart[], label: '' }
+      ? // mystery blocks and sticky notes show the node's RAW text
+        // (Rule 5) — never a blank card
+        { parts: [] as BlockPart[], label: collapse(leafText(n)) }
       : buildHeader(n, skip, cond ? { start: cond.part.start, end: cond.part.end } : undefined)
   // hex condition socket splices into the token stream at byte order
   if (cond) {

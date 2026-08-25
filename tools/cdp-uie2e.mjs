@@ -267,6 +267,31 @@ check(
   (await ev(`Array.from(document.querySelectorAll('.pal')).some(p => p.textContent === 'define fn')`)) === true,
 );
 
+// 14b. render race (IMPROVEMENT-PLAN #1): a second edit landing while the
+// first parse is in flight must never leave stale blocks on the canvas
+await ev(`(() => { const t = document.getElementById('src'); t.value += '\\n// lagcheck-alpha\\n'; t.dispatchEvent(new Event('input')); return 1 })()`);
+await ev(`(() => { const t = document.getElementById('src'); t.value += '\\n// lagcheck-beta\\n'; t.dispatchEvent(new Event('input')); return 2 })()`);
+let lagOk = false;
+for (let i = 0; i < 32 && !lagOk; i++) {
+  await new Promise((r) => setTimeout(r, 125));
+  const labels = String((await ev(`window.__labels().join('\\n')`)) ?? '');
+  lagOk = labels.includes('lagcheck-alpha') && labels.includes('lagcheck-beta');
+}
+check('render race: rapid edits converge on canvas', lagOk);
+
+// 14c. Tab indents code instead of moving focus out of the editor
+const tabOk = await ev(`(() => {
+  const t = document.getElementById('src');
+  const before = t.value;
+  t.focus();
+  t.setSelectionRange(0, 0);
+  t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+  return document.activeElement === t && t.value.startsWith('  ') && t.value.length === before.length + 2;
+})()`);
+check('editor: Tab indents, focus stays', tabOk === true);
+// undo the indentation so later assertions see a pristine buffer
+await ev(`(() => { const t = document.getElementById('src'); if (t.value.startsWith('  ')) { t.value = t.value.slice(2); t.dispatchEvent(new Event('input')); } return 1 })()`);
+
 // 15. C++ subset pack: language rides with the file extension
 check(
   'cpp: extension detection',

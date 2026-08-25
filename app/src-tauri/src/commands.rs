@@ -14,7 +14,7 @@ pub struct ParseOut {
 }
 
 #[tauri::command]
-pub fn parse_c(src: String, lang: Option<String>) -> Result<ParseOut, String> {
+pub async fn parse_c(src: String, lang: Option<String>) -> Result<ParseOut, String> {
     let tree =
         core_parser::parse_canonical_lang(&src, lang_of(lang.as_deref())).ok_or("grammar failed to load")?;
     let has_errors = core_parser::ctree_has_errors(&tree);
@@ -22,7 +22,7 @@ pub fn parse_c(src: String, lang: Option<String>) -> Result<ParseOut, String> {
 }
 
 #[tauri::command]
-pub fn canonicalize_c(src: String, lang: Option<String>) -> Result<String, String> {
+pub async fn canonicalize_c(src: String, lang: Option<String>) -> Result<String, String> {
     core_parser::canonical_source_lang(&src, lang_of(lang.as_deref()))
 }
 
@@ -38,7 +38,7 @@ pub struct DiagOut {
 }
 
 #[tauri::command]
-pub fn diag_c(src: String, lang: Option<String>) -> Result<Vec<DiagOut>, String> {
+pub async fn diag_c(src: String, lang: Option<String>) -> Result<Vec<DiagOut>, String> {
     let l = lang_of(lang.as_deref());
     let stderr = core_parser::toolchain::syntax_check_stderr_lang(&src, l)?;
     let raws = core_parser::parse_clang_diags(&stderr, &format!("main.{}", l.as_str()));
@@ -69,7 +69,7 @@ fn resolve_in_workspace(root: &str, rel: &str) -> Result<PathBuf, String> {
 }
 
 #[tauri::command]
-pub fn list_c_files(root: String) -> Result<Vec<String>, String> {
+pub async fn list_c_files(root: String) -> Result<Vec<String>, String> {
     fn walk(dir: &PathBuf, base: &str, depth: u32, out: &mut Vec<String>) {
         if depth > 12 || out.len() > 20_000 {
             return;
@@ -108,13 +108,13 @@ fn is_source_file(name: &str) -> bool {
 }
 
 #[tauri::command]
-pub fn read_file(root: String, rel: String) -> Result<String, String> {
+pub async fn read_file(root: String, rel: String) -> Result<String, String> {
     let p = resolve_in_workspace(&root, &rel)?;
     std::fs::read_to_string(p).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn write_file(root: String, rel: String, content: String) -> Result<(), String> {
+pub async fn write_file(root: String, rel: String, content: String) -> Result<(), String> {
     let p = resolve_in_workspace(&root, rel.as_str())?;
     if let Some(parent) = p.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -127,13 +127,13 @@ pub fn write_file(root: String, rel: String, content: String) -> Result<(), Stri
 /// dialogs the user explicitly confirmed — the same trust model VS Code
 /// uses; nothing here is reachable by web content without that gesture.
 #[tauri::command]
-pub fn read_abs(path: String) -> Result<String, String> {
+pub async fn read_abs(path: String) -> Result<String, String> {
     let p = sanitize_abs(&path)?;
     std::fs::read_to_string(p).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn write_abs(path: String, content: String) -> Result<(), String> {
+pub async fn write_abs(path: String, content: String) -> Result<(), String> {
     let p = sanitize_abs(&path)?;
     if let Some(parent) = p.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -147,10 +147,51 @@ fn sanitize_abs(path: &str) -> Result<PathBuf, String> {
         return Err("empty path".into());
     }
     let pb = PathBuf::from(trimmed);
-    if pb.components().any(|c| matches!(c, Component::ParentDir)) {
-        return Err("path escapes upward".into());
+    // Windows drive/UNC prefixes are EXPECTED here (unlike workspace-relative
+    // paths). What must never pass: upward traversal anywhere, or a rooted
+    // segment that is not exactly the anchor right after an optional prefix
+    // ("C:file.txt" drive-relative forms are rejected as ambiguous).
+    let mut iter = pb.components();
+    match iter.next() {
+        Some(Component::Prefix(_)) => match iter.next() {
+            Some(Component::RootDir) => {}
+            _ => return Err("drive-relative path".into()),
+        },
+        Some(Component::RootDir) => {}
+        Some(Component::ParentDir) | None => return Err("path escapes upward".into()),
+        Some(_) => {}
+    }
+    for c in iter {
+        match c {
+            Component::ParentDir => return Err("path escapes upward".into()),
+            Component::RootDir => return Err("unexpected root segment".into()),
+            _ => {}
+        }
     }
     Ok(pb)
+}
+
+#[cfg(test)]
+mod abs_guard_tests {
+    use super::sanitize_abs;
+
+    #[test]
+    fn rejects_empty_traversal_and_malformed() {
+        assert!(sanitize_abs("").is_err());
+        assert!(sanitize_abs("   ").is_err());
+        assert!(sanitize_abs("..\\evil.c").is_err());
+        assert!(sanitize_abs("C:\\..\\..\\windows").is_err());
+        assert!(sanitize_abs("/home/x/../../etc").is_err());
+        assert!(sanitize_abs("C:\\temp\\sub\\\\..\\ok.c").is_err()); // ParentDir inside
+    }
+
+    #[test]
+    fn accepts_normal_absolute_paths() {
+        assert!(sanitize_abs("C:\\Users\\kid\\main.c").is_ok());
+        assert!(sanitize_abs("\\\\?\\C:\\long\\path.py").is_ok());
+        assert!(sanitize_abs("/home/kid/hello.js").is_ok());
+        assert!(sanitize_abs("/tmp/cade/main.rs").is_ok());
+    }
 }
 
 // Interactive runs have NO timeout (0 = unlimited in runner): a program
@@ -166,23 +207,8 @@ pub struct RunOut {
     pub timed_out: bool,
 }
 
-#[tauri::command]
-pub fn run_c(src: String) -> Result<RunOut, String> {
-    match runner::run_c(&src, RUN_TIMEOUT_MS) {
-        Ok(o) => Ok(RunOut {
-            stdout: o.stdout,
-            stderr: o.stderr,
-            exit: o.exit,
-            timed_out: o.timed_out,
-        }),
-        Err(compile_stderr) => Ok(RunOut {
-            stdout: String::new(),
-            stderr: compile_stderr,
-            exit: -1,
-            timed_out: false,
-        }),
-    }
-}
+// (the old synchronous `run_c` command was removed — the UI runs exclusively
+// through run_start/run_poll; runner::run_c remains for rust-side validators)
 
 // ------------------------------------------------- async run + stage panel
 fn stage_reader() -> &'static Mutex<Option<runner::stage::StageReader>> {
@@ -195,7 +221,7 @@ fn stage_reader() -> &'static Mutex<Option<runner::stage::StageReader>> {
 /// poll with `run_poll`. `trace_mem` prepends memtrace.h to the staged copy
 /// (disk file untouched).
 #[tauri::command]
-pub fn run_start(src: String, trace_mem: Option<bool>, lang: Option<String>) -> Result<(), String> {
+pub async fn run_start(src: String, trace_mem: Option<bool>, lang: Option<String>) -> Result<(), String> {
     let trace = trace_mem.unwrap_or(false);
     let run = runner::spawn_inspectable_lang(
         &src,
@@ -221,7 +247,7 @@ fn inspect_run() -> &'static Mutex<Option<(Arc<runner::InspectableRun>, u32)>> {
 
 /// Some(outcome) once the background run finished (consumed on read).
 #[tauri::command]
-pub fn run_poll() -> Result<Option<RunOut>, String> {
+pub async fn run_poll() -> Result<Option<RunOut>, String> {
     let guard = inspect_run().lock().map_err(|e| e.to_string())?;
     let taken = match guard.as_ref() {
         None => None,
@@ -246,7 +272,7 @@ pub fn run_poll() -> Result<Option<RunOut>, String> {
 
 /// Write one typed line to the running program's stdin (console input box).
 #[tauri::command]
-pub fn run_stdin(line: String) -> Result<(), String> {
+pub async fn run_stdin(line: String) -> Result<(), String> {
     let guard = inspect_run().lock().map_err(|e| e.to_string())?;
     match guard.as_ref() {
         Some((r, _)) => r.send_line(&line),
@@ -262,7 +288,7 @@ fn mem_reader() -> &'static Mutex<Option<runner::memtrace::MemTraceReader>> {
 
 /// Attach to the child's tracer ring (only present when trace_mem was on).
 #[tauri::command]
-pub fn mem_attach() -> Result<bool, String> {
+pub async fn mem_attach() -> Result<bool, String> {
     let mut guard = mem_reader().lock().map_err(|e| e.to_string())?;
     if guard.is_none() {
         *guard = runner::memtrace::MemTraceReader::attach(2500);
@@ -308,7 +334,7 @@ fn live_heap() -> &'static Mutex<LiveHeap> {
 /// Drain new tracer events into the live heap, then scan each box's contents
 /// via ReadProcessMemory for words that point at other boxes → pointer edges.
 #[tauri::command]
-pub fn mem_state() -> Result<MemStateOut, String> {
+pub async fn mem_state() -> Result<MemStateOut, String> {
     const SCAN_MAX_BOXES: usize = 48;
     const SCAN_BYTES: usize = 512;
     const MAX_EDGES: usize = 200;
@@ -404,7 +430,7 @@ pub fn mem_state() -> Result<MemStateOut, String> {
 
 /// Attach to the child's stage framebuffer (polls while the program starts).
 #[tauri::command]
-pub fn stage_attach() -> Result<Option<(i32, i32)>, String> {
+pub async fn stage_attach() -> Result<Option<(i32, i32)>, String> {
     let mut guard = stage_reader().lock().map_err(|e| e.to_string())?;
     if guard.is_none() {
         *guard = runner::stage::StageReader::attach(2500);
@@ -423,7 +449,7 @@ pub struct StageFrameOut {
 
 /// New frame since `last` (base64 RGBA), or null when nothing new.
 #[tauri::command]
-pub fn stage_frame(last: u32) -> Result<Option<StageFrameOut>, String> {
+pub async fn stage_frame(last: u32) -> Result<Option<StageFrameOut>, String> {
     let guard = stage_reader().lock().map_err(|e| e.to_string())?;
     let r = match guard.as_ref() {
         Some(r) => r,
@@ -473,7 +499,7 @@ fn base64_encode(data: &[u8]) -> String {
 }
 
 #[tauri::command]
-pub fn stage_keys(down: Vec<u8>) -> Result<(), String> {
+pub async fn stage_keys(down: Vec<u8>) -> Result<(), String> {
     let guard = stage_reader().lock().map_err(|e| e.to_string())?;
     if let Some(r) = guard.as_ref() {
         r.send_keys(&down);
@@ -484,7 +510,7 @@ pub fn stage_keys(down: Vec<u8>) -> Result<(), String> {
 /// Ask a well-behaved stage program to exit; also flips the supervision
 /// hard-stop flag so non-stage runaway programs die at the next tick.
 #[tauri::command]
-pub fn stage_stop() -> Result<(), String> {
+pub async fn stage_stop() -> Result<(), String> {
     let guard = stage_reader().lock().map_err(|e| e.to_string())?;
     if let Some(r) = guard.as_ref() {
         r.request_quit();
@@ -523,7 +549,7 @@ pub struct LevelInfoOut {
 }
 
 #[tauri::command]
-pub fn academy_levels(app: tauri::AppHandle) -> Result<Vec<LevelInfoOut>, String> {
+pub async fn academy_levels(app: tauri::AppHandle) -> Result<Vec<LevelInfoOut>, String> {
     let root = academy_root()?;
     let prof = crate::profile::Profile::load(&app);
     let mut out: Vec<LevelInfoOut> = Vec::new();
@@ -558,7 +584,7 @@ pub struct LevelLoadOut {
 
 /// Starter code + hint tiers (4.5). The solution file NEVER leaves the server side.
 #[tauri::command]
-pub fn academy_load(level_id: String) -> Result<LevelLoadOut, String> {
+pub async fn academy_load(level_id: String) -> Result<LevelLoadOut, String> {
     let root = academy_root()?;
     let dir = root.join(&level_id);
     let lv = runner::academy::Level::load(&dir.join("level.toml"))?;
@@ -586,7 +612,7 @@ pub struct CheckOut {
 /// Run the player's source against the level's hidden tests; award XP on a
 /// first-time pass. The reference solution is never exposed.
 #[tauri::command]
-pub fn academy_check(
+pub async fn academy_check(
     app: tauri::AppHandle,
     level_id: String,
     src: String,
@@ -642,7 +668,7 @@ pub struct ProfileOut {
 }
 
 #[tauri::command]
-pub fn profile_get(app: tauri::AppHandle) -> Result<ProfileOut, String> {
+pub async fn profile_get(app: tauri::AppHandle) -> Result<ProfileOut, String> {
     let p = crate::profile::Profile::load(&app);
     Ok(ProfileOut {
         xp: p.xp,
@@ -739,7 +765,7 @@ fn now_unix() -> i64 {
 
 /// Debounced from the editor on every change; survives a hard kill.
 #[tauri::command]
-pub fn journal_write(
+pub async fn journal_write(
     app: tauri::AppHandle,
     path: String,
     content: String,
@@ -765,7 +791,7 @@ pub struct JournalReadOut {
 /// Some(entry) when unsaved work was journalled — the frontend decides
 /// whether to restore it.
 #[tauri::command]
-pub fn journal_read(app: tauri::AppHandle) -> Result<Option<JournalReadOut>, String> {
+pub async fn journal_read(app: tauri::AppHandle) -> Result<Option<JournalReadOut>, String> {
     let p = journal_path(&app)?;
     let Some(j) = journal_read_at(p.parent().unwrap_or(std::path::Path::new("."))) else {
         return Ok(None);
@@ -782,7 +808,7 @@ pub fn journal_read(app: tauri::AppHandle) -> Result<Option<JournalReadOut>, Str
 
 /// Clear the journal after an explicit save or a discarded recovery.
 #[tauri::command]
-pub fn journal_clear(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn journal_clear(app: tauri::AppHandle) -> Result<(), String> {
     let p = journal_path(&app)?;
     journal_clear_at(p.parent().unwrap_or(std::path::Path::new(".")));
     Ok(())
@@ -799,7 +825,7 @@ pub struct JournalBackupOut {
 /// Snapshot inventory (slot 1 = newest) so the UI can recover when the live
 /// journal is missing or unusable.
 #[tauri::command]
-pub fn journal_backups(app: tauri::AppHandle) -> Result<Vec<JournalBackupOut>, String> {
+pub async fn journal_backups(app: tauri::AppHandle) -> Result<Vec<JournalBackupOut>, String> {
     let dir = data_root(&app)?;
     Ok((1..=JOURNAL_BACKUPS)
         .filter_map(|slot| {
@@ -816,7 +842,7 @@ pub fn journal_backups(app: tauri::AppHandle) -> Result<Vec<JournalBackupOut>, S
 /// Promote backup `slot` to the LIVE journal (rotating the chain) so the
 /// normal boot-recovery flow restores it; returns the promoted entry.
 #[tauri::command]
-pub fn journal_restore_backup(
+pub async fn journal_restore_backup(
     app: tauri::AppHandle,
     slot: u32,
 ) -> Result<Option<JournalReadOut>, String> {

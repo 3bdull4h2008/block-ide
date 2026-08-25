@@ -21,53 +21,58 @@ debt that scales badly · P2 = commercial polish · P3 = tracked big rocks.
 
 ## P0 — correctness bugs (fix now)
 
-### 1. `render()` silently drops overlapping renders — canvas desyncs from text
+### 0. Tauri sync commands ran ON THE MAIN THREAD — one slow call froze all IPC ✅ DONE (RUN 43)
+
+**Found while fixing #1.** Evidence: ipcLog timings showed parse_c/diag_c
+executing SERIALLY (6959 ms + 6960 ms back-to-back for ~10 ms of work), then
+canonicalize_c ×2 + run_start pending FOREVER while the JS thread stayed
+healthy — classic main-thread starvation. A blur-triggered clang-format
+blocked every later command; explains historic ctrl+enter flakes.
+
+**Fix shipped:** all 26 commands converted to `async fn` (off the main
+thread); perf.rs call sites wrapped in `tauri::async_runtime::block_on`.
+**Acceptance:** full suite green twice consecutively incl. new race + tab
+assertions.
+
+### 1. `render()` silently drops overlapping renders — canvas desyncs from text ✅ DONE (RUN 43)
 
 **Evidence:** main.ts:280 `if (rendering) return`. `render()` awaits an async
-IPC parse; a second edit arriving mid-await is dropped WITHOUT rescheduling.
-The textarea already shows edit B; the Pixi canvas shows edit A's tree. In
-Split view the user sees two different programs. Violates the visibility rule
-behind Golden Rule 1 ("file is truth" must be visibly true).
+IPC parse; a second edit arriving mid-await was dropped WITHOUT rescheduling.
+The textarea already showed edit B; the Pixi canvas showed edit A's tree.
 
-**Fix:** latest-wins generation token:
-```ts
-let renderGen = 0
-async function render(source: string): Promise<void> {
-  const gen = ++renderGen
-  rendering = true
-  try {
-    const out = await invoke('parse_c', { src: source, lang: activeLang })
-    if (gen !== renderGen) return // a newer render owns the canvas now
-    …draw…
-    rendering = false
-    if (gen === renderGen && srcEl.value !== source) return render(srcEl.value)
-  } finally { if (gen === renderGen) rendering = false }
-}
-```
-**Acceptance:** vitest simulating two overlapping renders asserts final
-blocksShape matches final src; add a fast-typing assertion to G-UI-E2E
-(type 5 chars quickly, blocks header contains last char).
+**Fix shipped:** latest-wins generation token (`renderGen`); stale renders
+abort after await; the finally-clause re-renders when the newest buffer
+differs from the parsed source. Gate assertion added to G-UI-E2E
+("render race: rapid edits converge on canvas") + `__labels` debug hook.
 
-### 2. `sanitize_abs` weaker than workspace guard
+### 2. `sanitize_abs` weaker than workspace guard ✅ DONE (RUN 43)
 
-**Evidence:** commands.rs `sanitize_abs` rejects empty + ParentDir only;
-`resolve_in_workspace` also rejects RootDir + Prefix components. An absolute
-path like `\\?\C:\...` (Prefix) or drive-relative weirdness slips through to
-std::fs. Low practical risk (paths come from native dialogs), but the two
-guards should agree.
+**Fix shipped:** prefix-aware component walk — ParentDir rejected anywhere,
+exactly one root segment allowed directly after an optional Windows prefix
+(drive-relative "C:file" forms rejected as ambiguous). Inline tests:
+`abs_guard_tests` (6 hostile rejects / 4 accepts).
 
-**Fix:** reuse one predicate for both; reject Component::RootDir and
-Component::Prefix in sanitize_abs too. **Acceptance:** unit test in recovery
-drill style: 4 hostile paths rejected, normal path accepted.
+### 3. Dead tauri command `run_c` ✅ DONE (RUN 43)
 
-### 3. Dead tauri command `run_c`
+**Fix shipped:** command + registration removed (runner::run_c kept for
+rust-side validators); comment marks the seam.
 
-**Evidence:** commands.rs `run_c` + registration in lib.rs; frontend calls
-only `run_start` (main.ts:1087). Two execution entries = two places to drift
-(RUN_TIMEOUT_MS semantics already diverged once).
+### BONUS fixes landed during the sweep (RUN 43)
 
-**Fix:** delete the command + registration (keep `runner::run_c` — validators
-use it). **Acceptance:** cargo check clean; grep shows no `'run_c'` invoke.
+- **Comment stickies + error mystery blocks rendered BLANK** — label was
+  hardcoded '' since the sticky era; now `leafText` supplies raw text
+  (Rule 5). New vitest: e2e/comments.test.ts.
+- **main.ts was full of committed double-mojibake** (`ΓÇÖ` etc. from an old
+  PS5.1 ANSI write) — byte-level cp1252↔utf8 round-trip restored every
+  em-dash/ellipsis/arrow; tsc + gates verified.
+- **canonicalize() rewrote the buffer under the user's caret on blur** —
+  caret is now semantically re-mapped onto the formatted tree without
+  stealing focus.
+- **run_start/run_poll failures were swallowed** (`.catch(() => {})`,
+  eternal spinner) — launch/poll errors now surface as `[launch]`/`[poll]`
+  console lines and reset the run state.
+- **Gates now rebuild dist + release exe before G-UI-E2E** and sweep stray
+  app.exe locks at startup — the tested binary can never be stale again.
 
 ---
 
@@ -115,16 +120,15 @@ bound; closed tabs never evict (there ARE no close buttons — see #13).
 close; optional LRU cap 64. **Acceptance:** close a dirty-guarded tab →
 reopen shows disk content; memory flat over 100 open/close cycles.
 
-### 8. Tab key unusable in the text editor
+### 8. Tab key unusable in the text editor ✅ DONE (RUN 43)
 
 **Evidence:** no Tab handler for srcEl anywhere in main.ts — pressing Tab in
-Text view moves FOCUS out of the editor (browser default). Text-mode learners
-hit this immediately.
+Text view moved FOCUS out of the editor (browser default).
 
-**Fix:** keydown on srcEl: Tab inserts two spaces (Shift+Tab outdents line);
-Enter auto-indents to previous line's leading whitespace. **Acceptance:**
-G-UI-E2E assertion: dispatch Tab in textarea → value contains "\n  " and
-focus stays.
+**Fix shipped:** Tab inserts two spaces (collapsed caret), Shift+Tab outdents
+line by up to two spaces, multi-line selections indent/outdent line-wise,
+Enter auto-indents to the previous line and brace-expands `{` / python `:`.
+Gate assertion added ("editor: Tab indents, focus stays").
 
 ---
 
