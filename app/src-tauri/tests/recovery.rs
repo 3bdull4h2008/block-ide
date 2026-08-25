@@ -7,7 +7,7 @@
 //!   4. explicit clear removes everything; read then returns nothing
 
 use app_lib::commands::{
-    journal_clear_at, journal_read_at, journal_write_at, JournalEntry,
+    journal_backup_read_at, journal_clear_at, journal_read_at, journal_write_at, JournalEntry,
 };
 
 fn dir() -> std::path::PathBuf {
@@ -85,6 +85,28 @@ fn crash_recovery_drill() {
     assert!(!d.join("journal-6.json").exists(), "rotation kept a 6th backup");
     journal_clear_at(&d);
     assert!(read_backup(1) == Some("v5".into()), "clear must keep backups");
+
+    // 6. restore path: with the live journal GONE, slot 1 is readable —
+    //    this is what journal_restore_backup promotes for boot recovery
+    for n in 1..=5u32 {
+        let _ = std::fs::remove_file(d.join(format!("journal-{n}.json")));
+    }
+    let mk = |s: &str| JournalEntry {
+        path: String::new(),
+        content: s.into(),
+        saved_unix: 0,
+    };
+    journal_write_at(&d, &mk("vA")).unwrap();
+    journal_write_at(&d, &mk("vB")).unwrap(); // live = vB, backup-1 = vA
+    std::fs::remove_file(d.join("journal.json")).unwrap();
+    assert!(journal_read_at(&d).is_none(), "live journal should be gone");
+    let salvage = journal_backup_read_at(&d, 1).expect("backup readable after journal loss");
+    assert_eq!(salvage.content, "vA");
+    // promoting it rewrites the live journal (and rotates the old copy on)
+    journal_write_at(&d, &salvage).unwrap();
+    assert_eq!(journal_read_at(&d).map(|j| j.content), Some("vA".into()));
+    assert!(journal_backup_read_at(&d, 2).map(|j| j.content) == Some("vA".into()));
+
     for n in 1..=5u32 {
         let _ = std::fs::remove_file(d.join(format!("journal-{n}.json")));
     }

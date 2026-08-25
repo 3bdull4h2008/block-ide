@@ -259,12 +259,13 @@ G-MEMTRACE, G-MEMVIEW all ENFORCED+green. Step mode explicitly deferred.
 | Step | Description | Status | Validation |
 |------|-------------|--------|------------|
 | 4.1 | Level format v1 (TOML, mirrors manifest discipline): id, world, xp, starter code, hidden tests (stdin→expected stdout/exit), hint[3], solution.c | ✅ runner::academy + academy/worlds/ | schema lint in G-ACADEMY |
-| 4.2 | Level runner: compiles submission in sandbox, runs hidden tests, awards XP; anti-hardcode (≥2 distinct test inputs per level) | ✅ headless reference solves; XP/profile store pending | G-ACADEMY |
-| 4.3 | Profile store: local JSON under userData; XP, streaks, badges, unlocked categories; palette filters by unlock state | ❌ | Unlock-enforcement unit tests |
-| 4.4 | Content: Worlds 1–5 — Hello&Output → Variables/Math → Control Flow → Loops → Functions/Structs; 6 levels + 1 boss battle each (boss = runnable mini-game using stage.h) | 🚧 3/30 seed levels committed | G-ACADEMY content count |
-| 4.5 | Hint system: 3-tier progressive reveal per level, usage tracked locally | ❌ UI pending (hints exist in format) | Content lint (every level has 3 hints) |
+| 4.2 | Level runner: compiles submission in sandbox, runs hidden tests, awards XP; anti-hardcode (≥2 distinct test inputs per level) | ✅ headless reference solves + XP/profile store (RUN 16) | G-ACADEMY |
+| 4.3 | Profile store: local JSON under userData; XP, streaks, badges, unlocked categories; palette filters by unlock state | ✅ RUN 16 (UNLOCK_RULES ladder; live lock/unlock) | unlock behavior exercised by G-UI-E2E academy section |
+| 4.4 | Content: Worlds 1–5 — Hello&Output → Variables/Math → Control Flow → Loops → Functions/Structs; 6 levels + 1 boss battle each (boss = runnable mini-game using stage.h) | ✅ 30 levels authored (RUN 16; lint caught CP1252/decoy bugs) | G-ACADEMY content count |
+| 4.5 | Hint system: 3-tier progressive reveal per level, usage tracked locally | ✅ UI landed RUN 18 ("Hint (n/3)") | Content lint (every level has 3 hints) |
 
-**Gate 4:** ❌ NOT MET. `G-ACADEMY`.
+**Gate 4:** ✅ MET — schema lint + headless reference solves + decoy rejection
+ENFORCED green; 30-level content authored (RUN 16).
 
 ---
 
@@ -408,9 +409,7 @@ extended into `tests/recovery.rs`.
 | `memtrace_soak_validator` | 35k-op tracer soak + leak reconstruction + overhead-when-off | ✅ P3 |
 | `memview_validator` | pointer-chain arrows via ReadProcessMemory (8 nodes / 7 edges) | ✅ P3 |
 | `academy_runner_validator` | level schema lint + headless reference solves + decoy rejection | ✅ P4 |
-| `memtrace_soak_validator` | tracer correctness + leak check | ❌ P3 |
-| `academy_runner_validator` | headless reference solves | ❌ P4 |
-| E2E driver (UI scripting) | scripted flows for G-EDIT-E2E | ❌ P1 |
+| E2E driver (UI scripting) | scripted flows for G-EDIT-E2E + G-UI-E2E (cdp-uie2e, 48 assertions) | ✅ P5 |
 
 Corpus policy: all fixtures committed with content hashes; corpus growth
 requires adding the failing case + minimization, never editing in place.

@@ -89,7 +89,9 @@ $env:BLOCKIDE_DATA_DIR = "$env:TEMP\blockide-gate-data"
 New-Item -ItemType Directory -Force -Path $env:BLOCKIDE_DATA_DIR | Out-Null
 # fresh state every suite run: earlier runs kill the app mid-edit, leaving a
 # dirty journal that the next boot would faithfully restore over the sample
-Remove-Item -LiteralPath (Join-Path $env:BLOCKIDE_DATA_DIR 'journal.json') -Force -ErrorAction SilentlyContinue
+# (backups too - boot salvages them when the live journal is missing)
+Get-ChildItem -LiteralPath $env:BLOCKIDE_DATA_DIR -Filter 'journal*.json' -ErrorAction SilentlyContinue |
+    Remove-Item -Force -ErrorAction SilentlyContinue
 $appExe = Join-Path $repo 'target\release\app.exe'
 if (-not (Test-Path $appExe)) { $appExe = Join-Path $repo 'target\debug\app.exe' }
 $uiProc = Start-Process -FilePath $appExe -PassThru

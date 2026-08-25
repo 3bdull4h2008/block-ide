@@ -1,6 +1,30 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 40: trigger=user: close the quick gaps - backup restore UI, README
+refresh, stale PLAN rows
+expect: boot salvages newest journal backup when live journal missing;
+README says Cade/5 languages/14 gates; PLAN 4.x rows match reality; gates green
+obs: (1) RESTORE PATH: commands gain journal_backups (slot inventory) +
+journal_restore_backup(slot) - promotes the snapshot to LIVE journal so the
+existing boot-recovery flow restores it; beginSession falls back to slot 1
+when nothing restored, skipping template-identical snapshots, with a
+[recovery] BACKUP console notice. TEST FINDS: first draft deleted an already-
+cleared journal.json (unwrap panic) AND mis-traced promotion rotation
+(copy lands in slot 2, not 1) - rewrote step 6 with a fresh deterministic
+chain. run_gates now wipes journal*.json (backups included) or the suite
+flake returns THROUGH the new path. recovery drill green. (2) README:
+Block-IDE -> Cade headline, 5-language story, backends table reality,
+14 gates, backup-rotation mention, logos/ in layout. (3) PLAN: 4.2/4.3/4.4/
+4.5 stale rows -> RUN 16/18 reality; Gate 4 verdict -> MET (matches enforced
+G-ACADEMY); duplicate ❌ validator rows dropped. tsc clean; vitest 40/40;
+ALL FOURTEEN gates PASS exit 0.
+state=SUCCESS | next: remaining open items are BIG: WASM parity gate,
+comment-survival emitter, clangd hovers, step-mode debugger, installer
+rebuild + vanilla drill
+```
+
+```
 RUN 39: trigger=user: apply ALL missing things from competitor research
 expect: six gap-closers landed (off-ramp ladder, ownership chaining,
 context-aware instructions, spaced mastery, keyboard-first palette, backup

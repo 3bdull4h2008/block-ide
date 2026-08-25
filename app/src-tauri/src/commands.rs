@@ -688,6 +688,12 @@ pub fn journal_read_at(dir: &std::path::Path) -> Option<JournalEntry> {
     serde_json::from_str(&s).ok()
 }
 
+/// Read one rotated backup slot (1 = newest). Testable seam + restore source.
+pub fn journal_backup_read_at(dir: &std::path::Path, slot: u32) -> Option<JournalEntry> {
+    let s = std::fs::read_to_string(journal_backup(dir, slot)).ok()?;
+    serde_json::from_str(&s).ok()
+}
+
 pub fn journal_clear_at(dir: &std::path::Path) {
     let _ = std::fs::remove_file(dir.join("journal.json"));
     let _ = std::fs::remove_file(dir.join("journal.tmp"));
@@ -749,4 +755,48 @@ pub fn journal_clear(app: tauri::AppHandle) -> Result<(), String> {
     let p = journal_path(&app)?;
     journal_clear_at(p.parent().unwrap_or(std::path::Path::new(".")));
     Ok(())
+}
+
+#[derive(Serialize)]
+pub struct JournalBackupOut {
+    pub slot: u32,
+    pub saved_unix: i64,
+    pub path: String,
+    pub chars: usize,
+}
+
+/// Snapshot inventory (slot 1 = newest) so the UI can recover when the live
+/// journal is missing or unusable.
+#[tauri::command]
+pub fn journal_backups(app: tauri::AppHandle) -> Result<Vec<JournalBackupOut>, String> {
+    let dir = data_root(&app)?;
+    Ok((1..=JOURNAL_BACKUPS)
+        .filter_map(|slot| {
+            journal_backup_read_at(&dir, slot).map(|j| JournalBackupOut {
+                slot,
+                saved_unix: j.saved_unix,
+                path: j.path,
+                chars: j.content.chars().count(),
+            })
+        })
+        .collect())
+}
+
+/// Promote backup `slot` to the LIVE journal (rotating the chain) so the
+/// normal boot-recovery flow restores it; returns the promoted entry.
+#[tauri::command]
+pub fn journal_restore_backup(
+    app: tauri::AppHandle,
+    slot: u32,
+) -> Result<Option<JournalReadOut>, String> {
+    let dir = data_root(&app)?;
+    let Some(j) = journal_backup_read_at(&dir, slot) else {
+        return Ok(None);
+    };
+    journal_write_at(&dir, &j)?;
+    Ok(Some(JournalReadOut {
+        path: j.path,
+        content: j.content,
+        age_secs: (now_unix() - j.saved_unix).max(0),
+    }))
 }
