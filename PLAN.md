@@ -327,10 +327,10 @@ passes. Laws (adopted from B2S discipline):
 
 ## Branding & Logo Assets (2026-08-25)
 
-Three official logo lockups, shipped as PNGs in `branding/`. Use the RIGHT
+Three official logo lockups, shipped as PNGs in `logos/`. Use the RIGHT
 lockup for the space — never stretch, recolor, or rebuild them.
 
-### 1. `branding/1.png` — Stacked / Vertical Logo
+### 1. `logos/1.png` — Stacked / Vertical Logo
 
 The icon sits directly ABOVE the typography. Best in spaces that are square
 or taller than they are wide, or when the logo is the central focus.
@@ -343,7 +343,7 @@ or taller than they are wide, or when the logo is the central focus.
 | Social media posts | Square (1:1) Instagram/promo graphics |
 | Large signage | Posters, standing banners — vertical space abundant |
 
-### 2. `branding/brand.png` — Horizontal / Landscape Logo
+### 2. `logos/brand.png` — Horizontal / Landscape Logo
 
 Icon ALONGSIDE the typography. The most versatile digital format, especially
 where vertical height is limited.
@@ -356,7 +356,7 @@ where vertical height is limited.
 | Letterheads & invoices | Top of official stationery |
 | Sponsorship banners | Horizontal step-and-repeat / event boards |
 
-### 3. `branding/logo.png` — Logomark / Icon
+### 3. `logos/logo.png` — Logomark / Icon
 
 Standalone symbol, NO text. For extreme space limits or when the brand name
 is already established by surrounding context.
