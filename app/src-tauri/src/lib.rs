@@ -37,9 +37,11 @@ commands::journal_restore_backup,
             commands::stage_keys,
             commands::stage_stop,
             commands::list_c_files,
-            commands::read_file,
-            commands::write_file,
-            commands::diag_c
+commands::read_file,
+commands::write_file,
+commands::read_abs,
+commands::write_abs,
+commands::diag_c
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

@@ -115,11 +115,42 @@ pub fn read_file(root: String, rel: String) -> Result<String, String> {
 
 #[tauri::command]
 pub fn write_file(root: String, rel: String, content: String) -> Result<(), String> {
-    let p = resolve_in_workspace(&root, &rel)?;
+    let p = resolve_in_workspace(&root, rel.as_str())?;
     if let Some(parent) = p.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     std::fs::write(p, content).map_err(|e| e.to_string())
+}
+
+/// Absolute-path document IO for standalone files (no folder open) and
+/// Save As targets outside the workspace. Paths arrive from NATIVE file
+/// dialogs the user explicitly confirmed — the same trust model VS Code
+/// uses; nothing here is reachable by web content without that gesture.
+#[tauri::command]
+pub fn read_abs(path: String) -> Result<String, String> {
+    let p = sanitize_abs(&path)?;
+    std::fs::read_to_string(p).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn write_abs(path: String, content: String) -> Result<(), String> {
+    let p = sanitize_abs(&path)?;
+    if let Some(parent) = p.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(p, content).map_err(|e| e.to_string())
+}
+
+fn sanitize_abs(path: &str) -> Result<PathBuf, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("empty path".into());
+    }
+    let pb = PathBuf::from(trimmed);
+    if pb.components().any(|c| matches!(c, Component::ParentDir)) {
+        return Err("path escapes upward".into());
+    }
+    Ok(pb)
 }
 
 // Interactive runs have NO timeout (0 = unlimited in runner): a program

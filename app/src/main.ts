@@ -1,6 +1,7 @@
 import { Application, Container, Graphics, Text } from 'pixi.js'
 import { invoke } from '@tauri-apps/api/core'
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import { open as openDialog, save as saveDialog, ask } from '@tauri-apps/plugin-dialog'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import {
   buildBlocks,
   harvestVars,
@@ -163,6 +164,9 @@ function blip(freq: number, dur = 0.06, type: OscillatorType = 'sine', gain = 0.
 }
 
 let workspace: string | null = null
+/** Buffer content as last LOADED or explicitly SAVED — the dirty baseline
+ *  for title dots, discard guards, and the close-time checkpoint. */
+let savedSnapshot = ''
 let activePath: string | null = null
 const savedCache = new Map<string, string>()
 const fileCache = new Map<string, string>()
@@ -256,6 +260,7 @@ function markDirty(): void {
     if (t.dataset.path === activePath) t.classList.toggle('dirty', dirty)
     t.classList.toggle('active', t.dataset.path === activePath)
   }
+  updateTitle()
 }
 
 // Context-aware instructions (Blockly's proven rule: a popup only closes
@@ -1302,6 +1307,36 @@ window.addEventListener('keydown', (e) => {
 
 
 // ------------------------------------------------------------- workspace/tabs
+// Documents are either workspace-RELATIVE (a folder is open) or ABSOLUTE
+// (standalone file via New/Open/Save As). One path shape per doc; fsRead/
+// fsWrite route on which shape the path is.
+const isWinPath = (p: string): boolean => /^[A-Za-z]:[\\/]/.test(p) || p.startsWith('/')
+const baseName = (p: string): string => p.split(/[\\/]/).pop() ?? p
+const dirName = (p: string): string => {
+  const parts = p.split(/[\\/]/)
+  parts.pop()
+  return parts.length > 0 ? parts.join('\\') : '.'
+}
+const normSlashes = (p: string): string => p.replace(/\\/g, '/')
+const asRelInWorkspace = (abs: string): string | null => {
+  if (workspace === null) return null
+  const w = normSlashes(workspace).replace(/\/$/, '').toLowerCase() + '/'
+  const n = normSlashes(abs)
+  return n.toLowerCase().startsWith(w) ? n.slice(w.length) : null
+}
+async function fsRead(p: string): Promise<string> {
+  return workspace !== null && !isWinPath(p)
+    ? invoke<string>('read_file', { root: workspace, rel: p })
+    : invoke<string>('read_abs', { path: p })
+}
+async function fsWrite(p: string, c: string): Promise<void> {
+  if (workspace !== null && !isWinPath(p)) {
+    await invoke('write_file', { root: workspace, rel: p, content: c })
+  } else {
+    await invoke('write_abs', { path: p, content: c })
+  }
+}
+
 async function refreshFiles(): Promise<void> {
   if (!workspace) return
   files = await invoke<string[]>('list_c_files', { root: workspace })
@@ -1310,9 +1345,37 @@ async function refreshFiles(): Promise<void> {
     const el = document.createElement('div')
     el.className = 'file'
     el.textContent = f
-    el.addEventListener('click', () => void openTab(f))
+    el.addEventListener('click', () => void guardedOpenTab(f))
     filesEl.appendChild(el)
   }
+}
+
+function createTab(path: string, content: string): void {
+  fileCache.set(path, content)
+  savedCache.set(path, content)
+  const tab = document.createElement('div')
+  tab.className = 'tab'
+  tab.dataset.path = path
+  tab.textContent = baseName(path)
+  tab.addEventListener('click', () => void guardedOpenTab(path))
+  tabsEl.appendChild(tab)
+  activateTab(path)
+}
+
+/** Unsaved-changes gate for every navigation that would REPLACE the single
+ *  buffer (tab/file/recent/folder/new/open). Commercial rule: never lose
+ *  work silently, never nag when clean. */
+async function confirmDiscard(): Promise<boolean> {
+  if (activePath === null || src === savedSnapshot || src.trim().length === 0) return true
+  return await ask(`"${baseName(activePath)}" has unsaved changes.\n\nDiscard them?`, {
+    title: 'Unsaved changes',
+    kind: 'warning',
+  })
+}
+
+async function guardedOpenTab(path: string): Promise<void> {
+  if (!(await confirmDiscard())) return
+  await openTab(path)
 }
 
 async function openTab(rel: string): Promise<void> {
@@ -1320,18 +1383,10 @@ async function openTab(rel: string): Promise<void> {
     activateTab(rel)
     return
   }
-  const content =
-    fileCache.get(rel) ?? (await invoke<string>('read_file', { root: workspace, rel }))
-  fileCache.set(rel, content)
-  savedCache.set(rel, content)
-  const tab = document.createElement('div')
-  tab.className = 'tab'
-  tab.dataset.path = rel
-  tab.textContent = rel.split('/').pop() ?? rel
-  tab.addEventListener('click', () => activateTab(rel))
-  tabsEl.appendChild(tab)
-  activateTab(rel)
-  if (workspace) pushRecent(workspace, rel)
+  const content = fileCache.get(rel) ?? (await fsRead(rel))
+  createTab(rel, content)
+  if (workspace !== null && !isWinPath(rel)) pushRecent(workspace, rel)
+  else if (isWinPath(rel)) pushRecent(dirName(rel), baseName(rel))
 }
 
 function activateTab(rel: string): void {
@@ -1341,6 +1396,7 @@ function activateTab(rel: string): void {
   activePath = rel
   activeLang = langOf(rel)
   src = fileCache.get(rel) ?? ''
+  savedSnapshot = src // fresh load = clean baseline
   srcEl.value = src
   void render(src)
   markDirty()
@@ -1348,6 +1404,7 @@ function activateTab(rel: string): void {
 }
 
 document.getElementById('open-folder')?.addEventListener('click', async () => {
+  if (!(await confirmDiscard())) return
   const dir = await openDialog({ directory: true })
   if (typeof dir !== 'string') return
   workspace = dir
@@ -1359,41 +1416,125 @@ document.getElementById('open-folder')?.addEventListener('click', async () => {
   consoleEl.textContent = `workspace: ${dir}`
 })
 
-document.getElementById('new-file')?.addEventListener('click', async () => {
-  if (!workspace) {
-    consoleEl.textContent = 'open a folder first'
-    return
-  }
-  const name = window.prompt('New file name:', 'main.c')
-  if (!name) return
-  const rel = /\.[a-z]+$/i.test(name) ? name : name + '.c'
-  const content = NEW_TEMPLATES[langOf(rel)]
-  await invoke('write_file', { root: workspace, rel, content })
-  await refreshFiles()
-  await openTab(rel)
+// Standalone documents: New File and Open File work with NO folder open —
+// a native dialog picks the location (VS Code-style), the doc opens as its
+// own tab, and recents remember it.
+document.getElementById('open-file')?.addEventListener('click', async () => {
+  if (!(await confirmDiscard())) return
+  const picked = await openDialog({
+    multiple: false,
+    filters: [
+      { name: 'Source files', extensions: ['c', 'cpp', 'cc', 'cxx', 'hpp', 'hh', 'py', 'js', 'mjs', 'rs'] },
+      { name: 'All files', extensions: ['*'] },
+    ],
+  })
+  if (typeof picked !== 'string' || !picked) return
+  const rel = asRelInWorkspace(picked)
+  await openTab(rel ?? normSlashes(picked))
 })
 
-document.getElementById('save')?.addEventListener('click', saveActive)
+document.getElementById('new-file')?.addEventListener('click', async () => {
+  if (!(await confirmDiscard())) return
+  const name = window.prompt('New file name:', 'main.c')
+  if (!name) return
+  const withExt = /\.[a-z]+$/i.test(name) ? name : `${name}.c`
+  if (workspace !== null) {
+    const content = NEW_TEMPLATES[langOf(withExt)]
+    await invoke('write_file', { root: workspace, rel: withExt, content })
+    await refreshFiles()
+    await openTab(withExt)
+  } else {
+    const picked = await saveDialog({
+      title: 'Save new file',
+      defaultPath: withExt,
+      filters: [{ name: 'Source files', extensions: ['c', 'cpp', 'cc', 'cxx', 'hh', 'py', 'js', 'mjs', 'rs'] }],
+    })
+    if (typeof picked !== 'string' || !picked) return
+    const content = NEW_TEMPLATES[langOf(picked)]
+    await invoke('write_abs', { path: picked, content })
+    await openTab(normSlashes(picked))
+  }
+})
 
-async function saveActive(): Promise<void> {
-  if (!workspace || !activePath) {
-    consoleEl.textContent = 'nothing to save — no file open'
+document.getElementById('save')?.addEventListener('click', () => void saveActive())
+
+let statusFlashTimer = 0
+function statusFlash(msg: string): void {
+  statusEl.textContent = msg
+  statusEl.className = 'ok'
+  clearTimeout(statusFlashTimer)
+  statusFlashTimer = window.setTimeout(() => {
+    statusEl.textContent = ''
+  }, 2500)
+}
+
+function updateTitle(): void {
+  const dirty = activePath !== null && src !== savedSnapshot ? ' •' : ''
+  const name = activePath ? baseName(activePath) : 'Cade'
+  document.title = `${name}${dirty} - Cade`
+  getCurrentWindow()
+    .setTitle(`${name}${dirty} - Cade`)
+    .catch(() => {})
+}
+
+async function saveActive(saveAs = false): Promise<void> {
+  if (activePath === null && !saveAs) {
+    // nothing open yet — Save behaves like "save this new document"
+    consoleEl.textContent = 'nothing to save — no file open (New File creates one)'
     return
   }
-  await invoke('write_file', { root: workspace, rel: activePath, content: src })
-  savedCache.set(activePath, src)
+
+  let target = activePath
+  if (saveAs) {
+    const initName = activePath ? baseName(activePath) : 'main.c'
+    const initDir =
+      workspace ?? (activePath && isWinPath(activePath) ? dirName(activePath) : '')
+    const picked = await saveDialog({
+      title: 'Save As',
+      defaultPath: initDir ? `${initDir}\\${initName}` : initName,
+      filters: [{ name: 'Source files', extensions: ['c', 'cpp', 'cc', 'cxx', 'hh', 'py', 'js', 'mjs', 'rs'] }],
+    })
+    if (typeof picked !== 'string' || !picked) return
+    target = asRelInWorkspace(picked) ?? normSlashes(picked)
+  }
+  if (target === null) return
+
+  try {
+    await fsWrite(target, src)
+  } catch (e) {
+    consoleEl.textContent = `save failed: ${String(e)}`
+    blip(200, 0.1, 'square', 0.05)
+    return
+  }
+
+  const switched = target !== activePath
+  if (switched) {
+    const old = Array.from(tabsEl.children).find(
+      (t) => (t as HTMLElement).dataset.path === activePath,
+    )
+    old?.remove()
+    tabViews.delete(activePath ?? '')
+    activePath = target
+    activeLang = langOf(target)
+    createTab(target, src)
+  } else {
+    savedCache.set(target, src)
+  }
+  savedSnapshot = src // explicit save = clean baseline
   markDirty()
   void invoke('journal_clear')
-  pushRecent(workspace, activePath)
-  consoleEl.textContent = `saved ${activePath}`
+  if (workspace !== null && !isWinPath(target)) pushRecent(workspace, target)
+  else if (isWinPath(target)) pushRecent(dirName(target), baseName(target))
+  statusFlash('Saved ✓')
+  blip(880, 0.07, 'sine', 0.05)
 }
 
 window.addEventListener('keydown', (e) => {
   const ctrl = e.ctrlKey || e.metaKey
   if (!ctrl) return
-  if (e.key === 's') {
+  if (e.key.toLowerCase() === 's') {
     e.preventDefault()
-    void saveActive()
+    void saveActive(e.shiftKey) // Ctrl+Shift+S = Save As
   } else if (e.key === 'z' && !e.shiftKey) {
     e.preventDefault()
     const prev = hist.undo(src)
@@ -1993,6 +2134,7 @@ document.getElementById('level-load')?.addEventListener('click', async () => {
     const chained = prev ? levelSols[prev.id] : undefined
     caretAnchor = null
     setSrc(chained?.trim() ? chained : l.starter)
+    savedSnapshot = src // the seeded buffer is the clean baseline
     hints = l.hints
     hintTier = 0
     updateHintBtn()
@@ -2181,16 +2323,6 @@ themeBtn.addEventListener('click', () =>
   setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'),
 )
 
-// ------------------------------------------------- autosave crash journal
-let journalTimer = 0
-
-function journalSchedule(): void {
-  clearTimeout(journalTimer)
-  journalTimer = window.setTimeout(() => {
-    if (src.trim().length > 0) void invoke('journal_write', { path: activePath ?? '', content: src })
-  }, 2000)
-}
-
 // --------------------------------------------------- launch splash (Blender-style)
 // Language choice + recent files at every launch; C starts automatically when
 // nobody interacts (countdown bar). Chosen language loads its sample/blocks.
@@ -2217,6 +2349,8 @@ function pushRecent(root: string, rel: string): void {
 async function beginSession(lang: Lang): Promise<void> {
   activeLang = lang
   src = SAMPLES[lang]
+  savedSnapshot = src // fresh sample session = clean baseline
+  activePath = null
   caretAnchor = null
   // unsaved work from a previous session overrides the sample (its language
   // rides with the journaled path when there is one)
@@ -2264,10 +2398,13 @@ async function beginSession(lang: Lang): Promise<void> {
   srcEl.value = src
   void render(src)
   void refreshDiags()
+  markDirty()
+  updateTitle()
   if (!localStorage.getItem('tour-done')) setTimeout(startTour, 600)
 }
 
 async function beginFromRecent(entry: RecentEntry): Promise<void> {
+  if (!(await confirmDiscard())) return
   workspace = entry.root
   await refreshFiles()
   try {
@@ -2334,10 +2471,14 @@ aboutEl.addEventListener('click', () => {
   aboutEl.style.display = 'none'
 })
 
-srcEl.addEventListener('input', () => journalSchedule())
+// Close-time crash checkpoint ONLY (not autosave): one journal write when
+// the window goes away with unsaved work, so a hard kill mid-session still
+// recovers. Normal editing never touches the journal — explicit Save is the
+// workflow; discard guards cover navigation.
 window.addEventListener('beforeunload', () => {
-  // best effort: flush synchronously-ish; tauri invoke is async but fast enough
-  if (src.trim()) void invoke('journal_write', { path: activePath ?? '', content: src })
+  if (activePath !== null && src.trim() && src !== savedSnapshot) {
+    void invoke('journal_write', { path: activePath ?? '', content: src })
+  }
 })
 
 // keybindings: Ctrl+Enter / F5 run, Ctrl+B sidebar toggle

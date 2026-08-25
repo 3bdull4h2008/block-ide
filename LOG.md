@@ -1,6 +1,38 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 41: trigger=user: remove autosave, New File without open folder, make
+saving/loading commercial-grade
+expect: explicit-save model (D13); standalone docs; guards + Save As +
+title dot; gates green
+obs: (1) AUTOSAVE REMOVED: debounced keystroke journaling deleted; the only
+journal write is a close-time checkpoint when exiting with unsaved work -
+boot recovery + backup salvage stay as the crash net (G-RECOVERY untouched).
+Side effect: gate UI-E2E can no longer leave dirty journals from mid-test
+edits at all. (2) STANDALONE DOCS: read_abs/write_abs commands (sanitize:
+reject empty + ParentDir escape) for paths from USER-CONFIRMED native
+dialogs; fsRead/fsWrite route rel-vs-abs by path shape; New File with no
+folder = native Save dialog then opens as its own tab; new Open File button;
+recents record standalone files (dir+name) so splash reopens them. FIRST
+EDIT BUG: my write_file rewrite left a duplicated closing fragment - cargo
+check caught unexpected delimiter immediately, removed. (3) GUARDS:
+confirmDiscard (native ask, warning) wired into tab/file/recent/folder/
+new/open navigation - never silent loss, never nag when clean;
+savedSnapshot baseline drives dirty state everywhere (load/save/level-seed).
+(4) SAVE AS: Ctrl+Shift+S via native dialog; switching into/out of the
+workspace retabs correctly (old tab removed). Title bar shows `name • - Cade`
+(window setTitle w/ core:window:allow-set-title capability, catch-guarded);
+Saved flash lands in status. tsc clean; vitest 40/40; ALL FOURTEEN gates
+PASS exit 0.
+state=SUCCESS | next: user eyes-on (New File w/o folder, Ctrl+Shift+S,
+dirty-dot title); remaining big rocks unchanged (WASM gate, comments
+emitter, clangd hovers, step-mode). NOTE: first suite run showed G-PERF
+FAIL - cargo could not relink app.exe (Access denied): a stray manual-run
+app.exe held the lock; killed process, full suite re-ran green. Not a code
+regression.
+```
+
+```
 RUN 40: trigger=user: close the quick gaps - backup restore UI, README
 refresh, stale PLAN rows
 expect: boot salvages newest journal backup when live journal missing;
