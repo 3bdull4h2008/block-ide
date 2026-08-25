@@ -87,11 +87,15 @@ $env:WEBVIEW2_USER_DATA_FOLDER = "$env:TEMP\blockide-uie2e-profile"
 # isolate ALL local state (journal/profile) from the user's real data
 $env:BLOCKIDE_DATA_DIR = "$env:TEMP\blockide-gate-data"
 New-Item -ItemType Directory -Force -Path $env:BLOCKIDE_DATA_DIR | Out-Null
+# fresh state every suite run: earlier runs kill the app mid-edit, leaving a
+# dirty journal that the next boot would faithfully restore over the sample
+Remove-Item -LiteralPath (Join-Path $env:BLOCKIDE_DATA_DIR 'journal.json') -Force -ErrorAction SilentlyContinue
 $appExe = Join-Path $repo 'target\release\app.exe'
 if (-not (Test-Path $appExe)) { $appExe = Join-Path $repo 'target\debug\app.exe' }
 $uiProc = Start-Process -FilePath $appExe -PassThru
 Start-Sleep -Seconds 8
 node (Join-Path $repo 'tools\cdp-uie2e.mjs') $uiPort 2>&1 | Tee-Object -Variable ueOut | Out-Null
+$ueOut | Set-Content -LiteralPath (Join-Path $gatesDir 'ui-e2e-last.log')
 $uiExit = $LASTEXITCODE
 if (-not $uiProc.HasExited) { Stop-Process -Id $uiProc.Id -Force -ErrorAction SilentlyContinue }
 Add-Gate -Id 'G-UI-E2E' -Pass ($uiExit -eq 0) -Metrics @{ tail = ($ueOut | Select-String 'G-UI-E2E'); failures = @($ueOut | Select-String 'FAIL') }

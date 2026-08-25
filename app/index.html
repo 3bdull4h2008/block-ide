@@ -2,20 +2,30 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/logos/logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cade</title>
   </head>
   <body>
     <div id="splash">
       <div id="splash-card">
-        <h1>Cade</h1>
+        <img id="splash-logo" src="/logos/1.png" alt="Cade" />
         <div class="splash-sub">choose a coding language</div>
         <div class="splash-langs">
           <button class="splash-lang active" data-lang="c">
             <b>C</b><span>the classic</span>
           </button>
           <button class="splash-lang" data-lang="cpp">
-            <b>C++</b><span>classes, namespaces, iostream</span>
+            <b>C++</b><span>classes, namespaces</span>
+          </button>
+          <button class="splash-lang" data-lang="python">
+            <b>Python</b><span>print, loops, defs</span>
+          </button>
+          <button class="splash-lang" data-lang="javascript">
+            <b>JavaScript</b><span>console, functions</span>
+          </button>
+          <button class="splash-lang" data-lang="rust">
+            <b>Rust</b><span>fn, println!, loops</span>
           </button>
         </div>
         <div class="splash-recent">
@@ -29,7 +39,7 @@
     </div>
     <div id="app">
       <div id="toolbar">
-        <strong>Cade</strong>
+        <img id="brand-logo" src="/logos/brand.png" alt="Cade" />
         <span id="xp-badge">☆ 0 XP</span>
         <button id="open-folder">Open Folder</button>
         <button id="new-file">New File</button>
@@ -91,6 +101,13 @@
           <span class="step-dots" id="tour-dots"></span>
           <button id="tour-next">Next</button>
         </div>
+      </div>
+    </div>
+    <div id="about" style="display:none">
+      <div id="about-card" title="click to close">
+        <img src="/logos/brand.png" alt="Cade" />
+        <div class="about-tag">blocks that ARE the code — C · C++ · Python · JavaScript · Rust</div>
+        <div class="about-tag">v0.1.0 · offline-first · no accounts, no telemetry</div>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

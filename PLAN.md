@@ -216,7 +216,7 @@ comment anchors) remain open — see P1.2 residual note.
 | 1.12 | Boolean HEX sockets (Scratch boolean shape): control-statement conditions become hexagonal editable slots — if/while/switch inner-expression (parens stay as text), for keeps init/update granular with only the condition hex; merge-barrier keeps `;` tokens separate; any non-empty condition accepted (broken code stays editable, Rule 5) | ✅ (RUN 31) | vitest bool-sockets suite; G-UI-E2E hex commit/reject |
 | 1.13 | Operators category (Scratch green #59C059): round arithmetic reporters (+ - * / %) drop into round sockets; hex comparison/logic reporters (== != < > <= >= && \|\| !) drop into condition sockets — shape-checked drops with wrong-shape feedback; expression validator (operator-bearing or bare operand, boolean ops round-socket-refused); Functions group gains call proc + define fn (toplevel file-scope splice — C definitions never nest); printf %d / scanf %d I/O chips; operators unlock tier 5 | ✅ (RUN 32) | vitest operators/toplevel suite; G-UI-E2E operators+shape checks |
 | 1.14 | C++ SUBSET PACK (D3 amendment 2026-08-25): Lang enum + tree-sitter-cpp grammar; language rides with file extension; parse/canonicalize/diag/run all language-aware; C++ routes to clang backend (tcc is C-only, memtrace C-only v1); workspace lists .cpp/.cc/.cxx/.hpp/.hh; cpp new-file template (iostream); classes render as declaration-mouths; status shows active language | ✅ (RUN 33) | rust cpp tests (parse+backend, clang run verified); vitest cpp blocks; G-UI-E2E lang mapping |
-| 1.15 | MULTI-LANGUAGE PACKS (D11, 2026-08-25): Python (.py) + JavaScript (.js/.mjs) + Rust (.rs). core-parser: 3 grammar crates + CTree.lang; blocks: per-lang body-container kind (block/statement_block) + control/fn/class kind maps; runner: interpreter backends (python/node in the job-object jail) + rustc two-phase compile+run, all detected at runtime (missing = console hint); palette: per-lang Control/Loops/Code chips + split logic operators (and/or/not vs &&/||/!); splash: 5 language cards; new-file templates; var/list chips gated to C/C++ | ✅ (RUN 36) | rust per-lang parse units; vitest py/js/rust blocks; G-UI-E2E python splash session |
+| 1.15 | MULTI-LANGUAGE PACKS (D11, 2026-08-25): Python (.py) + JavaScript (.js/.mjs) + Rust (.rs). core-parser: 3 grammar crates + CTree.lang; blocks: per-lang body-container kind (block/statement_block) + control/fn/class kind maps; runner: interpreter backends (python/node in the job-object jail) + rustc two-phase compile+run, all detected at runtime (missing = console hint); palette: per-lang Control/Loops/Code chips + split logic operators (and/or/not vs &&/||/!); splash: 5 language cards; new-file templates; var/list chips gated to C/C++; python control snippets carry `pass` bodies so every chip emits compilable code | ✅ runner+parser RUN 37; front end completed+verified RUN 38 | rust per-lang parse units; vitest py/js/rust snippet-parse suites; G-UI-E2E python splash session |
 
 **Gate 1:** ❌ NOT MET. `G-EDIT-E2E` scripted flows (build fizzbuzz entirely
 in blocks; fix injected bug found via blocks only).
@@ -369,9 +369,11 @@ is already established by surrounding context.
 | Watermarks | Translucent overlay on images/video |
 | Small UI elements | Buttons, loading animations inside the software |
 
-**Product wiring (where each lands in Block-IDE):** splash card → `1.png` ·
-toolbar brand + about dialog → `brand.png` · window/taskbar/installer/
-favicon → `logo.png`.
+**Product wiring (where each lands in Cade):** splash card → `1.png` ·
+toolbar brand (click = about dialog) + about dialog → `brand.png` ·
+window/taskbar/installer/favicon → `logo.png`. WIRED 2026-08-25 (RUN 38):
+app/public/logos/ serves all three; src-tauri/icons regenerated from
+logo.png (favicon via /logos/logo.png); about dialog added to index.html.
 
 ---
 

@@ -122,7 +122,10 @@ pub fn write_file(root: String, rel: String, content: String) -> Result<(), Stri
     std::fs::write(p, content).map_err(|e| e.to_string())
 }
 
-const RUN_TIMEOUT_MS: u64 = 5000;
+// Interactive runs have NO timeout (0 = unlimited in runner): a program
+// waiting on cin/scanf/input() must never be killed mid-typing — the Stop
+// button and the job-object hard stop govern. Academy checks keep theirs.
+const RUN_TIMEOUT_MS: u64 = 0;
 
 #[derive(Serialize, Clone)]
 pub struct RunOut {

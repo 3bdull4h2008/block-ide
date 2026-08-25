@@ -28,6 +28,7 @@ import {
   VARIABLES_COLOR,
   validateSlotValue,
   validateVarName,
+  type SourceLang,
   reporterFits,
   varChips,
   varTypes,
@@ -82,6 +83,14 @@ int main() {
         total = total + i;
     }
     std::cout << total << "\\n";
+    return 0;
+}
+`
+
+const CPP_TEMPLATE = `#include <iostream>
+
+int main() {
+    std::cout << "hi\\n";
     return 0;
 }
 `
@@ -152,12 +161,71 @@ const savedCache = new Map<string, string>()
 const fileCache = new Map<string, string>()
 let files: string[] = []
 
-// C++ subset pack (D3 amendment): language rides with the FILE (.cpp/.cc/...)
-const CPP_RE = /\.(cpp|cc|cxx|hpp|hh)$/i
-function langOf(path: string | null): 'c' | 'cpp' {
-  return path && CPP_RE.test(path) ? 'cpp' : 'c'
+// Multi-language packs (D11): language rides with the FILE
+type Lang = SourceLang
+function langOf(path: string | null): Lang {
+  const ext = (path ?? '').toLowerCase().split('.').pop() ?? ''
+  if (['cpp', 'cc', 'cxx', 'hpp', 'hh'].includes(ext)) return 'cpp'
+  if (ext === 'py' || ext === 'pyw') return 'python'
+  if (['js', 'mjs', 'cjs'].includes(ext)) return 'javascript'
+  if (ext === 'rs') return 'rust'
+  return 'c'
 }
-let activeLang: 'c' | 'cpp' = 'c'
+let activeLang: Lang = 'c'
+
+const SAMPLES: Record<Lang, string> = {
+  c: SAMPLE,
+  cpp: CPP_SAMPLE,
+  python: `print("hello")
+
+total = 0
+for i in range(5):
+    total = total + i
+
+print(total)
+`,
+  javascript: `let total = 0;
+
+for (let i = 0; i < 5; i++) {
+    total = total + i;
+}
+
+console.log("hello");
+console.log(total);
+`,
+  rust: `fn main() {
+    let mut total = 0;
+
+    for i in 0..5 {
+        total = total + i;
+    }
+
+    println!("hello");
+    println!("{}", total);
+}
+`,
+}
+
+const NEW_TEMPLATES: Record<Lang, string> = {
+  c: NEW_TEMPLATE,
+  cpp: CPP_TEMPLATE,
+  python: `def main():
+    print("hi")
+
+
+main()
+`,
+  javascript: `function main() {
+    console.log("hi");
+}
+
+main();
+`,
+  rust: `fn main() {
+    println!("hi");
+}
+`,
+}
 
 let src = SAMPLE
 let roots: BBlock[] = []
@@ -1267,14 +1335,6 @@ document.getElementById('open-folder')?.addEventListener('click', async () => {
   consoleEl.textContent = `workspace: ${dir}`
 })
 
-const CPP_TEMPLATE = `#include <iostream>
-
-int main() {
-    std::cout << "hi\\n";
-    return 0;
-}
-`
-
 document.getElementById('new-file')?.addEventListener('click', async () => {
   if (!workspace) {
     consoleEl.textContent = 'open a folder first'
@@ -1283,7 +1343,7 @@ document.getElementById('new-file')?.addEventListener('click', async () => {
   const name = window.prompt('New file name:', 'main.c')
   if (!name) return
   const rel = /\.[a-z]+$/i.test(name) ? name : name + '.c'
-  const content = CPP_RE.test(rel) ? CPP_TEMPLATE : NEW_TEMPLATE
+  const content = NEW_TEMPLATES[langOf(rel)]
   await invoke('write_file', { root: workspace, rel, content })
   await refreshFiles()
   await openTab(rel)
@@ -1610,86 +1670,90 @@ function renderPalette(): void {
     for (const item of g.items) addChip(item)
   }
 
-  // ---- Variables section (Scratch data category) ----
-  const vhead = addGroupHeader('Variables', VARIABLES_COLOR)
-  const vdot = document.createElement('span')
-  vdot.className = 'rail-dot'
-  vdot.title = 'Variables'
-  vdot.style.background = VARIABLES_COLOR
-  vdot.addEventListener('click', () =>
-    paletteEl.scrollTo({ top: vhead.offsetTop - 26, behavior: 'smooth' }),
-  )
-  rail.appendChild(vdot)
-  dots.push({ dot: vdot, name: 'Variables' })
+  // ---- Variables section (Scratch data category) — C/C++ only: typed
+  // declarations are meaningless in dynamically-typed languages, so Make a
+  // Variable/List and their chips stay hidden there (D11) ----
+  if (activeLang === 'c' || activeLang === 'cpp') {
+    const vhead = addGroupHeader('Variables', VARIABLES_COLOR)
+    const vdot = document.createElement('span')
+    vdot.className = 'rail-dot'
+    vdot.title = 'Variables'
+    vdot.style.background = VARIABLES_COLOR
+    vdot.addEventListener('click', () =>
+      paletteEl.scrollTo({ top: vhead.offsetTop - 26, behavior: 'smooth' }),
+    )
+    rail.appendChild(vdot)
+    dots.push({ dot: vdot, name: 'Variables' })
 
-  const mk = document.createElement('button')
-  mk.id = 'make-var'
-  mk.dataset.cat = 'variables' // lock-gated with the section in academy mode
-  mk.textContent = 'Make a Variable'
-  mk.addEventListener('click', () => {
-    if (mk.classList.contains('locked')) return
-    const raw = window.prompt('Variable name:', 'score')
-    if (raw === null) return
-    const name = validateVarName(raw)
-    if (name === null) {
-      consoleEl.textContent = `"${raw}" is not a valid C variable name`
-      blip(200, 0.08, 'square', 0.04)
-      return
-    }
-    // C/C++ variables need a DECLARED TYPE — second step of the dialog
-    const types = varTypes(activeLang)
-    const traw = window.prompt(`Type for "${name}" (${types.join('/')}):`, varTypesMap[name] ?? 'int')
-    if (traw === null) return
-    const type = traw.trim().toLowerCase()
-    if (!types.includes(type)) {
-      consoleEl.textContent = `"${type}" is not a type I know — use ${types.join('/')}`
-      blip(200, 0.08, 'square', 0.04)
-      return
-    }
-    if (!knownVars.includes(name)) knownVars.push(name)
-    varTypesMap[name] = type
-    saveVars()
-    renderPalette()
-    blip(740, 0.07, 'sine', 0.06)
-  })
-  paletteEl.appendChild(mk)
+    const mk = document.createElement('button')
+    mk.id = 'make-var'
+    mk.dataset.cat = 'variables' // lock-gated with the section in academy mode
+    mk.textContent = 'Make a Variable'
+    mk.addEventListener('click', () => {
+      if (mk.classList.contains('locked')) return
+      const raw = window.prompt('Variable name:', 'score')
+      if (raw === null) return
+      const name = validateVarName(raw)
+      if (name === null) {
+        consoleEl.textContent = `"${raw}" is not a valid C variable name`
+        blip(200, 0.08, 'square', 0.04)
+        return
+      }
+      // C/C++ variables need a DECLARED TYPE — second step of the dialog
+      const types = varTypes(activeLang)
+      const traw = window.prompt(`Type for "${name}" (${types.join('/')}):`, varTypesMap[name] ?? 'int')
+      if (traw === null) return
+      const type = traw.trim().toLowerCase()
+      if (!types.includes(type)) {
+        consoleEl.textContent = `"${type}" is not a type I know — use ${types.join('/')}`
+        blip(200, 0.08, 'square', 0.04)
+        return
+      }
+      if (!knownVars.includes(name)) knownVars.push(name)
+      varTypesMap[name] = type
+      saveVars()
+      renderPalette()
+      blip(740, 0.07, 'sine', 0.06)
+    })
+    paletteEl.appendChild(mk)
 
-  const allVars = [...new Set([...knownVars, ...harvestedVars])]
-  for (const v of allVars) {
-    for (const chip of varChips(v, varTypesMap[v] ?? 'int')) {
-      paletteEl.appendChild(makeVarChip(chip))
+    const allVars = [...new Set([...knownVars, ...harvestedVars])]
+    for (const v of allVars) {
+      for (const chip of varChips(v, varTypesMap[v] ?? 'int')) {
+        paletteEl.appendChild(makeVarChip(chip))
+      }
     }
-  }
 
-  // ---- Lists subcategory (Scratch Lists -> C arrays) ----
-  const mkList = document.createElement('button')
-  mkList.id = 'make-list'
-  mkList.dataset.cat = 'variables'
-  mkList.textContent = 'Make a List'
-  mkList.addEventListener('click', () => {
-    if (mkList.classList.contains('locked')) return
-    const raw = window.prompt('List name (C array):', 'grid')
-    if (raw === null) return
-    const name = validateVarName(raw)
-    if (name === null) {
-      consoleEl.textContent = `"${raw}" is not a valid C array name`
-      blip(200, 0.08, 'square', 0.04)
-      return
+    // ---- Lists subcategory (Scratch Lists -> C arrays) ----
+    const mkList = document.createElement('button')
+    mkList.id = 'make-list'
+    mkList.dataset.cat = 'variables'
+    mkList.textContent = 'Make a List'
+    mkList.addEventListener('click', () => {
+      if (mkList.classList.contains('locked')) return
+      const raw = window.prompt('List name (C array):', 'grid')
+      if (raw === null) return
+      const name = validateVarName(raw)
+      if (name === null) {
+        consoleEl.textContent = `"${raw}" is not a valid C array name`
+        blip(200, 0.08, 'square', 0.04)
+        return
+      }
+      if (!knownLists.includes(name)) knownLists.push(name)
+      saveVars()
+      renderPalette()
+      blip(740, 0.07, 'sine', 0.06)
+    })
+    paletteEl.appendChild(mkList)
+
+    // list chips: user-created lists always; file-indexed vars discovered live
+    const listVars = new Set<string>(knownLists)
+    for (const v of allVars) {
+      if (src.includes(`${v}[`)) listVars.add(v)
     }
-    if (!knownLists.includes(name)) knownLists.push(name)
-    saveVars()
-    renderPalette()
-    blip(740, 0.07, 'sine', 0.06)
-  })
-  paletteEl.appendChild(mkList)
-
-  // list chips: user-created lists always; file-indexed vars discovered live
-  const listVars = new Set<string>(knownLists)
-  for (const v of allVars) {
-    if (src.includes(`${v}[`)) listVars.add(v)
-  }
-  for (const v of listVars) {
-    for (const chip of listChips(v)) paletteEl.appendChild(makeVarChip(chip, true))
+    for (const v of listVars) {
+      for (const chip of listChips(v)) paletteEl.appendChild(makeVarChip(chip, true))
+    }
   }
 
   // active rail dot follows scroll
@@ -1985,9 +2049,9 @@ function pushRecent(root: string, rel: string): void {
   localStorage.setItem('blockide-recent', JSON.stringify(list.slice(0, 6)))
 }
 
-async function beginSession(lang: 'c' | 'cpp'): Promise<void> {
+async function beginSession(lang: Lang): Promise<void> {
   activeLang = lang
-  src = lang === 'cpp' ? CPP_SAMPLE : SAMPLE
+  src = SAMPLES[lang]
   caretAnchor = null
   // unsaved work from a previous session overrides the sample (its language
   // rides with the journaled path when there is one)
@@ -1996,11 +2060,7 @@ async function beginSession(lang: 'c' | 'cpp'): Promise<void> {
       'journal_read',
     )
     if (j && j.content.trim()) {
-      if (
-        j.content === SAMPLE ||
-        j.content === NEW_TEMPLATE ||
-        j.content === CPP_SAMPLE
-      ) {
+      if (Object.values(SAMPLES).includes(j.content) || j.content === NEW_TEMPLATE) {
         void invoke('journal_clear')
       } else {
         src = j.content
@@ -2055,7 +2115,7 @@ function wireSplash(): void {
   splashEl.querySelectorAll<HTMLButtonElement>('.splash-lang').forEach((b) => {
     b.addEventListener('click', () => {
       blip(740, 0.07, 'sine', 0.06)
-      void beginSession(b.dataset.lang as 'c' | 'cpp')
+      void beginSession(b.dataset.lang as Lang)
     })
   })
   // footer: Open Folder… (same dialog as the toolbar button)
@@ -2073,6 +2133,17 @@ wireSplash()
 // exists BEFORE this line (top-level pixi await), so DOM presence alone
 // does not mean the click handlers are wired yet
 ;(window as unknown as { __bootDone?: boolean }).__bootDone = true
+
+// about dialog: toolbar brand logo opens the horizontal lockup card; any
+// click on the overlay closes it
+const aboutEl = document.getElementById('about') as HTMLDivElement
+document.getElementById('brand-logo')?.addEventListener('click', () => {
+  blip(660, 0.06, 'sine', 0.05)
+  aboutEl.style.display = 'flex'
+})
+aboutEl.addEventListener('click', () => {
+  aboutEl.style.display = 'none'
+})
 
 srcEl.addEventListener('input', () => journalSchedule())
 window.addEventListener('beforeunload', () => {

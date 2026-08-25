@@ -2,7 +2,7 @@
  *  Groups follow Scratch's category-section model; hexes are the scratch-blocks
  *  primaries adapted to C's needs (no Motion/Looks/Sound — we render code). */
 
-export type SourceLang = 'c' | 'cpp'
+export type SourceLang = 'c' | 'cpp' | 'python' | 'javascript' | 'rust'
 
 export interface PaletteItem {
   name: string
@@ -37,29 +37,81 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
     name: 'Control',
     color: '#FFAB19',
     items: [
-      { name: 'if', cat: 'control', snippet: 'if (cond) {\n}' },
+      { name: 'if', cat: 'control', snippet: 'if (cond) {\n}', langs: ['c', 'cpp'] },
       {
         name: 'else',
         cat: 'control',
         snippet: 'else {\n}',
+        langs: ['c', 'cpp'],
         requires: { kind: 'if_statement' },
       },
       {
         name: 'case + break',
         cat: 'control',
         snippet: 'case 1:\n    break;',
+        langs: ['c', 'cpp'],
         requires: { kind: 'switch_statement' },
       },
       { name: 'try / catch', cat: 'control', snippet: 'try {\n} catch (...) {\n}', langs: ['cpp'] },
+      // python
+      { name: 'if', cat: 'control', snippet: 'if cond:\n    pass', langs: ['python'] },
+      {
+        name: 'elif',
+        cat: 'control',
+        snippet: 'elif cond:\n    pass',
+        langs: ['python'],
+        requires: { kind: 'if_statement' },
+      },
+      {
+        name: 'else',
+        cat: 'control',
+        snippet: 'else:\n    pass',
+        langs: ['python'],
+        requires: { kind: 'if_statement' },
+      },
+      { name: 'for i in range', cat: 'control', snippet: 'for i in range(10):\n    pass', langs: ['python'] },
+      { name: 'while', cat: 'control', snippet: 'while cond:\n    pass', langs: ['python'] },
+      { name: 'try / except', cat: 'control', snippet: 'try:\n    pass\nexcept:\n    pass', langs: ['python'] },
+      // javascript
+      { name: 'if', cat: 'control', snippet: 'if (cond) {\n}', langs: ['javascript'] },
+      {
+        name: 'else',
+        cat: 'control',
+        snippet: 'else {\n}',
+        langs: ['javascript'],
+        requires: { kind: 'if_statement' },
+      },
+      { name: 'for-of', cat: 'control', snippet: 'for (const x of items) {\n}', langs: ['javascript'] },
+      { name: 'while', cat: 'control', snippet: 'while (cond) {\n}', langs: ['javascript'] },
+      { name: 'try / catch', cat: 'control', snippet: 'try {\n} catch (e) {\n}', langs: ['javascript'] },
+      // rust
+      { name: 'if', cat: 'control', snippet: 'if cond {\n}', langs: ['rust'] },
+      {
+        name: 'else',
+        cat: 'control',
+        snippet: 'else {\n}',
+        langs: ['rust'],
+        requires: { kind: 'if_expression' },
+      },
+      { name: 'loop', cat: 'control', snippet: 'loop {\n}', langs: ['rust'] },
+      { name: 'while', cat: 'control', snippet: 'while cond {\n}', langs: ['rust'] },
+      { name: 'for-in', cat: 'control', snippet: 'for x in 0..10 {\n}', langs: ['rust'] },
+      { name: 'match', cat: 'control', snippet: 'match value {\n    _ => {}\n}', langs: ['rust'] },
     ],
   },
   {
     name: 'Loops',
     color: '#FFAB19',
     items: [
-      { name: 'for', cat: 'loops', snippet: 'for (int i = 0; i < 10; i++) {\n}' },
-      { name: 'while', cat: 'loops', snippet: 'while (cond) {\n}' },
-      { name: 'do / while', cat: 'loops', snippet: 'do {\n} while (cond);' },
+      { name: 'for', cat: 'loops', snippet: 'for (int i = 0; i < 10; i++) {\n}', langs: ['c', 'cpp'] },
+      { name: 'while', cat: 'loops', snippet: 'while (cond) {\n}', langs: ['c', 'cpp'] },
+      { name: 'do / while', cat: 'loops', snippet: 'do {\n} while (cond);', langs: ['c', 'cpp'] },
+      { name: 'for i in range', cat: 'loops', snippet: 'for i in range(10):\n    pass', langs: ['python'] },
+      { name: 'while', cat: 'loops', snippet: 'while cond:\n    pass', langs: ['python'] },
+      { name: 'for', cat: 'loops', snippet: 'for (let i = 0; i < 10; i++) {\n}', langs: ['javascript'] },
+      { name: 'while', cat: 'loops', snippet: 'while (cond) {\n}', langs: ['javascript'] },
+      { name: 'for-in', cat: 'loops', snippet: 'for x in 0..10 {\n}', langs: ['rust'] },
+      { name: 'while', cat: 'loops', snippet: 'while cond {\n}', langs: ['rust'] },
     ],
   },
   {
@@ -79,9 +131,13 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
       { name: 'a > b', cat: 'operators', snippet: '', reporter: 'bool' },
       { name: 'a <= b', cat: 'operators', snippet: '', reporter: 'bool' },
       { name: 'a >= b', cat: 'operators', snippet: '', reporter: 'bool' },
-      { name: 'a && b', cat: 'operators', snippet: '', reporter: 'bool' },
-      { name: 'a || b', cat: 'operators', snippet: '', reporter: 'bool' },
-      { name: 'not ok', cat: 'operators', snippet: '', reporter: 'bool' },
+      // logic: python words vs symbolic (D11 split)
+      { name: 'a && b', cat: 'operators', snippet: '', reporter: 'bool', langs: ['c', 'cpp', 'javascript', 'rust'] },
+      { name: 'a || b', cat: 'operators', snippet: '', reporter: 'bool', langs: ['c', 'cpp', 'javascript', 'rust'] },
+      { name: 'not ok', cat: 'operators', snippet: '', reporter: 'bool', langs: ['c', 'cpp', 'javascript', 'rust'] },
+      { name: 'a and b', cat: 'operators', snippet: '', reporter: 'bool', langs: ['python'] },
+      { name: 'a or b', cat: 'operators', snippet: '', reporter: 'bool', langs: ['python'] },
+      { name: 'not ok', cat: 'operators', snippet: '', reporter: 'bool', langs: ['python'] },
     ],
   },
   {
@@ -150,18 +206,36 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
         snippet: 'using namespace std;',
         langs: ['cpp'],
       },
-      { name: 'assign +=', cat: 'statement', snippet: 'value = value + 1;' },
-      { name: 'return', cat: 'statement', snippet: 'return 0;' },
+      { name: 'assign +=', cat: 'statement', snippet: 'value = value + 1;', langs: ['c', 'cpp', 'javascript', 'rust'] },
+      { name: 'return', cat: 'statement', snippet: 'return 0;', langs: ['c', 'cpp', 'javascript', 'rust'] },
+      // python
+      { name: 'print text', cat: 'statement', snippet: 'print("hi")', langs: ['python'] },
+      { name: 'print value', cat: 'statement', snippet: 'print(value)', langs: ['python'] },
+      { name: 'input', cat: 'statement', snippet: 'value = input()', langs: ['python'] },
+      { name: 'int input', cat: 'statement', snippet: 'value = int(input())', langs: ['python'] },
+      { name: 'assign', cat: 'statement', snippet: 'value = value + 1', langs: ['python'] },
+      // javascript
+      { name: 'console.log text', cat: 'statement', snippet: 'console.log("hi");', langs: ['javascript'] },
+      { name: 'console.log value', cat: 'statement', snippet: 'console.log(value);', langs: ['javascript'] },
+      { name: 'let', cat: 'statement', snippet: 'let value = 0;', langs: ['javascript'] },
+      { name: 'assign +=', cat: 'statement', snippet: 'value = value + 1;', langs: ['javascript'] },
+      { name: 'return', cat: 'statement', snippet: 'return 0;', langs: ['javascript'] },
+      // rust
+      { name: 'println! text', cat: 'statement', snippet: 'println!("hi");', langs: ['rust'] },
+      { name: 'println! value', cat: 'statement', snippet: 'println!("{}", value);', langs: ['rust'] },
+      { name: 'let mut', cat: 'statement', snippet: 'let mut value = 0;', langs: ['rust'] },
+      { name: 'assign +=', cat: 'statement', snippet: 'value = value + 1;', langs: ['rust'] },
+      { name: 'return', cat: 'statement', snippet: 'return 0;', langs: ['rust'] },
     ],
   },
   {
     name: 'Functions',
     color: '#7C5CE0',
     items: [
-      { name: 'call fn', cat: 'functions', snippet: 'value = myfn(value);' },
-      { name: 'call proc', cat: 'functions', snippet: 'myfn();' },
+      { name: 'call fn', cat: 'functions', snippet: 'value = myfn(value);', langs: ['c', 'cpp', 'javascript', 'rust'] },
+      { name: 'call proc', cat: 'functions', snippet: 'myfn();', langs: ['c', 'cpp', 'javascript', 'rust'] },
       // toplevel: always splices at file scope (nested definitions are not C)
-      { name: 'define fn', cat: 'functions', snippet: 'int myfn(int x) {\n    return x;\n}', toplevel: true },
+      { name: 'define fn', cat: 'functions', snippet: 'int myfn(int x) {\n    return x;\n}', toplevel: true, langs: ['c', 'cpp'] },
       {
         name: 'namespace',
         cat: 'functions',
@@ -169,20 +243,29 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
         toplevel: true,
         langs: ['cpp'],
       },
+      { name: 'def', cat: 'functions', snippet: 'def myfn(x):\n    return x', toplevel: true, langs: ['python'] },
+      { name: 'function', cat: 'functions', snippet: 'function myfn(x) {\n    return x;\n}', toplevel: true, langs: ['javascript'] },
+      { name: 'fn', cat: 'functions', snippet: 'fn myfn(x: i32) -> i32 {\n    x\n}', toplevel: true, langs: ['rust'] },
     ],
   },
   {
     name: 'Structs',
     color: '#EC4899',
     items: [
-      { name: 'struct field', cat: 'structs', snippet: 'p.x = 0;' },
+      { name: 'struct field', cat: 'structs', snippet: 'p.x = 0;', langs: ['c', 'cpp'] },
       { name: 'define class', cat: 'structs', snippet: 'class MyClass {\n};', toplevel: true, langs: ['cpp'] },
+      { name: 'def class', cat: 'structs', snippet: 'class MyClass:\n    pass', toplevel: true, langs: ['python'] },
+      { name: 'define class', cat: 'structs', snippet: 'class MyClass {\n}', toplevel: true, langs: ['javascript'] },
+      { name: 'struct', cat: 'structs', snippet: 'struct MyClass {\n    x: i32,\n}', toplevel: true, langs: ['rust'] },
     ],
   },
   {
     name: 'Notes',
     color: '#FFE9A8',
-    items: [{ name: '// note', cat: 'comment', snippet: '// note' }],
+    items: [
+      { name: '// note', cat: 'comment', snippet: '// note', langs: ['c', 'cpp', 'javascript', 'rust'] },
+      { name: '# note', cat: 'comment', snippet: '# note', langs: ['python'] },
+    ],
   },
 ]
 
@@ -215,9 +298,13 @@ export interface VarChip extends PaletteItem {
   varName: string
 }
 
-/** Types offered by Make a Variable, per language. */
-export function varTypes(lang: 'c' | 'cpp'): string[] {
-  return lang === 'cpp' ? ['int', 'double', 'bool', 'string'] : ['int', 'double', 'bool']
+/** Types offered by Make a Variable — C/C++ only (D11: dynamically-typed
+ *  languages need no declaration, so the whole Variables section is
+ *  C/C++-gated in the renderer). */
+export function varTypes(lang: SourceLang): string[] {
+  if (lang === 'cpp') return ['int', 'double', 'bool', 'string']
+  if (lang === 'c') return ['int', 'double', 'bool']
+  return []
 }
 
 export function varChips(name: string, type = 'int'): VarChip[] {

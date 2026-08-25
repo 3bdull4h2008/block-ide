@@ -8,6 +8,7 @@ import {
   varChips,
   varTypes,
   listChips,
+  type SourceLang,
 } from '../src/palette'
 import { buildBlocks, harvestVars, layoutStack, flatten } from '../src/blocks'
 import { spliceInsert, insertTopLevel } from '../src/ops'
@@ -16,22 +17,18 @@ import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const ctree = (...p: string[]) => resolve(process.cwd(), '..', 'target', 'debug', ...p)
-const parseClean = (src: string, lang: 'c' | 'cpp' = 'c'): boolean => {
+const parseClean = (src: string, lang: SourceLang = 'c'): boolean => {
   const exe = ctree('ctree_json.exe')
   if (!existsSync(exe)) throw new Error(`missing ${exe}`)
   // NOTE: execFileSync(file, args, options) — args is NOT an option key
   const out = JSON.parse(
-    lang === 'cpp'
-      ? execFileSync(exe, ['cpp'], { input: src, encoding: 'utf8' })
-      : execFileSync(exe, { input: src, encoding: 'utf8' }),
+    execFileSync(exe, lang === 'c' ? [] : [lang], { input: src, encoding: 'utf8' }),
   )
   return !out.has_errors
 }
-const parsesClean = (base: string, snippet: string, lang: 'c' | 'cpp' = 'c'): boolean => {
+const parsesClean = (base: string, snippet: string, lang: SourceLang = 'c'): boolean => {
   const treeJson = JSON.parse(
-    lang === 'cpp'
-      ? execFileSync(ctree('ctree_json.exe'), ['cpp'], { input: base, encoding: 'utf8' })
-      : execFileSync(ctree('ctree_json.exe'), { input: base, encoding: 'utf8' }),
+    execFileSync(ctree('ctree_json.exe'), lang === 'c' ? [] : [lang], { input: base, encoding: 'utf8' }),
   )
   const roots = buildBlocks(treeJson.tree)
   layoutStack(roots, 40, 40)
@@ -57,32 +54,91 @@ describe('Scratch palette structure (1.10)', () => {
   })
 
   it('every group snippet produces parseable code in its intended context', () => {
+    // Per-language authoring contexts for the dynamic/braceless languages.
+    // stmt = snippet inside the entry body; cond = inside its prerequisite
+    // (elif needs if); top = file scope. C/C++ keep the splice-based
+    // machinery below (headerEnd insertion + prerequisite rewriting), which
+    // additionally exercises ops.ts on every chip.
+    const py = (s: string, pad = '    '): string =>
+      s
+        .split('\n')
+        .map((l) => (l.trim() ? pad + l : l))
+        .join('\n')
+    const CTX: Record<
+      'python' | 'javascript' | 'rust',
+      { stmt: (s: string) => boolean; cond: (s: string) => boolean; top: (s: string) => boolean }
+    > = {
+      python: {
+        stmt: (s) =>
+          parseClean(`def main():\n    x = 1\n${py(s)}\n    return 0\n\n\nmain()\n`, 'python'),
+        // elif/else arms FOLLOW their if at sibling level
+        cond: (s) =>
+          parseClean(
+            `def main():\n    x = 1\n    if x:\n        x = 2\n${py(s)}\n    return 0\n\n\nmain()\n`,
+            'python',
+          ),
+        top: (s) => parseClean(`def main():\n    return 0\n\n\nmain()\n\n\n${s}\n`, 'python'),
+      },
+      javascript: {
+        stmt: (s) =>
+          parseClean(
+            `function main() {\n    let x = 1;\n    ${s}\n    return 0;\n}\n\nmain();\n`,
+            'javascript',
+          ),
+        cond: (s) =>
+          parseClean(
+            `function main() {\n    let x = 1;\n    if (x) {\n        x = 2;\n    }\n    ${s}\n    return 0;\n}\n\nmain();\n`,
+            'javascript',
+          ),
+        top: (s) =>
+          parseClean(`function main() {\n    return 0;\n}\n\nmain();\n\n${s}\n`, 'javascript'),
+      },
+      rust: {
+        stmt: (s) => parseClean(`fn main() {\n    let mut x = 1;\n    ${s}\n}\n`, 'rust'),
+        cond: (s) =>
+          parseClean(
+            `fn main() {\n    let mut x = 1;\n    if x > 0 {\n        x += 1;\n    }\n    ${s}\n}\n`,
+            'rust',
+          ),
+        top: (s) => parseClean(`fn main() {\n    let mut x = 1;\n}\n\n${s}\n`, 'rust'),
+      },
+    }
     const base = `#include <stdio.h>\n\nint main(void) {\n    return 0;\n}\n`
+    const cppBase = `#include <iostream>\n\nint main() {\n    std::cout << "hi" << "\\n";\n    return 0;\n}\n`
     for (const g of PALETTE_GROUPS) {
       for (const item of g.items) {
         if (item.reporter !== undefined) continue // expressions: socket drops
         const lang = item.langs?.[0] ?? 'c'
-        // dependency fragments are valid only inside their prerequisite's
-        // context — wrap them the way the dependency system implies
-        let context = base
-        let snippet = item.snippet
-        if (item.requires?.kind === 'if_statement') {
-          // else must directly FOLLOW its if — build the whole context
-          const whole = base.replace(
-            'return 0;',
-            `if (c) {\n        return 1;\n    }\n    ${item.snippet}\n    return 0;`,
-          )
-          expect(parseClean(whole, lang), `${g.name}/${item.name}`).toBe(true)
-          continue
-        } else if (item.requires?.kind === 'switch_statement') {
-          snippet = `switch (x) {\n${item.snippet}\n}`
-        } else if (item.toplevel) {
-          continue // verified by the toplevel suite below
+        if (lang === 'c' || lang === 'cpp') {
+          const ctxBase = lang === 'cpp' ? cppBase : base
+          let snippet = item.snippet
+          if (item.requires?.kind === 'if_statement') {
+            // else must directly FOLLOW its if — build the whole context
+            const whole = ctxBase.replace(
+              /return (0|r);/,
+              `if (c) {\n        return 1;\n    }\n    ${item.snippet}\n    return 0;`,
+            )
+            expect(parseClean(whole, lang), `${g.name}/${item.name}`).toBe(true)
+            continue
+          } else if (item.requires?.kind === 'switch_statement') {
+            snippet = `switch (x) {\n${item.snippet}\n}`
+          } else if (item.toplevel) {
+            expect(
+              parseClean(ctxBase + item.snippet + '\n', lang),
+              `${g.name}/${item.name}`,
+            ).toBe(true)
+            continue
+          }
+          expect(parsesClean(ctxBase, snippet, lang), `${g.name}/${item.name}`).toBe(true)
+        } else {
+          const ctx = CTX[lang]
+          const result = item.requires?.kind
+            ? ctx.cond(item.snippet)
+            : item.toplevel
+              ? ctx.top(item.snippet)
+              : ctx.stmt(item.snippet)
+          expect(result, `${g.name}/${item.name} (${lang})`).toBe(true)
         }
-        expect(
-          parsesClean(context, snippet, lang),
-          `${g.name}/${item.name}`,
-        ).toBe(true)
       }
     }
   })
@@ -123,6 +179,10 @@ describe('Make a Variable (Scratch lifecycle)', () => {
     expect(parsesClean(base, chips[3].snippet)).toBe(true)
     expect(varTypes('c')).toEqual(['int', 'double', 'bool'])
     expect(varTypes('cpp')).toEqual(['int', 'double', 'bool', 'string'])
+    // dynamically-typed languages declare nothing (Variables UI hidden)
+    expect(varTypes('python')).toEqual([])
+    expect(varTypes('javascript')).toEqual([])
+    expect(varTypes('rust')).toEqual([])
   })
 })
 
@@ -181,17 +241,23 @@ describe('Operators category (Scratch green)', () => {
       'a / b',
       'a % b',
     ])
-    expect(bool.map((i) => i.name)).toEqual([
+    // logic splits by language (D11): comparisons are universal (untagged),
+    // symbolic logic serves c/cpp/js/rust, python gets wordy and/or/not
+    const untagged = bool.filter((i) => i.langs === undefined)
+    expect(untagged.map((i) => i.name)).toEqual([
       'a == b',
       'a != b',
       'a < b',
       'a > b',
       'a <= b',
       'a >= b',
-      'a && b',
-      'a || b',
-      'not ok',
     ])
+    const symLogic = bool.filter((i) => (i.langs?.length ?? 0) > 1)
+    expect(symLogic.map((i) => i.name)).toEqual(['a && b', 'a || b', 'not ok'])
+    for (const s of symLogic) expect(s.langs).not.toContain('python')
+    const words = bool.filter((i) => i.langs?.length === 1)
+    expect(words.map((i) => i.name)).toEqual(['a and b', 'a or b', 'not ok'])
+    for (const w of words) expect(w.langs).toEqual(['python'])
     for (const i of ops!.items) {
       expect(reporterFits(i.reporter, i.reporter === 'bool' ? 'bool' : 'number')).toBe(true)
       expect(reporterFits(i.reporter, i.reporter === 'bool' ? 'number' : 'bool')).toBe(false)
@@ -201,9 +267,16 @@ describe('Operators category (Scratch green)', () => {
   it('define fn / namespace are toplevel; call chips are statements', () => {
     const fns = PALETTE_GROUPS.find((g) => g.name === 'Functions')!
     const toplevel = fns.items.filter((i) => i.toplevel)
-    expect(toplevel.map((i) => i.name).sort()).toEqual(['define fn', 'namespace'])
+    // one definition chip per language (+ cpp namespace), all file-scope
+    expect(toplevel.map((i) => [i.name, i.langs?.[0] ?? 'c']).sort()).toEqual([
+      ['def', 'python'],
+      ['define fn', 'c'],
+      ['fn', 'rust'],
+      ['function', 'javascript'],
+      ['namespace', 'cpp'],
+    ])
     for (const i of fns.items) {
-      if (i.name !== 'define fn' && i.name !== 'namespace') expect(i.toplevel).toBeFalsy()
+      if (!i.toplevel) expect(i.name.startsWith('call'), i.name).toBe(true)
     }
   })
 })

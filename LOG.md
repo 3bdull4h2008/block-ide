@@ -1,6 +1,44 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 38: trigger=user: resume plan - wire logos/ into the product, study ALL
+competitors' wins/losses + reviews; inherited broken in-flight D11 front end
+expect: logos on splash/toolbar/about/favicon/icons; D11 front end compiles
+and passes gates; research doc expanded with per-competitor win/loss/reviews
+obs: (1) IN-FLIGHT RESCUE: working tree did not COMPILE (8 TS errors -
+SourceLang still c/cpp-only, Cat missing structs, dead CPP_RE ref, unused
+NEW_TEMPLATES). Fixed: palette SourceLang widened to 5 langs (main.ts Lang
+aliases it), blocks COLORS/BORDER gain structs pink, new-file uses
+NEW_TEMPLATES[langOf(rel)], Variables section gated to C/C++ per D11,
+python control snippets carry `pass` bodies (bare headers violate
+compilable-snippet rule - python blocks are mandatory-body). STALE BINARY
+FOUND: target/debug ctree_json.exe predates py/js/rs grammars - valid python
+reported has_errors=true; cargo build fixes. vitest updated to per-lang
+contexts (elif/else arms must FOLLOW their if as siblings in all langs;
+comparisons untagged=universal, symbolic logic tagged non-python); tsc clean,
+35/35. (2) LOGOS WIRED: splash ->1.png + toolbar ->brand.png (prior session)
+verified; ADDED about dialog (toolbar logo click, brand.png lockup card);
+favicon /logos/logo.png confirmed; src-tauri icons regenerated from logo.png
+(prior session). (3) RESEARCH: docs/COMPETITOR-RESEARCH.md rewritten - 17
+competitors each with WON/LOST/USERS-SAY incl review receipts (Tynker
+Trustpilot billing horror corpus + CSM 'glitchy inferior lost progress';
+mBlock silent-failure teardown; Ardublockly graveyard forensics; Kodu
+shutdown; GameMaker GML Visual newbie-bait demotion; App Inventor 24M/100M;
+Snap first-class CS; MakeCode mediated-transfer RCTs; EduBlocks INTERACT
+2023 usability verdict; Code.org forum pain at the text seam) + failure
+taxonomy (8 classes) + source ledger. Cade wedge re-derived: bidirectional
+file-truth is THE unsolved quadrant the literature names.
+(4) GATE FLAKE ROOT-CAUSED: suite G-UI-E2E failed twice ('ctrl+enter: no
+[exit]') while standalone passed - killed prior runs left a DIRTY journal in
+blockide-gate-data; next boot restored it over the sample and ctrl+enter
+compiled garbage (no exit line). Fix: run_gates wipes journal.json before
+UI-E2E launch + saves build/gates/ui-e2e-last.log for diagnosis. ALL
+FOURTEEN gates PASS exit 0 (48 UI assertions).
+state=SUCCESS | next: user eyes-on (logos + 5-language splash); gap-closers:
+off-ramp ladder, own-solution chaining, keyboard-first palette
+```
+
+```
 RUN 37: trigger=user: typed variable definitions missing, cin can't receive
 input, variable blocks won't drop into cout + competitor/review research
 expect: typed declarations, interactive stdin, forgiving reporter drops,

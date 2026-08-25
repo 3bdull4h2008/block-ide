@@ -14,9 +14,11 @@ export interface CNodeJSON {
 export interface CTreeJSON {
   root: CNodeJSON
   tail: string
+  /** language pack the tree was parsed with (block maps key on it) */
+  lang: string
 }
 
-export type Cat = 'function' | 'control' | 'statement' | 'variables' | 'comment' | 'error'
+export type Cat = 'function' | 'control' | 'statement' | 'variables' | 'comment' | 'error' | 'structs'
 
 /** One renderable chunk of a block header: literal text or an editable,
  *  type-constrained input slot (Scratch-style rounded field). `bool` renders
@@ -52,13 +54,82 @@ export interface BBlock {
   h: number
 }
 
-const CONTROL_KINDS = new Set([
+/** Per-language shape maps (D11): the block renderer is language-generic —
+ *  only the NODE KINDS differ. body = the kind that holds statement rows
+ *  (C braces, python indentation blocks, JS/Rust braces). */
+interface LangShape {
+  body: string
+  controls: Set<string>
+  fns: Set<string>
+  classes: Set<string>
+  /** comment node kind (all five use "comment") */
+}
+
+const C_CONTROLS = new Set([
   'if_statement',
   'for_statement',
   'while_statement',
   'do_statement',
   'switch_statement',
 ])
+
+const LANG_SHAPES: Record<string, LangShape> = {
+  c: {
+    body: 'compound_statement',
+    controls: C_CONTROLS,
+    fns: new Set(['function_definition']),
+    classes: new Set(),
+  },
+  cpp: {
+    body: 'compound_statement',
+    controls: C_CONTROLS,
+    fns: new Set(['function_definition']),
+    classes: new Set(['class_specifier', 'struct_specifier']),
+  },
+  python: {
+    body: 'block',
+    controls: new Set([
+      'if_statement',
+      'for_statement',
+      'while_statement',
+      'try_statement',
+      'with_statement',
+    ]),
+    fns: new Set(['function_definition']),
+    classes: new Set(['class_definition']),
+  },
+  javascript: {
+    body: 'statement_block',
+    controls: new Set([
+      'if_statement',
+      'for_statement',
+      'for_in_statement',
+      'while_statement',
+      'do_statement',
+      'switch_statement',
+      'try_statement',
+    ]),
+    fns: new Set(['function_declaration', 'generator_function_declaration']),
+    classes: new Set(['class_declaration']),
+  },
+  rust: {
+    body: 'block',
+    controls: new Set([
+      'if_expression',
+      'if_let_expression',
+      'match_expression',
+      'loop_expression',
+      'while_expression',
+      'while_let_expression',
+      'for_expression',
+    ]),
+    fns: new Set(['function_item']),
+    classes: new Set(['struct_item', 'enum_item']),
+  },
+}
+
+/** Active shape — set per buildBlocks call (render is single-threaded). */
+let SHAPE: LangShape = LANG_SHAPES.c
 
 /** tree-sitter-c field names that hold a control statement's nested bodies */
 const BODY_FIELDS = new Set(['body', 'consequence', 'alternative'])
@@ -78,7 +149,7 @@ function collapse(s: string): string {
 
 function findCompound(n: CNodeJSON): CNodeJSON | null {
   for (const c of n.children) {
-    if (c.kind === 'compound_statement') return c
+    if (c.kind === SHAPE.body) return c
     const deep = findCompound(c)
     if (deep) return deep
   }
@@ -104,7 +175,7 @@ const SLOT_KINDS: Record<string, PartType> = {
 function headerLeaves(n: CNodeJSON, skip: Set<CNodeJSON>): CNodeJSON[] {
   const out: CNodeJSON[] = []
   const visit = (m: CNodeJSON): void => {
-    if (skip.has(m) || m.kind === 'comment' || m.kind === 'compound_statement') return
+    if (skip.has(m) || m.kind === 'comment' || m.kind === SHAPE.body) return
     if (!m.named && m.text !== null && m.text.trim() === '') return // stray ws token
     const slot = SLOT_KINDS[m.kind]
     if (slot !== undefined || m.children.length === 0) {
@@ -176,8 +247,9 @@ function buildHeader(
 
 function categorize(kind: string): Cat {
   if (kind === 'ERROR' || kind === 'MISSING') return 'error'
-  if (kind === 'function_definition' || kind === 'namespace_definition') return 'function'
-  if (CONTROL_KINDS.has(kind)) return 'control'
+  if (SHAPE.fns.has(kind) || kind === 'namespace_definition') return 'function'
+  if (SHAPE.controls.has(kind)) return 'control'
+  if (SHAPE.classes.has(kind)) return 'structs'
   if (kind === 'comment') return 'comment'
   if (
     kind.endsWith('_statement') ||
@@ -193,9 +265,9 @@ function toBlock(n: CNodeJSON): BBlock {
   const bodies = fieldedBodies(n)
   const compound = findCompound(n)
   // Control statements are ALWAYS Scratch C-mouths — braced or not. Other
-  // containers (functions) keep the compound-based rule.
-  const container = CONTROL_KINDS.has(n.kind) || (compound !== null && n.kind !== 'comment')
-  // children: expanded bodies for controls, raw compound rows for functions
+  // containers (functions/classes) keep the body-based rule.
+  const container = SHAPE.controls.has(n.kind) || (compound !== null && n.kind !== 'comment')
+  // children: expanded bodies for controls, raw body rows for functions
   let kids: BBlock[] = []
   if (container) {
     if (bodies.length > 0) {
@@ -207,7 +279,7 @@ function toBlock(n: CNodeJSON): BBlock {
             ? (b.children.find((c) => c.kind !== 'else') ?? b)
             : b
         if (isBrace(inner)) continue
-        if (inner.kind === 'compound_statement') kids.push(...stackFrom(inner))
+        if (inner.kind === SHAPE.body) kids.push(...stackFrom(inner))
         else kids.push(toBlock(inner))
       }
     } else if (compound !== null) {
@@ -215,7 +287,7 @@ function toBlock(n: CNodeJSON): BBlock {
     }
   }
   const skip = new Set<CNodeJSON>(bodies)
-  const cond = CONTROL_KINDS.has(n.kind) ? conditionSlot(n) : null
+  const cond = SHAPE.controls.has(n.kind) ? conditionSlot(n) : null
   if (cond) skip.add(cond.node)
   let { parts, label } =
     cat === 'error' || cat === 'comment'
@@ -263,6 +335,7 @@ function stackFrom(parent: CNodeJSON): BBlock[] {
 }
 
 export function buildBlocks(tree: CTreeJSON): BBlock[] {
+  SHAPE = LANG_SHAPES[tree.lang] ?? LANG_SHAPES.c
   return stackFrom(tree.root)
 }
 
@@ -444,6 +517,7 @@ export const COLORS: Record<Cat, number> = {
   variables: 0xff8c1a,
   comment: 0xffe9a8,
   error: 0x94a3b8,
+  structs: 0xec4899,
 }
 
 export const BORDER: Record<Cat, number> = {
@@ -453,4 +527,5 @@ export const BORDER: Record<Cat, number> = {
   variables: 0xcc6d10,
   comment: 0xd9b25a,
   error: 0x64748b,
+  structs: 0xbe2e6f,
 }

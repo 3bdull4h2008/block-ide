@@ -368,15 +368,22 @@ fn run_job_opts(
         f(child.id());
     }
 
-    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+    // timeout_ms == 0 → NO deadline: interactive runs (waiting on stdin)
+    // must never be killed mid-typing — the Stop button / hard-stop govern.
+    let deadline = if timeout_ms == 0 {
+        None
+    } else {
+        Some(Instant::now() + Duration::from_millis(timeout_ms))
+    };
     let mut timed_out = false;
     loop {
         match child.try_wait().map_err(|e| e.to_string())? {
             Some(_) => break,
             None => {
-                if Instant::now() >= deadline || super_stop_requested() {
+                let expired = deadline.is_some_and(|d| Instant::now() >= d);
+                if expired || super_stop_requested() {
                     let _ = child.kill();
-                    timed_out = Instant::now() >= deadline;
+                    timed_out = expired;
                     break;
                 }
                 thread::sleep(Duration::from_millis(15));
