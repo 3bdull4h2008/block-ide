@@ -377,6 +377,25 @@ logo.png (favicon via /logos/logo.png); about dialog added to index.html.
 
 ---
 
+## Research Gap-Closers Applied (2026-08-25, RUN 39)
+
+From docs/COMPETITOR-RESEARCH.md ("gap-closers this research mandates") —
+all six landed:
+
+| # | Closer | Evidence base | Status |
+|---|---|---|---|
+| 1 | **Off-ramp ladder**: every finished run auto-reveals split view from Blocks ("that output came from THIS code →"); 🎓 Graduate button switches to real-code view with a welcome note | Blockly Games graduation ladder; GML Visual's undignified fate; MakeCode toggle | ✅ |
+| 2 | **Ownership chaining**: passing level N stores the solution; loading level N starts from YOUR N-1 solution instead of starter code | Blockly's data: ownership beats fill-in-the-blank | ✅ |
+| 3 | **Context-aware instructions**: tour steps close themselves when the action is performed (first edit / first run / first Check); Skip remains | Blockly: popups must verify the action or nobody reads them | ✅ |
+| 4 | **Spaced mastery**: Leitner boxes over passed levels (1/3/7/14-day intervals), ⟳review markers in level select, review notes on load/pass | Field-wide hole (MakeCode critique) | ✅ |
+| 5 | **Keyboard-first palette**: `/` focuses filter, type-to-filter with section collapse, arrows highlight, Enter splices through the same seams (top/toplevel/caret) | Frame-based editing papers: mouse-only blocks die at ~14 | ✅ |
+| 6 | **Never-lose-work hardening**: journal writes rotate 5 backups (`journal-1..5.json`), clear() keeps them for salvage | Tynker/mBlock "lost progress" rage corpus | ✅ |
+
+Pure logic unit-tested (`app/src/academy-extras.ts` + vitest); rotation drill
+extended into `tests/recovery.rs`.
+
+---
+
 ## Validation Infrastructure
 
 | Validator | Purpose | Status |

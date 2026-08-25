@@ -648,9 +648,33 @@ pub struct JournalEntry {
     pub saved_unix: i64,
 }
 
+/// How many rotated history copies of the journal to keep (Tynker/mBlock
+/// rage-proofing: "lost my progress" must be structurally impossible —
+/// even a bad restore can be rolled back through these).
+const JOURNAL_BACKUPS: u32 = 5;
+
+fn journal_backup(dir: &std::path::Path, n: u32) -> std::path::PathBuf {
+    dir.join(format!("journal-{n}.json"))
+}
+
+/// Shift the backup chain: journal-4→5, …, journal-1→2, journal→1. Oldest
+/// copy falls off the end. Best-effort — rotation must never break the write.
+/// Destinations are removed first: Windows rename fails onto existing files.
+fn rotate_journal_backups(dir: &std::path::Path) {
+    for i in (1..JOURNAL_BACKUPS).rev() {
+        let dst = journal_backup(dir, i + 1);
+        let _ = std::fs::remove_file(&dst);
+        let _ = std::fs::rename(journal_backup(dir, i), &dst);
+    }
+    let dst = journal_backup(dir, 1);
+    let _ = std::fs::remove_file(&dst);
+    let _ = std::fs::rename(dir.join("journal.json"), &dst);
+}
+
 /// Atomic journal write into an explicit directory (testable seam).
 pub fn journal_write_at(dir: &std::path::Path, entry: &JournalEntry) -> Result<(), String> {
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    rotate_journal_backups(dir);
     let p = dir.join("journal.json");
     let s = serde_json::to_string(entry).map_err(|e| e.to_string())?;
     // write-temp-then-rename so a kill mid-write never corrupts the journal

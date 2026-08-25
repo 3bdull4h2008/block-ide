@@ -53,6 +53,7 @@
           <button class="vm active" data-view="split" title="Blocks + text (Ctrl+2)">Split</button>
           <button class="vm" data-view="blocks" title="Blocks only (Ctrl+1)">Blocks</button>
           <button class="vm" data-view="text" title="Text only (Ctrl+3)">Text</button>
+          <button id="graduate" title="The off-ramp: switch to real-code view. Blocks come back with Ctrl+1.">🎓 Graduate</button>
         </span>
         <span class="hint">Ctrl+Enter run · Ctrl+Z/Y undo/redo · Ctrl+S save · double-click a block to edit</span>
         <button id="theme-toggle" title="Toggle light/dark theme">☾</button>
@@ -61,6 +62,7 @@
       </div>
       <div id="sidebar">
         <div id="files"></div>
+        <input id="pal-filter" type="text" placeholder="filter blocks  ( / )" spellcheck="false" autocomplete="off" />
         <div id="palette"></div>
         <div id="academy">
           <strong>Academy</strong>

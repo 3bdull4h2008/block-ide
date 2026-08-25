@@ -61,4 +61,31 @@ fn crash_recovery_drill() {
         "blank journal surfaced as recovery"
     );
     journal_clear_at(&d);
+
+    // 5. backup rotation (never-lose-work hardening): every write shifts the
+    //    previous journal into journal-1.json … journal-5.json; the 6th-oldest
+    //    copy falls off; clear() leaves backups intact for manual salvage
+    journal_clear_at(&d);
+    for i in 0..7u32 {
+        journal_write_at(
+            &d,
+            &JournalEntry { path: String::new(), content: format!("v{i}"), saved_unix: i as i64 },
+        )
+        .unwrap();
+    }
+    let read_backup = |n: u32| -> Option<String> {
+        std::fs::read_to_string(d.join(format!("journal-{n}.json")))
+            .ok()
+            .map(|s| serde_json::from_str::<JournalEntry>(&s).expect("backup json").content)
+    };
+    assert_eq!(journal_read_at(&d).map(|j| j.content), Some("v6".into()));
+    for n in 1..=5u32 {
+        assert_eq!(read_backup(n), Some(format!("v{}", 6 - n)), "backup {n}");
+    }
+    assert!(!d.join("journal-6.json").exists(), "rotation kept a 6th backup");
+    journal_clear_at(&d);
+    assert!(read_backup(1) == Some("v5".into()), "clear must keep backups");
+    for n in 1..=5u32 {
+        let _ = std::fs::remove_file(d.join(format!("journal-{n}.json")));
+    }
 }

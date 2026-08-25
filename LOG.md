@@ -1,6 +1,35 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 39: trigger=user: apply ALL missing things from competitor research
+expect: six gap-closers landed (off-ramp ladder, ownership chaining,
+context-aware instructions, spaced mastery, keyboard-first palette, backup
+rotation); gates green
+obs: (1) BACKUP ROTATION: journal_write_at rotates journal-1..5.json before
+each write; clear() keeps backups for salvage; FIRST TRY BUG caught by the
+drill: std::fs::rename FAILS onto existing files on Windows - steady-state
+rotation would have silently no-op'd; destinations now removed first.
+recovery drill extended (7 writes -> exact chain asserted). (2) OWNERSHIP
+CHAINING + SPACED MASTERY as pure module academy-extras.ts (nextMastery/
+masteryDue/masteryNextIn/previousLevel) + 5 vitest cases; UI: pass stores
+blockide-levelsol + promotes Leitner box (1/3/7/14d), load seeds from YOUR
+prev solution with console note, level select shows (backslash-o)review
+markers. (3) CONTEXT-AWARE TOUR: steps carry until-events fired ONLY by real
+actions (drop/slot/keyboard edits -> 'edit', startRun -> 'run', Check ->
+'check'); matching step self-closes w/ blip; Skip stays; e2e unaffected
+(script presets tour-done). (4) OFF-RAMP LADDER: finishRun reveals split
+from blocks-only ('that output came from THIS code'), graduate button ->
+text view + note. (5) KEYBOARD-FIRST PALETTE: / focuses #pal-filter,
+type-to-filter hides chips + collapses empty sections, arrows highlight,
+Enter splices via existing seams (top/toplevel/caret-anchor spliceInsert);
+reporter chips explain instead of splicing. tsc clean; vitest 40/40;
+ALL FOURTEEN gates PASS exit 0.
+state=SUCCESS | next: user eyes-on (/ then type 'cout', Enter in main);
+research backlog now fully applied - next candidates: cloud-less backup
+UI, hint-tier UX polish
+```
+
+```
 RUN 38: trigger=user: resume plan - wire logos/ into the product, study ALL
 competitors' wins/losses + reviews; inherited broken in-flight D11 front end
 expect: logos on splash/toolbar/about/favicon/icons; D11 front end compiles

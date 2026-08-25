@@ -35,6 +35,13 @@ import {
   listChips,
   type PaletteItem,
 } from './palette'
+import {
+  nextMastery,
+  masteryDue,
+  masteryNextIn,
+  previousLevel,
+  type MasteryState,
+} from './academy-extras'
 import './style.css'
 
 interface DragPayload {
@@ -250,6 +257,11 @@ function markDirty(): void {
     t.classList.toggle('active', t.dataset.path === activePath)
   }
 }
+
+// Context-aware instructions (Blockly's proven rule: a popup only closes
+// when the learner actually PERFORMS the action). The tour registers an
+// advance hook; real user actions fire events — never timers.
+const tourHooks: { advance?: (ev: 'edit' | 'run' | 'check') => void } = {}
 
 function setSrc(next: string, kind: 'op' | 'type' = 'op'): void {
   hist.push(src, kind)
@@ -796,6 +808,7 @@ async function onDragEnd(e: PointerEvent): Promise<void> {
   if (d.toplevel) {
     setSrc(insertTopLevel(src, roots, d.snippet ?? ''))
     void canonicalize()
+    tourHooks.advance?.('edit')
     blip(740, 0.07, 'sine', 0.08)
     return
   }
@@ -804,6 +817,7 @@ async function onDragEnd(e: PointerEvent): Promise<void> {
   if (d.insertTop) {
     setSrc(`${d.snippet ?? ''}\n${src}`)
     void canonicalize()
+    tourHooks.advance?.('edit')
     blip(740, 0.07, 'sine', 0.08)
     return
   }
@@ -824,6 +838,7 @@ async function onDragEnd(e: PointerEvent): Promise<void> {
   setTimeout(() => blip(980, 0.05, 'sine', 0.05), 60)
   setSrc(next)
   void canonicalize()
+  tourHooks.advance?.('edit')
 }
 
 function attachHeaderEvents(
@@ -858,6 +873,7 @@ function commitSlotValue(s: SlotHit, raw: string): string | null {
   if (final === s.part.text) return null
   setSrc(src.slice(0, s.part.start) + final + src.slice(s.part.end))
   void canonicalize()
+  tourHooks.advance?.('edit')
   blip(660, 0.05, 'sine', 0.06)
   return null
 }
@@ -1041,10 +1057,18 @@ function finishRun(r: {
   if (r.stderr) out += (out ? '\n[stderr] ' : '[stderr] ') + r.stderr
   out += `\n[exit ${r.exit}${r.timed_out ? ', timed out' : ''}]`
   consoleEl.textContent = out.trim() || '(no output)'
+  // Off-ramp ladder (Blockly playbook — show the REAL code after every run):
+  // blocks-only users get split view revealed the moment their program ends,
+  // so the text they generated is always on screen.
+  if (viewMode === 'blocks') {
+    setView('split')
+    statusEl.textContent = 'run finished — that output came from THIS code →'
+  }
 }
 
 async function startRun(): Promise<void> {
   consoleEl.textContent = 'running…'
+  tourHooks.advance?.('run')
   lastFrame = u32max
   downKeys.clear()
   running = true
@@ -1484,6 +1508,7 @@ function makeReporterChip(item: PaletteItem): HTMLDivElement {
   el.className = `pal pal-${item.cat}${hex ? ' pal-hex' : ' pal-reporter'}`
   el.dataset.cat = item.cat
   el.textContent = item.name
+  ;(el as unknown as { __item?: PaletteItem }).__item = item
   el.title = `Drop into a ${hex ? 'hex condition' : 'round'} socket, then click it to edit the operands`
   el.addEventListener('pointerdown', (e) => {
     if (el.classList.contains('locked')) {
@@ -1505,6 +1530,7 @@ function makeVarChip(item: PaletteItem & { varName?: string }, list = false): HT
   const el = document.createElement('div')
   el.className = `pal pal-variables${isReporterChip(item) ? ' pal-reporter' : ''}${list ? ' pal-list' : ''}`
   el.dataset.cat = 'variables'
+  ;(el as unknown as { __item?: PaletteItem }).__item = item
   el.dataset.var = item.varName ?? item.name
   el.textContent = item.name
   el.addEventListener('pointerdown', (e) => {
@@ -1629,6 +1655,7 @@ function renderPalette(): void {
     el.className = `pal pal-${item.cat}${depOk ? '' : ' pal-dep'}`
     el.dataset.cat = item.cat
     el.textContent = item.name
+    ;(el as unknown as { __item?: PaletteItem }).__item = item
     if (!depOk) {
       const need = item.requires!.kind ?? item.requires!.include!
       el.title = `Needs ${need} in the program first`
@@ -1766,9 +1793,105 @@ function renderPalette(): void {
     for (const d of dots) d.dot.classList.toggle('active', d.name === active)
   }
 
+  applyPalFilter()
   paletteEl.scrollTop = st
   renderPaletteLocks()
 }
+
+// ------------------------------------------ keyboard-first palette (research:
+// frame-based editing papers — blocks must scale past mouse-only dragging)
+const palFilter = document.getElementById('pal-filter') as HTMLInputElement
+let kbdIdx = -1
+
+function visibleChips(): HTMLElement[] {
+  return Array.from(
+    paletteEl.querySelectorAll<HTMLElement>('.pal, #make-var, #make-list'),
+  ).filter((el) => !el.classList.contains('pal-hide'))
+}
+
+/** Type-to-filter: hide non-matching chips, collapse emptied sections. */
+function applyPalFilter(): void {
+  const q = palFilter.value.trim().toLowerCase()
+  kbdIdx = -1
+  for (const el of Array.from(
+    paletteEl.querySelectorAll<HTMLElement>('.pal, #make-var, #make-list'),
+  )) {
+    el.classList.remove('pal-kbd')
+    el.classList.toggle('pal-hide', q !== '' && !(el.textContent ?? '').toLowerCase().includes(q))
+  }
+  for (const head of Array.from(paletteEl.querySelectorAll<HTMLElement>('.pal-group'))) {
+    let visible = 0
+    let n = head.nextElementSibling as HTMLElement | null
+    while (n && !n.classList.contains('pal-group')) {
+      if (!n.classList.contains('pal-hide')) visible++
+      n = n.nextElementSibling as HTMLElement | null
+    }
+    head.classList.toggle('pal-hide', q !== '' && visible === 0)
+  }
+}
+
+/** Enter on a highlighted chip splices it through the same seams as a drag:
+ *  includes → top, toplevel → file scope, statements → at your caret. */
+function keyboardActivateChip(el: HTMLElement): void {
+  if (el.id === 'make-var' || el.id === 'make-list') {
+    ;(el as HTMLButtonElement).click()
+    return
+  }
+  const item = (el as unknown as { __item?: PaletteItem }).__item
+  if (!item) return
+  if (item.reporter !== undefined) {
+    consoleEl.textContent = 'reporter chips drop INTO sockets — drag one onto a round or hex slot'
+    blip(200, 0.06, 'square', 0.03)
+    return
+  }
+  tourHooks.advance?.('edit')
+  blip(740, 0.07, 'sine', 0.08)
+  if (item.top) {
+    setSrc(`${item.snippet}\n${src}`)
+    void canonicalize()
+    return
+  }
+  if (item.toplevel) {
+    setSrc(insertTopLevel(src, roots, item.snippet))
+    void canonicalize()
+    return
+  }
+  try {
+    const anchor = caretAnchor ?? pickAnchor(roots, src.length)
+    const off = Math.max(0, Math.min(src.length, caretOffset(roots, src.length, anchor)))
+    const next = spliceInsert(src, off, item.snippet)
+    if (next !== null) {
+      setSrc(next)
+      void canonicalize()
+      return
+    }
+  } catch {
+    /* fall through to the hint */
+  }
+  consoleEl.textContent = 'no insertion point here — click inside main first'
+}
+
+palFilter.addEventListener('input', applyPalFilter)
+palFilter.addEventListener('keydown', (e) => {
+  const chips = visibleChips()
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault()
+    if (chips.length === 0) return
+    kbdIdx =
+      e.key === 'ArrowDown' ? Math.min(kbdIdx + 1, chips.length - 1) : Math.max(kbdIdx - 1, 0)
+    chips.forEach((c, i) => c.classList.toggle('pal-kbd', i === kbdIdx))
+    chips[kbdIdx].scrollIntoView({ block: 'nearest' })
+  } else if (e.key === 'Enter') {
+    e.preventDefault()
+    const el = chips[kbdIdx]
+    if (el) keyboardActivateChip(el)
+  } else if (e.key === 'Escape') {
+    e.preventDefault()
+    palFilter.value = ''
+    applyPalFilter()
+    srcEl.focus({ preventScroll: true })
+  }
+})
 
 // ---------------------------------------------------------------- academy
 interface ProfileOut {
@@ -1790,6 +1913,19 @@ const hintBtn = document.getElementById('hint-btn') as HTMLButtonElement
 let profile: ProfileOut | null = null
 let hints: string[] = []
 let hintTier = 0
+
+// Research gap-closers (docs/COMPETITOR-RESEARCH.md): OWNERSHIP CHAINING —
+// level N starts from the student's own N-1 solution, not a fresh starter —
+// and SPACED MASTERY — passed levels resurface for review on a Leitner
+// ladder (1/3/7/14-day intervals). Both offline in localStorage.
+const nowSec = (): number => Math.floor(Date.now() / 1000)
+const levelSols = JSON.parse(
+  localStorage.getItem('blockide-levelsol') ?? '{}',
+) as Record<string, string>
+const mastery = JSON.parse(
+  localStorage.getItem('blockide-mastery') ?? '{}',
+) as Record<string, MasteryState>
+let levelsCache: LevelInfo[] = []
 
 // --------------------------------------------- D7 mode split: sandbox|academy
 type AppMode = 'sandbox' | 'academy'
@@ -1833,11 +1969,13 @@ async function refreshProfile(): Promise<void> {
 async function refreshLevels(): Promise<void> {
   try {
     const levels = await invoke<LevelInfo[]>('academy_levels')
+    levelsCache = levels
     levelSelect.innerHTML = ''
     for (const l of levels) {
       const o = document.createElement('option')
+      const due = masteryDue(mastery[l.id], nowSec()) ? ' ⟳review' : ''
       o.value = l.id
-      o.textContent = `W${l.world}${l.done ? ' ✓' : ''} · ${l.title} (${l.xp}xp)`
+      o.textContent = `W${l.world}${l.done ? ' ✓' : ''} · ${l.title} (${l.xp}xp)${due}`
       levelSelect.appendChild(o)
     }
   } catch {
@@ -1850,12 +1988,20 @@ document.getElementById('level-load')?.addEventListener('click', async () => {
   if (!id) return
   try {
     const l = await invoke<{ starter: string; hints: string[] }>('academy_load', { levelId: id })
+    // ownership chaining: seed from the student's own previous solution
+    const prev = previousLevel(levelsCache, id)
+    const chained = prev ? levelSols[prev.id] : undefined
     caretAnchor = null
-    setSrc(l.starter)
+    setSrc(chained?.trim() ? chained : l.starter)
     hints = l.hints
     hintTier = 0
     updateHintBtn()
-    consoleEl.textContent = `[academy] ${id} loaded — ${hints.length} hints available. Write code, press Check!`
+    consoleEl.textContent = chained?.trim()
+      ? `[academy] ${id} loaded — starting from YOUR "${prev!.id}" solution (ownership chaining). ${hints.length} hints available.`
+      : `[academy] ${id} loaded — ${hints.length} hints available. Write code, press Check!`
+    if (masteryDue(mastery[id], nowSec())) {
+      consoleEl.textContent += '\n[academy] ⟳ spaced review: you solved this before — again cements it.'
+    }
   } catch (e) {
     consoleEl.textContent = String(e)
   }
@@ -1885,13 +2031,22 @@ document.getElementById('check-btn')?.addEventListener('click', async () => {
       { levelId: id, src },
     )
     if (r.passed) {
+      tourHooks.advance?.('check')
+      // record THIS solution (ownership chaining seeds the next level) and
+      // promote the spaced-mastery box
+      levelSols[id] = src
+      localStorage.setItem('blockide-levelsol', JSON.stringify(levelSols))
+      mastery[id] = nextMastery(mastery[id], nowSec())
+      localStorage.setItem('blockide-mastery', JSON.stringify(mastery))
+      const review = masteryNextIn(mastery[id])
       consoleEl.textContent =
         r.xp_awarded > 0
-          ? `[academy] PASSED ✓  +${r.xp_awarded} XP (total ${r.total_xp})`
-          : `[academy] PASSED ✓  (already completed before — no extra XP)`
+          ? `[academy] PASSED ✓  +${r.xp_awarded} XP (total ${r.total_xp}) · solution saved — the next level starts from it · next ⟳review in ${review}`
+          : `[academy] PASSED ✓  (already completed before — no extra XP) · next ⟳review in ${review}`
       await refreshProfile()
       await refreshLevels()
     } else {
+      tourHooks.advance?.('check')
       const bad = r.results.filter((x) => !x.ok).map((x) => `test[${x.index}]`)
       consoleEl.textContent = `[academy] failed hidden tests: ${bad.join(', ')} — take a hint?`
     }
@@ -1999,6 +2154,16 @@ function setView(v: ViewMode): void {
 viewBtns.forEach((b) =>
   b.addEventListener('click', () => setView(b.dataset.view as ViewMode)),
 )
+
+// The off-ramp made visible (research: tools whose text mode has "dignity"
+// keep their graduates — GML Visual's lesson inverted). One click switches
+// to the real-code view; blocks stay one Ctrl+1 away, forever.
+document.getElementById('graduate')?.addEventListener('click', () => {
+  setView('text')
+  blip(880, 0.09, 'sine', 0.07)
+  consoleEl.textContent =
+    '[graduate] You are writing REAL code now — the same file the blocks were showing. Ctrl+1 brings the blocks back anytime.'
+})
 
 // ------------------------------------------------------- theme + keybinds
 const themeBtn = document.getElementById('theme-toggle') as HTMLButtonElement
@@ -2174,15 +2339,41 @@ window.addEventListener('keydown', (e) => {
   } else if (e.ctrlKey && e.key === '3') {
     e.preventDefault()
     setView('text')
+  } else if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
+    // keyboard-first palette: / focuses the block filter from anywhere
+    const t = e.target as HTMLElement | null
+    if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT')) return
+    e.preventDefault()
+    palFilter.focus()
+    palFilter.select()
   }
 })
 
 // --------------------------------------------------------- onboarding tour
-const TOUR_STEPS: [string, string][] = [
-  ['Welcome to Cade', 'Real code on disk is the truth. Blocks are a live view of it — break either one and they stay in sync.'],
-  ['Drag & edit blocks', 'Drag chips from the palette into loops or main. Double-click any block to edit its text. Drag a block to move it.'],
-  ['Run & see', 'Ctrl+Enter runs your program. Output lands in the console, graphics in the Stage below, memory boxes appear when you tick "memory".'],
-  ['Learn in the Academy', 'Pick a level in the sidebar, press Load, solve it, then Check to earn XP. New block kinds unlock as you go.'],
+// Context-aware instructions (Blockly's proven pattern: nobody reads
+// instructions — popups must VERIFY the action before closing). Steps with
+// an `until` event close themselves when the learner actually does the
+// thing; Next always remains as an escape hatch.
+const TOUR_STEPS: { title: string; body: string; until?: 'edit' | 'run' | 'check' }[] = [
+  {
+    title: 'Welcome to Cade',
+    body: 'Real code on disk is the truth. Blocks are a live view of it — break either one and they stay in sync.',
+  },
+  {
+    title: 'Drag & edit blocks',
+    body: 'Drag a chip from the palette into main, or double-click any block text and change it. This step closes when you do.',
+    until: 'edit',
+  },
+  {
+    title: 'Run & see',
+    body: 'Press Ctrl+Enter to run YOUR program. Output lands in the console. This step closes when you run it.',
+    until: 'run',
+  },
+  {
+    title: 'Learn in the Academy',
+    body: 'Pick a level, press Load, solve it, then press Check for XP. This step closes on your first Check.',
+    until: 'check',
+  },
 ]
 
 function startTour(): void {
@@ -2192,21 +2383,33 @@ function startTour(): void {
   const body = document.getElementById('tour-body') as HTMLParagraphElement
   const dots = document.getElementById('tour-dots') as HTMLSpanElement
   const next = document.getElementById('tour-next') as HTMLButtonElement
-  const show = (): void => {
-    ;[title.textContent, body.textContent] = TOUR_STEPS[step]
-    dots.textContent = `${step + 1} / ${TOUR_STEPS.length}`
-    next.textContent = step === TOUR_STEPS.length - 1 ? 'Start coding' : 'Next'
+  const finish = (): void => {
+    overlay.style.display = 'none'
+    localStorage.setItem('tour-done', '1')
+    tourHooks.advance = undefined
   }
-  overlay.style.display = 'flex'
-  show()
-  next.onclick = () => {
-    step++
+  const show = (): void => {
+    const s = TOUR_STEPS[step]
+    ;[title.textContent, body.textContent] = [s.title, s.body]
+    dots.textContent = `${step + 1} / ${TOUR_STEPS.length}`
+    next.textContent = s.until ? `Skip — do it myself` : step === TOUR_STEPS.length - 1 ? 'Start coding' : 'Next'
+  }
+  const advanceTo = (n: number): void => {
+    step = n
     if (step >= TOUR_STEPS.length) {
-      overlay.style.display = 'none'
-      localStorage.setItem('tour-done', '1')
+      finish()
       return
     }
     show()
+  }
+  overlay.style.display = 'flex'
+  show()
+  next.onclick = () => advanceTo(step + 1)
+  tourHooks.advance = (ev) => {
+    if (overlay.style.display === 'flex' && TOUR_STEPS[step]?.until === ev) {
+      blip(880, 0.08, 'sine', 0.06)
+      advanceTo(step + 1)
+    }
   }
 }
 // tour is triggered by beginSession (after the splash) — not on a timer

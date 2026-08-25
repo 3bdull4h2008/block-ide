@@ -777,6 +777,41 @@ select:focus-visible,
   margin: 2px 0;
 }
 
+/* ---- keyboard-first palette (research gap-closer: blocks must scale past
+   the mouse — frame-based editing papers) ---- */
+
+#pal-filter {
+  margin: 0;
+  padding: 5px 9px;
+  border: 2px solid rgba(8, 145, 178, 0.3);
+  border-radius: 9px;
+  background: var(--panel, #fff);
+  color: var(--fg, #164e63);
+  font-family: inherit;
+  font-size: 11px;
+  outline: none;
+}
+
+#pal-filter:focus-visible {
+  border-color: var(--accent, #0891b2);
+}
+
+.pal-kbd {
+  outline: 2.5px solid var(--accent, #0891b2) !important;
+  outline-offset: -1px;
+}
+
+.pal-hide {
+  display: none !important;
+}
+
+/* ---- graduate button: the off-ramp made visible ---- */
+
+#graduate {
+  font-size: 10.5px;
+  padding: 3px 8px;
+}
+
 #splash-logo {
   width: 120px;
   display: block;
