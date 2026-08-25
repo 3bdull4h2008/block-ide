@@ -269,6 +269,52 @@ check(
   (await ev(`window.__langOf('main.cpp') === 'cpp' && window.__langOf('main.cc') === 'cpp' && window.__langOf('main.c') === 'c'`)) === true,
 );
 
+// 16. per-language palette + dependency-gated chips (cpp session)
+check(
+  'lang palette: printf absent in C++ session',
+  (await ev(`Array.from(document.querySelectorAll('.pal')).some(p => p.textContent === 'printf')`)) === false,
+);
+check(
+  'lang palette: cout chips present in C++ session',
+  (await ev(`Array.from(document.querySelectorAll('.pal')).some(p => p.textContent === 'cout text')`)) === true,
+);
+check(
+  'dep: cout enabled (sample includes <iostream>)',
+  (await ev(`(() => { const c = Array.from(document.querySelectorAll('.pal')).find(p => p.textContent === 'cout text'); return !!c && !c.classList.contains('pal-dep'); })()`)) === true,
+);
+check(
+  'dep: else gated while no if exists in program',
+  (await ev(`(() => { const c = Array.from(document.querySelectorAll('.pal')).find(p => p.textContent === 'else'); return !!c && c.classList.contains('pal-dep'); })()`)) === true,
+);
+
+// 17. C session via splash: stdio palette comes back
+await send('Page.reload');
+// cold boot can outlast any fixed wait (top-level pixi await) — poll until
+// the splash is actually interactive, then until the session really began
+let splashReady = false;
+for (let i = 0; i < 60 && !splashReady; i++) {
+  await new Promise((r) => setTimeout(r, 250));
+  splashReady =
+    (await ev(`window.__bootDone === true && !!document.querySelector('.splash-lang[data-lang=\"c\"]')`)) === true;
+}
+check('splash: interactive after reload', splashReady);
+await ev(`document.querySelector('.splash-lang[data-lang=\"c\"]').click()`);
+let sessionReady = false;
+for (let i = 0; i < 40 && !sessionReady; i++) {
+  await new Promise((r) => setTimeout(r, 250));
+  sessionReady =
+    (await ev(`window.__activeLang() === 'c' && document.getElementById('src').value.length > 0`)) === true;
+}
+check('lang: session is C with content', sessionReady);
+check(
+  'lang palette: printf back in C session',
+  (await ev(`Array.from(document.querySelectorAll('.pal')).some(p => p.textContent === 'printf')`)) === true,
+);
+check(
+  'lang palette: cout absent in C session',
+  (await ev(`Array.from(document.querySelectorAll('.pal')).some(p => p.textContent === 'cout text')`)) === false,
+);
+
 await shot(process.env.TEMP + '\\ui-e2e.png');
 console.log(failures === 0 ? '[G-UI-E2E] PASS' : `[G-UI-E2E] FAIL (${failures})`);
 process.exit(failures === 0 ? 0 : 1);

@@ -17,6 +17,7 @@ import {
   partWidth,
   type BBlock,
   type BlockPart,
+  type CNodeJSON,
   type CTreeJSON,
 } from './blocks'
 import { History } from './history'
@@ -45,6 +46,8 @@ interface DragPayload {
   slotKind?: 'round' | 'bool'
   /** always splices at file scope (function definitions) */
   toplevel?: boolean
+  /** splice at the very top of the file (#include chips) */
+  insertTop?: boolean
 }
 
 const SAMPLE = `#include <stdio.h>
@@ -195,9 +198,35 @@ async function render(source: string): Promise<void> {
     })
     roots = buildBlocks(out.tree)
     layoutStack(roots, 40, 40)
-    // palette's variable section reflects the program's own data
+    // palette reflects the program: harvested vars + node kinds/includes
+    // (dependency-gated chips re-evaluate when the signature changes)
+    const kinds = new Set<string>()
+    const includes = new Set<string>()
+    const walkSig = (n: { kind: string; children: unknown[]; text: string | null; pre: string }): string => {
+      kinds.add(n.kind)
+      let acc = n.pre + (n.text ?? '')
+      for (const c of n.children as never[]) walkSig(c as never)
+      return acc
+    }
+    const walkInc = (n: CNodeJSON): void => {
+      if (n.kind === 'preproc_include') {
+        includes.add(
+          n.children
+            .map((c) => c.text ?? '')
+            .join('')
+            .trim(),
+        )
+      }
+      for (const c of n.children) walkInc(c)
+    }
+    walkInc(out.tree.root)
+    const sig = `${[...kinds].sort().join(',')}|${[...includes].sort().join(',')}`
     const nextHarvest = harvestVars(out.tree.root)
-    if (nextHarvest.join('\u0000') !== harvestedVars.join('\u0000')) {
+    const nextSig = `${sig}|${nextHarvest.join('\u0000')}`
+    if (nextSig !== paletteSignature) {
+      paletteSignature = nextSig
+      programKinds = kinds
+      programIncludes = includes
       harvestedVars = nextHarvest
       renderPalette()
     }
@@ -673,6 +702,14 @@ async function onDragEnd(e: PointerEvent): Promise<void> {
   // function definitions splice at FILE SCOPE (never nested in C)
   if (d.toplevel) {
     setSrc(insertTopLevel(src, roots, d.snippet ?? ''))
+    void canonicalize()
+    blip(740, 0.07, 'sine', 0.08)
+    return
+  }
+
+  // includes splice at the VERY TOP of the file
+  if (d.insertTop) {
+    setSrc(`${d.snippet ?? ''}\n${src}`)
     void canonicalize()
     blip(740, 0.07, 'sine', 0.08)
     return
@@ -1306,6 +1343,9 @@ hostEl.addEventListener(
 const knownVars: string[] = JSON.parse(localStorage.getItem('blockide-vars') ?? '[]')
 const knownLists: string[] = JSON.parse(localStorage.getItem('blockide-lists') ?? '[]')
 let harvestedVars: string[] = [] // declared in the open file (file is truth)
+let paletteSignature = ''
+let programKinds = new Set<string>()
+let programIncludes = new Set<string>()
 
 function saveVars(): void {
   localStorage.setItem('blockide-vars', JSON.stringify(knownVars))
@@ -1452,17 +1492,36 @@ function renderPalette(): void {
     return head
   }
   const addChip = (item: PaletteItem): void => {
+    // per-language palette (D3): chips declare which languages they serve
+    if (item.langs !== undefined && !item.langs.includes(activeLang)) return
     if (item.reporter !== undefined) {
       paletteEl.appendChild(makeReporterChip(item))
       return
     }
+    // Scratch's dependency rule: some blocks need another block to exist
+    // (else needs if, cout needs <iostream>…)
+    const depOk =
+      item.requires === undefined ||
+      ((item.requires.kind === undefined || programKinds.has(item.requires.kind)) &&
+        (item.requires.include === undefined ||
+          [...programIncludes].some((inc) => inc.includes(item.requires!.include!))))
     const el = document.createElement('div')
-    el.className = `pal pal-${item.cat}`
+    el.className = `pal pal-${item.cat}${depOk ? '' : ' pal-dep'}`
     el.dataset.cat = item.cat
     el.textContent = item.name
+    if (!depOk) {
+      const need = item.requires!.kind ?? item.requires!.include!
+      el.title = `Needs ${need} in the program first`
+    }
     el.addEventListener('pointerdown', (e) => {
       if (el.classList.contains('locked')) {
         e.preventDefault()
+        return
+      }
+      if (!depOk) {
+        e.preventDefault()
+        blip(200, 0.08, 'square', 0.04)
+        consoleEl.textContent = `"${item.name}" needs ${item.requires!.kind ?? item.requires!.include!} in the program first`
         return
       }
       e.preventDefault()
@@ -1471,6 +1530,7 @@ function renderPalette(): void {
         snippet: item.snippet,
         cat: item.cat,
         toplevel: item.toplevel,
+        insertTop: item.top,
       })
     })
     paletteEl.appendChild(el)
@@ -1898,52 +1958,46 @@ async function beginFromRecent(entry: RecentEntry): Promise<void> {
 
 const splashEl = document.getElementById('splash') as HTMLDivElement
 function wireSplash(): void {
-  // recent files (top 5, newest first)
+  // Blender-style recent files: bold name + dim path, hover highlight
   const list = document.getElementById('recent-list') as HTMLDivElement
-  const recents = recentList().slice(0, 5)
+  const recents = recentList().slice(0, 6)
   list.innerHTML = ''
   if (recents.length === 0) {
-    list.innerHTML = '<span class="m-free">no recent files yet</span>'
+    list.innerHTML = '<span class="m-free">no recent files yet — open a folder to begin</span>'
   }
   for (const r of recents) {
     const el = document.createElement('div')
     el.className = 'recent-item'
-    el.textContent = `${r.rel.split('/').pop()} — ${r.root}`
-    el.title = r.rel
+    const name = document.createElement('b')
+    name.textContent = r.rel.split('/').pop() ?? r.rel
+    const path = document.createElement('span')
+    path.textContent = r.root
+    el.append(name, path)
     el.addEventListener('click', () => void beginFromRecent(r))
     list.appendChild(el)
   }
-  // language cards
+  // language cards — the ONLY way past the splash (no timer)
   splashEl.querySelectorAll<HTMLButtonElement>('.splash-lang').forEach((b) => {
     b.addEventListener('click', () => {
       blip(740, 0.07, 'sine', 0.06)
-      beginSession(b.dataset.lang as 'c' | 'cpp')
+      void beginSession(b.dataset.lang as 'c' | 'cpp')
     })
   })
-  // auto-start with C unless the user interacts with the splash
-  const bar = document.getElementById('splash-bar-i') as HTMLElement
-  bar.style.transition = 'none'
-  bar.style.width = '100%'
-  requestAnimationFrame(() => {
-    bar.style.transition = 'width 8s linear'
-    bar.style.width = '0%'
+  // footer: Open Folder… (same dialog as the toolbar button)
+  document.getElementById('splash-open')?.addEventListener('click', () => {
+    void beginSession('c').then(() => {
+      window.setTimeout(() => {
+        document.getElementById('open-folder')?.click()
+      }, 150)
+    })
   })
-  let engaged = false
-  splashEl.addEventListener(
-    'pointerdown',
-    () => {
-      engaged = true
-      bar.style.transition = 'none'
-      bar.style.width = '100%'
-    },
-    { once: true },
-  )
-  setTimeout(() => {
-    if (!engaged && splashEl.style.display !== 'none') beginSession('c')
-  }, 8200)
 }
 
 wireSplash()
+// module-eval-complete signal for headless drivers: static splash markup
+// exists BEFORE this line (top-level pixi await), so DOM presence alone
+// does not mean the click handlers are wired yet
+;(window as unknown as { __bootDone?: boolean }).__bootDone = true
 
 srcEl.addEventListener('input', () => journalSchedule())
 window.addEventListener('beforeunload', () => {

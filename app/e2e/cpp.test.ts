@@ -9,7 +9,8 @@ const ctree = (...p: string[]) => resolve(process.cwd(), '..', 'target', 'debug'
 function parseCpp(src: string): CTreeJSON {
   const exe = ctree('ctree_json.exe')
   if (!existsSync(exe)) throw new Error(`missing ${exe} — run cargo build first`)
-  return JSON.parse(execFileSync(exe, { input: src, encoding: 'utf8', args: ['cpp'] })).tree
+  // args is a POSITIONAL parameter of execFileSync, not an option key
+  return JSON.parse(execFileSync(exe, ['cpp'], { input: src, encoding: 'utf8' })).tree
 }
 
 const CPP = `#include <iostream>

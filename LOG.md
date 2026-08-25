@@ -1,6 +1,39 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 35: trigger=user: per-language bricks/panel, namespace blocks instead of
+std blocks, blocks depending on other blocks, NO splash timer, Blender-like
+recent files
+expect: C and C++ palettes differ; dep-gated chips; splash stays until
+choice; recents two-line + Open Folder footer; gates green
+obs: (1) PER-LANGUAGE PALETTE: PaletteItem.langs - Code group now splits:
+C keeps stdio family (printf/printf %d/scanf, each requiring the stdio.h
+include), C++ gets #include <iostream>, cout text/value, cin >> value,
+using namespace std (namespace chip in Functions, toplevel), define class
+(Structs, toplevel), try/catch (Control). (2) DEPENDENCY RULE (Scratch
+grammar-gating from PLAN 1.3): PaletteItem.requires {kind,include} -
+chips render .pal-dep (dashed + link icon + tooltip) until the program
+contains the prerequisite; clicks explain instead of splicing broken code.
+else needs if_statement, case+break needs switch_statement, stdio/iostream
+chips need their #include (include chips themselves splice at TOP via
+insertTop payload). Palette rebuilds on a program SIGNATURE (node kinds +
+includes + harvested vars) so deps re-evaluate live. (3) SPLASH: countdown
+removed entirely - stays until C or C++ clicked; Open Folder footer button
+(loads session then fires the folder dialog). (4) RECENTS Blender-style:
+bold filename + dim path two-line entries, hover highlight, empty-state
+hint. GATE FINDS: (a) execFileSync args is a POSITIONAL param, not an
+option key - every 'cpp' vitest parse had silently run as C; fixed in all
+helpers (cpp tests now genuinely exercise tree-sitter-cpp); (b) ev() cannot
+return DOM elements (unserializable) - class assertions moved inside page
+expressions; (c) splash markup exists before module eval completes (pixi
+top-level await) - added window.__bootDone flag, gate polls it before
+clicking; reload section polls splash-interactive then session-ready
+instead of fixed sleeps. vitest 35/35; ALL FOURTEEN gates PASS exit 0
+(46 UI assertions); screenshot verified timerless splash + Open Folder.
+state=SUCCESS | next: user eyes-on; vanilla install drill (manual, Gate 5)
+```
+
+```
 RUN 34: trigger=user: Blender-style launch splash - language choice + recent
 files at startup, C auto-starts if untouched
 expect: splash at every launch (C preselected + countdown, C++ card, recent

@@ -15,16 +15,27 @@ import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const ctree = (...p: string[]) => resolve(process.cwd(), '..', 'target', 'debug', ...p)
-const parseClean = (src: string): boolean => {
+const parseClean = (src: string, lang: 'c' | 'cpp' = 'c'): boolean => {
   const exe = ctree('ctree_json.exe')
   if (!existsSync(exe)) throw new Error(`missing ${exe}`)
-  return !JSON.parse(execFileSync(exe, { input: src, encoding: 'utf8' })).has_errors
+  // NOTE: execFileSync(file, args, options) — args is NOT an option key
+  const out = JSON.parse(
+    lang === 'cpp'
+      ? execFileSync(exe, ['cpp'], { input: src, encoding: 'utf8' })
+      : execFileSync(exe, { input: src, encoding: 'utf8' }),
+  )
+  return !out.has_errors
 }
-const parsesClean = (base: string, snippet: string): boolean => {
-  const roots = buildBlocks(JSON.parse(execFileSync(ctree('ctree_json.exe'), { input: base, encoding: 'utf8' })).tree)
+const parsesClean = (base: string, snippet: string, lang: 'c' | 'cpp' = 'c'): boolean => {
+  const treeJson = JSON.parse(
+    lang === 'cpp'
+      ? execFileSync(ctree('ctree_json.exe'), ['cpp'], { input: base, encoding: 'utf8' })
+      : execFileSync(ctree('ctree_json.exe'), { input: base, encoding: 'utf8' }),
+  )
+  const roots = buildBlocks(treeJson.tree)
   layoutStack(roots, 40, 40)
   const fn = flatten(roots).find((b) => b.nodeKind === 'function_definition')!
-  return parseClean(spliceInsert(base, fn.headerEnd + 1, snippet))
+  return parseClean(spliceInsert(base, fn.headerEnd + 1, snippet), lang)
 }
 
 describe('Scratch palette structure (1.10)', () => {
@@ -44,12 +55,33 @@ describe('Scratch palette structure (1.10)', () => {
     }
   })
 
-  it('every group snippet produces parseable C when dropped into main', () => {
+  it('every group snippet produces parseable code in its intended context', () => {
     const base = `#include <stdio.h>\n\nint main(void) {\n    return 0;\n}\n`
     for (const g of PALETTE_GROUPS) {
       for (const item of g.items) {
-        // comment snippets are comments; everything else must compile-parse
-        expect(parsesClean(base, item.snippet), `${g.name}/${item.name}`).toBe(true)
+        if (item.reporter !== undefined) continue // expressions: socket drops
+        const lang = item.langs?.[0] ?? 'c'
+        // dependency fragments are valid only inside their prerequisite's
+        // context — wrap them the way the dependency system implies
+        let context = base
+        let snippet = item.snippet
+        if (item.requires?.kind === 'if_statement') {
+          // else must directly FOLLOW its if — build the whole context
+          const whole = base.replace(
+            'return 0;',
+            `if (c) {\n        return 1;\n    }\n    ${item.snippet}\n    return 0;`,
+          )
+          expect(parseClean(whole, lang), `${g.name}/${item.name}`).toBe(true)
+          continue
+        } else if (item.requires?.kind === 'switch_statement') {
+          snippet = `switch (x) {\n${item.snippet}\n}`
+        } else if (item.toplevel) {
+          continue // verified by the toplevel suite below
+        }
+        expect(
+          parsesClean(context, snippet, lang),
+          `${g.name}/${item.name}`,
+        ).toBe(true)
       }
     }
   })
@@ -156,12 +188,12 @@ describe('Operators category (Scratch green)', () => {
     }
   })
 
-  it('define fn is marked toplevel; call chips are statements', () => {
+  it('define fn / namespace are toplevel; call chips are statements', () => {
     const fns = PALETTE_GROUPS.find((g) => g.name === 'Functions')!
-    const def = fns.items.find((i) => i.name === 'define fn')!
-    expect(def.toplevel).toBe(true)
+    const toplevel = fns.items.filter((i) => i.toplevel)
+    expect(toplevel.map((i) => i.name).sort()).toEqual(['define fn', 'namespace'])
     for (const i of fns.items) {
-      if (i.name !== 'define fn') expect(i.toplevel).toBeFalsy()
+      if (i.name !== 'define fn' && i.name !== 'namespace') expect(i.toplevel).toBeFalsy()
     }
   })
 })
@@ -169,7 +201,6 @@ describe('Operators category (Scratch green)', () => {
 describe('variable harvesting from the open file', () => {
   const parseTree = (src: string) =>
     JSON.parse(execFileSync(ctree('ctree_json.exe'), { input: src, encoding: 'utf8' })).tree.root
-
   it('collects declared variables: locals, globals, multi-declarators, arrays', () => {
     const src = `int global_a;\nint global_b = 2, global_c;\n\nint main(void) {\n    int total = 0;\n    int grid[10];\n    float f = 1.5;\n    total = grid[0];\n    return 0;\n}\n`
     const vars = harvestVars(parseTree(src))

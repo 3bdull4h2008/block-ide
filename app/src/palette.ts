@@ -2,6 +2,8 @@
  *  Groups follow Scratch's category-section model; hexes are the scratch-blocks
  *  primaries adapted to C's needs (no Motion/Looks/Sound — we render code). */
 
+export type SourceLang = 'c' | 'cpp'
+
 export interface PaletteItem {
   name: string
   cat: string
@@ -10,6 +12,13 @@ export interface PaletteItem {
   reporter?: 'round' | 'bool'
   /** always splices at file scope (function definitions are not nestable) */
   toplevel?: boolean
+  /** splice at the very top of the file (includes) */
+  top?: boolean
+  /** only shown for these languages (default: both) */
+  langs?: SourceLang[]
+  /** chip stays disabled until the program contains this node kind
+   *  and/or this #include — Scratch's "blocks depend on others" rule */
+  requires?: { kind?: string; include?: string }
 }
 
 export interface PaletteGroup {
@@ -29,7 +38,19 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
     color: '#FFAB19',
     items: [
       { name: 'if', cat: 'control', snippet: 'if (cond) {\n}' },
-      { name: 'if / else', cat: 'control', snippet: 'if (cond) {\n} else {\n}' },
+      {
+        name: 'else',
+        cat: 'control',
+        snippet: 'else {\n}',
+        requires: { kind: 'if_statement' },
+      },
+      {
+        name: 'case + break',
+        cat: 'control',
+        snippet: 'case 1:\n    break;',
+        requires: { kind: 'switch_statement' },
+      },
+      { name: 'try / catch', cat: 'control', snippet: 'try {\n} catch (...) {\n}', langs: ['cpp'] },
     ],
   },
   {
@@ -67,9 +88,68 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
     name: 'Code',
     color: '#0891B2',
     items: [
-      { name: 'printf', cat: 'statement', snippet: 'printf("hi\\n");' },
-      { name: 'printf %d', cat: 'statement', snippet: 'printf("%d\\n", value);' },
-      { name: 'scanf %d', cat: 'statement', snippet: 'scanf("%d", &value);' },
+      {
+        name: '#include <stdio.h>',
+        cat: 'statement',
+        snippet: '#include <stdio.h>',
+        top: true,
+        langs: ['c'],
+      },
+      {
+        name: '#include <iostream>',
+        cat: 'statement',
+        snippet: '#include <iostream>',
+        top: true,
+        langs: ['cpp'],
+      },
+      {
+        name: 'printf',
+        cat: 'statement',
+        snippet: 'printf("hi\\n");',
+        langs: ['c'],
+        requires: { include: 'stdio.h' },
+      },
+      {
+        name: 'printf %d',
+        cat: 'statement',
+        snippet: 'printf("%d\\n", value);',
+        langs: ['c'],
+        requires: { include: 'stdio.h' },
+      },
+      {
+        name: 'scanf %d',
+        cat: 'statement',
+        snippet: 'scanf("%d", &value);',
+        langs: ['c'],
+        requires: { include: 'stdio.h' },
+      },
+      {
+        name: 'cout text',
+        cat: 'statement',
+        snippet: 'std::cout << "text" << "\\n";',
+        langs: ['cpp'],
+        requires: { include: 'iostream' },
+      },
+      {
+        name: 'cout value',
+        cat: 'statement',
+        snippet: 'std::cout << value << "\\n";',
+        langs: ['cpp'],
+        requires: { include: 'iostream' },
+      },
+      {
+        name: 'cin >> value',
+        cat: 'statement',
+        snippet: 'std::cin >> value;',
+        langs: ['cpp'],
+        requires: { include: 'iostream' },
+      },
+      {
+        name: 'using namespace std',
+        cat: 'statement',
+        snippet: 'using namespace std;',
+        langs: ['cpp'],
+      },
       { name: 'assign +=', cat: 'statement', snippet: 'value = value + 1;' },
       { name: 'return', cat: 'statement', snippet: 'return 0;' },
     ],
@@ -82,12 +162,22 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
       { name: 'call proc', cat: 'functions', snippet: 'myfn();' },
       // toplevel: always splices at file scope (nested definitions are not C)
       { name: 'define fn', cat: 'functions', snippet: 'int myfn(int x) {\n    return x;\n}', toplevel: true },
+      {
+        name: 'namespace',
+        cat: 'functions',
+        snippet: 'namespace myns {\n}',
+        toplevel: true,
+        langs: ['cpp'],
+      },
     ],
   },
   {
     name: 'Structs',
     color: '#EC4899',
-    items: [{ name: 'struct field', cat: 'structs', snippet: 'p.x = 0;' }],
+    items: [
+      { name: 'struct field', cat: 'structs', snippet: 'p.x = 0;' },
+      { name: 'define class', cat: 'structs', snippet: 'class MyClass {\n};', toplevel: true, langs: ['cpp'] },
+    ],
   },
   {
     name: 'Notes',
