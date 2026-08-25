@@ -6,6 +6,7 @@ import {
   validateVarName,
   reporterFits,
   varChips,
+  varTypes,
   listChips,
 } from '../src/palette'
 import { buildBlocks, harvestVars, layoutStack, flatten } from '../src/blocks'
@@ -104,15 +105,24 @@ describe('Make a Variable (Scratch lifecycle)', () => {
     expect(validateVarName('for')).toBeNull()
   })
 
-  it('per-variable chips: oval reporter + set/change stacks with C snippets', () => {
+  it('per-variable chips: TYPED declaration + oval reporter + set/change', () => {
     const chips = varChips('score')
-    expect(chips.length).toBe(3)
-    expect(chips[0].snippet).toBe('') // reporter — slot-drop only
-    expect(chips[1].snippet).toBe('score = 0;')
-    expect(chips[2].snippet).toBe('score = score + 1;')
+    expect(chips.length).toBe(4)
+    expect(chips[0]).toMatchObject({
+      snippet: 'int score = 0;',
+      cat: 'variables',
+    }) // typed declaration — C/C++ need the variable to EXIST first
+    expect(chips[1].snippet).toBe('') // reporter — slot-drop only
+    expect(chips[2].snippet).toBe('score = 0;')
+    expect(chips[3].snippet).toBe('score = score + 1;')
+    const dbl = varChips('score', 'double')
+    expect(dbl[0].snippet).toBe('double score = 0;')
     const base = `#include <stdio.h>\n\nint main(void) {\n    return 0;\n}\n`
-    expect(parsesClean(base, chips[1].snippet)).toBe(true)
+    expect(parsesClean(base, chips[0].snippet)).toBe(true)
     expect(parsesClean(base, chips[2].snippet)).toBe(true)
+    expect(parsesClean(base, chips[3].snippet)).toBe(true)
+    expect(varTypes('c')).toEqual(['int', 'double', 'bool'])
+    expect(varTypes('cpp')).toEqual(['int', 'double', 'bool', 'string'])
   })
 })
 

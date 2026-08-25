@@ -1,6 +1,38 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 37: trigger=user: typed variable definitions missing, cin can't receive
+input, variable blocks won't drop into cout + competitor/review research
+expect: typed declarations, interactive stdin, forgiving reporter drops,
+research doc; gates green (multi-language runner dispatch completed en route)
+obs: (1) MULTI-LANG RUNNER FINISHED (was in flight): prepare_lang dispatches
+python/node interpreters + rustc two-phase compile, all PATH-probed with
+exit-status check (Windows Store python alias spawns but exits nonzero);
+missing toolchain = friendly install hint via [launch] stderr. (2) STDIN:
+InspectableRun now carries the LIVE child stdin pipe (run_job_opts
+stdin_slot); run_stdin command + console input row (visible while running,
+echoes '> line') - cin/scanf/input() finally receive typing; academy
+write-and-close path unchanged. (3) TYPED VARIABLES: Make a Variable is now
+TWO prompts (name, then type int/double/bool[/string for C++]); per-var
+chips gain a TYPED DECLARATION chip (new int score = 0;) - fixes 'variable
+type definition missing'; types persist (blockide-vartypes). (4) FORGIVING
+DROPS: variable reporters dropped anywhere ON a statement block fill its
+nearest compatible socket (no pixel-perfect aiming) - cout/cin operands now
+take variable blocks naturally. (5) RESEARCH: docs/COMPETITOR-RESEARCH.md
+(Scratch/Blockly/MakeCode/Tynker/Snap/hybrids/dead Arduino block tools +
+Weintrop transition studies + Blockly's Ten Things): success = no syntax
+errors, category discipline, live feedback, off-ramps, ownership; failures
+= unsolved blocks->text transition (read-only JS buttons, one-way
+generation), authenticity gap, abandoned C-family block tools, paywall
+trust, no mastery mechanics; Cade's wedge = TRUE bidirectional blocks<->real
+files + real sandboxed toolchains + multi-language + memory viz; six
+prioritized gap-closers recorded. GATE FINDS: var chip count 3->4 (typed
+declaration) - assertions updated. vitest 35/35; ALL FOURTEEN gates PASS
+exit 0 (48 UI assertions).
+state=SUCCESS | next: user eyes-on (cin flow!); gap-closers from research doc
+```
+
+```
 RUN 36: trigger=user: rename project to "Cade"
 expect: user-visible branding renamed everywhere; nothing breaks
 obs: renamed window title, tab title, splash h1, toolbar wordmark, tour

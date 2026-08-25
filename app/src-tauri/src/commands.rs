@@ -210,6 +210,16 @@ pub fn run_poll() -> Result<Option<RunOut>, String> {
     }))
 }
 
+/// Write one typed line to the running program's stdin (console input box).
+#[tauri::command]
+pub fn run_stdin(line: String) -> Result<(), String> {
+    let guard = inspect_run().lock().map_err(|e| e.to_string())?;
+    match guard.as_ref() {
+        Some((r, _)) => r.send_line(&line),
+        None => Err("no program is running".into()),
+    }
+}
+
 fn mem_reader() -> &'static Mutex<Option<runner::memtrace::MemTraceReader>> {
     static MEM: std::sync::OnceLock<Mutex<Option<runner::memtrace::MemTraceReader>>> =
         std::sync::OnceLock::new();

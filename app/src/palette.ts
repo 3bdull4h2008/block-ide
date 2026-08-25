@@ -208,18 +208,34 @@ export function validateVarName(raw: string): string | null {
   return name
 }
 
-/** Per-variable chips, Scratch-style: the oval reporter (drops into slots)
- *  plus the two stack blocks that target it via C semantics. varName is the
- *  owning variable — labels differ per chip. */
+/** Per-variable chips, Scratch-style: a TYPED declaration chip (C/C++ need
+ *  the variable to exist before use — Scratch doesn't, C does), the oval
+ *  reporter, and the set/change stacks. varName is the owning variable. */
 export interface VarChip extends PaletteItem {
   varName: string
 }
 
-export function varChips(name: string): VarChip[] {
+/** Types offered by Make a Variable, per language. */
+export function varTypes(lang: 'c' | 'cpp'): string[] {
+  return lang === 'cpp' ? ['int', 'double', 'bool', 'string'] : ['int', 'double', 'bool']
+}
+
+export function varChips(name: string, type = 'int'): VarChip[] {
   return [
-    { name, varName: name, cat: 'variables', snippet: '' }, // reporter — slot-drop only
+    {
+      name: `new ${type} ${name}`,
+      varName: name,
+      cat: 'variables',
+      snippet: `${type} ${name} = 0;`,
+    },
+    { name, varName: name, cat: 'variables', snippet: '', reporter: 'round' }, // oval reporter
     { name: `set ${name} = 0`, varName: name, cat: 'variables', snippet: `${name} = 0;` },
-    { name: `change ${name} + 1`, varName: name, cat: 'variables', snippet: `${name} = ${name} + 1;` },
+    {
+      name: `change ${name} + 1`,
+      varName: name,
+      cat: 'variables',
+      snippet: `${name} = ${name} + 1;`,
+    },
   ]
 }
 

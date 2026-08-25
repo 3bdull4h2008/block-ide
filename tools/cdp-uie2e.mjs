@@ -205,10 +205,14 @@ check(
   (await ev(`window.__makeVar('2bad name')`)) === 'invalid',
 );
 check(
-  'make var: creates reporter + set/change chips',
+  'make var: creates declaration + reporter + set/change chips',
   (await ev(`window.__makeVar('score')`)) === null &&
     (await ev(`!!document.querySelector('.pal-reporter[data-var=\"score\"]')`)) === true &&
-    (await ev(`document.querySelectorAll('.pal[data-var=\"score\"]').length`)) === 3,
+    (await ev(`document.querySelectorAll('.pal[data-var=\"score\"]').length`)) === 4,
+);
+check(
+  'make var: typed declaration chip (int score = 0)',
+  (await ev(`Array.from(document.querySelectorAll('.pal')).some(p => p.textContent === 'new int score')`)) === true,
 );
 
 // 12. category rail + Lists (C arrays) + harvested variables

@@ -840,8 +840,39 @@ select:focus-visible,
   font-size: 12px;
 }
 
-/* dependency-gated chips: block exists only when its prerequisite does */
-.pal.pal-dep {
+/* console stdin: typing lines into the running program (cin/scanf/input) */
+#console-input-row {
+  display: none;
+  gap: 6px;
+  padding: 4px 6px;
+  background: var(--panel, #0f3d4f);
+  border-top: 1px solid rgba(8, 145, 178, 0.25);
+}
+
+#console-input {
+  flex: 1;
+  font-family: 'Comic Neue', monospace;
+  font-size: 13px;
+  color: var(--fg, #eaf6fb);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(8, 145, 178, 0.35);
+  border-radius: 8px;
+  padding: 4px 10px;
+  outline: none;
+}
+
+#console-input:focus {
+  border-color: var(--accent, #0891b2);
+}
+
+#console-send {
+  min-width: 34px;
+  border-radius: 8px;
+  background: var(--accent, #0891b2);
+  color: #fff;
+}
+
+/* dependency-gated chips: block exists only when its prerequisite does */.pal.pal-dep {
   opacity: 0.45;
   border: 2px dashed rgba(100, 116, 139, 0.6);
   cursor: help;

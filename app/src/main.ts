@@ -30,6 +30,7 @@ import {
   validateVarName,
   reporterFits,
   varChips,
+  varTypes,
   listChips,
   type PaletteItem,
 } from './palette'
@@ -89,6 +90,8 @@ const srcEl = document.getElementById('src') as HTMLTextAreaElement
 const statusEl = document.getElementById('status') as HTMLSpanElement
 const hostEl = document.getElementById('canvas-host') as HTMLDivElement
 const consoleEl = document.getElementById('console') as HTMLPreElement
+const consoleInputRow = document.getElementById('console-input-row') as HTMLDivElement
+const consoleInput = document.getElementById('console-input') as HTMLInputElement
 const paletteEl = document.getElementById('palette') as HTMLDivElement
 const tabsEl = document.getElementById('tabs') as HTMLDivElement
 const filesEl = document.getElementById('files') as HTMLDivElement
@@ -568,6 +571,28 @@ function slotUnderWorldPoint(wx: number, wy: number): SlotHit | null {
   return null
 }
 
+/** Nearest compatible socket on the block under the point — forgiving drop
+ *  target: kids drop a variable ON the block, not pixel-perfect on a socket. */
+function nearestCompatibleSlot(
+  wx: number,
+  wy: number,
+  kind: 'round' | 'bool' | undefined,
+): SlotHit | null {
+  const blk = hitTestHeader(roots, wx, wy) ?? null
+  if (!blk) return null
+  let best: SlotHit | null = null
+  let bestD = Infinity
+  for (const s of slotHits) {
+    if (s.block.id !== blk.id || !reporterFits(kind, s.part.type)) continue
+    const d = (s.x + s.w / 2 - wx) ** 2 + (s.y + s.h / 2 - wy) ** 2
+    if (d < bestD) {
+      bestD = d
+      best = s
+    }
+  }
+  return best
+}
+
 function onDragMove(e: PointerEvent): void {
   ghost.style.left = `${e.clientX + 12}px`
   ghost.style.top = `${e.clientY - 14}px`
@@ -580,7 +605,7 @@ function onDragMove(e: PointerEvent): void {
     // reporter chips: highlight the matching-shape socket they would fill
     // (Scratch: round reporters fit round sockets, hex fits hex)
     if (drag.slotValue) {
-      const s = slotUnderWorldPoint(w.x, w.y)
+      const s = slotUnderWorldPoint(w.x, w.y) ?? nearestCompatibleSlot(w.x, w.y, drag.slotKind)
       clearSnapGhost()
       dropbar.style.display = 'none'
       if (s && reporterFits(drag.slotKind, s.part.type)) {
@@ -682,7 +707,7 @@ async function onDragEnd(e: PointerEvent): Promise<void> {
 
   // reporter chips -> shape-checked socket fill
   if (d.slotValue) {
-    const s = slotUnderWorldPoint(w.x, w.y)
+    const s = slotUnderWorldPoint(w.x, w.y) ?? nearestCompatibleSlot(w.x, w.y, d.slotKind)
     if (!s) return
     if (!reporterFits(d.slotKind, s.part.type)) {
       blip(200, 0.08, 'square', 0.04)
@@ -956,6 +981,7 @@ async function startRun(): Promise<void> {
   downKeys.clear()
   running = true
   stopBtn.style.display = 'block'
+  consoleInputRow.style.display = 'flex' // cin / scanf / input() need typing
   fpsT0 = performance.now()
   fpsFrames = 0
   const tracing = memTraceEl.checked
@@ -982,6 +1008,7 @@ async function startRun(): Promise<void> {
           running = false
           clearInterval(pollTimer)
           stopBtn.style.display = 'none'
+          consoleInputRow.style.display = 'none'
           fpsEl.textContent = ''
           finishRun(r as Parameters<typeof finishRun>[0])
           reportLeaks()
@@ -990,6 +1017,30 @@ async function startRun(): Promise<void> {
       .catch(() => {})
   }, 120)
 }
+
+// ------------------------------------------------------- console stdin box
+async function sendConsoleLine(): Promise<void> {
+  const line = consoleInput.value
+  if (line.length === 0) return
+  consoleInput.value = ''
+  consoleEl.textContent += `\n> ${line}`
+  consoleEl.scrollTop = consoleEl.scrollHeight
+  try {
+    await invoke('run_stdin', { line })
+  } catch (e) {
+    consoleEl.textContent += `\n${String(e)}`
+  }
+}
+
+consoleInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    void sendConsoleLine()
+  }
+})
+document.getElementById('console-send')?.addEventListener('click', () => {
+  void sendConsoleLine()
+})
 
 // ------------------------------------------------------------- memory view
 interface MemBox {
@@ -1342,6 +1393,14 @@ hostEl.addEventListener(
 // Variables section owns Make-a-Variable / Make-a-List and per-var chips.
 const knownVars: string[] = JSON.parse(localStorage.getItem('blockide-vars') ?? '[]')
 const knownLists: string[] = JSON.parse(localStorage.getItem('blockide-lists') ?? '[]')
+/** declared type per variable (C/C++ need the declaration to exist first) */
+const varTypesMap: Record<string, string> = (() => {
+  try {
+    return JSON.parse(localStorage.getItem('blockide-vartypes') ?? '{}') as Record<string, string>
+  } catch {
+    return {}
+  }
+})()
 let harvestedVars: string[] = [] // declared in the open file (file is truth)
 let paletteSignature = ''
 let programKinds = new Set<string>()
@@ -1350,6 +1409,7 @@ let programIncludes = new Set<string>()
 function saveVars(): void {
   localStorage.setItem('blockide-vars', JSON.stringify(knownVars))
   localStorage.setItem('blockide-lists', JSON.stringify(knownLists))
+  localStorage.setItem('blockide-vartypes', JSON.stringify(varTypesMap))
 }
 
 function isReporterChip(item: PaletteItem & { varName?: string }): boolean {
@@ -1576,7 +1636,18 @@ function renderPalette(): void {
       blip(200, 0.08, 'square', 0.04)
       return
     }
+    // C/C++ variables need a DECLARED TYPE — second step of the dialog
+    const types = varTypes(activeLang)
+    const traw = window.prompt(`Type for "${name}" (${types.join('/')}):`, varTypesMap[name] ?? 'int')
+    if (traw === null) return
+    const type = traw.trim().toLowerCase()
+    if (!types.includes(type)) {
+      consoleEl.textContent = `"${type}" is not a type I know — use ${types.join('/')}`
+      blip(200, 0.08, 'square', 0.04)
+      return
+    }
     if (!knownVars.includes(name)) knownVars.push(name)
+    varTypesMap[name] = type
     saveVars()
     renderPalette()
     blip(740, 0.07, 'sine', 0.06)
@@ -1584,7 +1655,11 @@ function renderPalette(): void {
   paletteEl.appendChild(mk)
 
   const allVars = [...new Set([...knownVars, ...harvestedVars])]
-  for (const v of allVars) for (const chip of varChips(v)) paletteEl.appendChild(makeVarChip(chip))
+  for (const v of allVars) {
+    for (const chip of varChips(v, varTypesMap[v] ?? 'int')) {
+      paletteEl.appendChild(makeVarChip(chip))
+    }
+  }
 
   // ---- Lists subcategory (Scratch Lists -> C arrays) ----
   const mkList = document.createElement('button')

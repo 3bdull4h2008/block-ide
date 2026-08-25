@@ -19,6 +19,7 @@ pub fn run() {
             commands::canonicalize_c,
             commands::run_c,
             commands::run_start,
+            commands::run_stdin,
             commands::run_poll,
             commands::mem_attach,
             commands::mem_state,

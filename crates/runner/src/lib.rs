@@ -296,7 +296,27 @@ fn run_job(
     extra_env: &[(&str, &str)],
     timeout_ms: u64,
     stdin_text: &str,
+    on_spawn: Option<&mut dyn FnMut(u32)>,
+) -> Result<RunOutcome, String> {
+    run_job_opts(
+        program,
+        args,
+        extra_env,
+        timeout_ms,
+        stdin_text,
+        on_spawn,
+        None,
+    )
+}
+
+fn run_job_opts(
+    program: &Path,
+    args: &[String],
+    extra_env: &[(&str, &str)],
+    timeout_ms: u64,
+    stdin_text: &str,
     mut on_spawn: Option<&mut dyn FnMut(u32)>,
+    stdin_slot: Option<&std::sync::Arc<std::sync::Mutex<Option<std::process::ChildStdin>>>>,
 ) -> Result<RunOutcome, String> {
     use std::io::{Read, Write};
 
@@ -312,7 +332,7 @@ fn run_job(
     // child's CRT init can transiently fail against a dying parent console
     // with ERROR_NO_DATA (os error 232). NUL-piped stdio needs no console.
     cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-    if stdin_text.is_empty() {
+    if stdin_text.is_empty() && stdin_slot.is_none() {
         cmd.stdin(Stdio::null());
     } else {
         cmd.stdin(Stdio::piped());
@@ -339,6 +359,10 @@ fn run_job(
         if let Some(mut si) = child.stdin.take() {
             let _ = si.write_all(stdin_text.as_bytes());
         }
+    } else if let Some(slot) = stdin_slot {
+        // interactive run: hand the LIVE stdin pipe to the caller — the
+        // console panel writes typed lines into it while the program waits
+        *slot.lock().unwrap() = child.stdin.take();
     }
     if let Some(f) = on_spawn.take() {
         f(child.id());
@@ -555,6 +579,8 @@ pub struct InspectableRun {
     pub pid: u32,
     done: Arc<Mutex<Option<Result<RunOutcome, String>>>>,
     finished: Arc<std::sync::atomic::AtomicBool>,
+    /// Live stdin pipe (interactive runs) — console panel writes into it.
+    stdin: Arc<Mutex<Option<std::process::ChildStdin>>>,
 }
 
 /// Spawn a run that stays inspectable (same backend selection + jail).
@@ -567,12 +593,15 @@ pub fn spawn_inspectable(
 }
 
 /// Language-aware inspectable spawn (C++ routes to clang automatically).
+/// The child's stdin stays OPEN for interactive runs — the console panel
+/// writes typed lines into it via `send_line` (cin/scanf/input()).
 pub fn spawn_inspectable_lang(
     src: &str,
     timeout_ms: u64,
     trace_mem: bool,
     lang: core_parser::Lang,
 ) -> Result<InspectableRun, String> {
+    use std::process::ChildStdin;
     let p = prepare_lang(src, trace_mem, lang)?;
     clear_hard_stop();
     let done: Arc<Mutex<Option<Result<RunOutcome, String>>>> = Arc::new(Mutex::new(None));
@@ -581,20 +610,26 @@ pub fn spawn_inspectable_lang(
     let fin2 = finished.clone();
     let pid_slot: Arc<Mutex<Option<u32>>> = Arc::new(Mutex::new(None));
     let pid_for_thread = pid_slot.clone();
+    let stdin_slot: Arc<Mutex<Option<ChildStdin>>> = Arc::new(Mutex::new(None));
+    let stdin_for_struct = stdin_slot.clone();
+    let stdin_for_thread = stdin_slot.clone();
     thread::spawn(move || {
         let mut cb = |pid: u32| {
             *pid_for_thread.lock().unwrap() = Some(pid);
         };
         // prepare() ran on the caller thread; program/args/envs move in.
         // Launch errors are PRESERVED (not .ok()-dropped) so the UI can show
-        *done2.lock().unwrap() = Some(run_job(
+        *done2.lock().unwrap() = Some(run_job_opts(
             &p.program,
             &p.args,
             &p.envs,
             timeout_ms,
             "",
             Some(&mut cb),
+            Some(&stdin_for_thread),
         ));
+        // child is gone — drop the pipe so send_line fails fast
+        *stdin_for_thread.lock().unwrap() = None;
         fin2.store(true, std::sync::atomic::Ordering::Relaxed);
     });
     // wait briefly for the spawn callback so callers get a real pid
@@ -604,6 +639,7 @@ pub fn spawn_inspectable_lang(
                 pid,
                 done,
                 finished,
+                stdin: stdin_for_struct,
             });
         }
         if finished.load(std::sync::atomic::Ordering::Relaxed) {
@@ -623,6 +659,20 @@ impl InspectableRun {
 
     pub fn is_finished(&self) -> bool {
         self.finished.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Write one line to the running program's stdin (console input box).
+    pub fn send_line(&self, line: &str) -> Result<(), String> {
+        use std::io::Write;
+        let mut guard = self.stdin.lock().unwrap();
+        match guard.as_mut() {
+            Some(si) => {
+                si.write_all(line.as_bytes()).map_err(|e| e.to_string())?;
+                si.write_all(b"\n").map_err(|e| e.to_string())?;
+                si.flush().map_err(|e| e.to_string())
+            }
+            None => Err("program is not running (or does not read input)".into()),
+        }
     }
 
     /// Read arbitrary child memory (heap contents for pointer scanning).
