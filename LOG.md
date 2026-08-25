@@ -1,6 +1,32 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 34: trigger=user: Blender-style launch splash - language choice + recent
+files at startup, C auto-starts if untouched
+expect: splash at every launch (C preselected + countdown, C++ card, recent
+list); choice loads that language's sample/blocks/backend; gates green
+obs: #splash overlay (fixed, blurred backdrop) with C/C++ cards, recent
+list (localStorage blockide-recent, top 6, recorded on open+save), 8.2s
+countdown bar -> beginSession('c') unless engaged (any pointerdown cancels
+the timer so readers are not rushed). beginSession: journal restore FIRST
+(unsaved work overrides sample; language rides the journaled path),
+CPP_SAMPLE mirrors SAMPLE's statement shape (total/for i<5/return 0) so
+ALL existing gate assertions hold for either launch language, then render +
+tour. Recent click: opens folder + tab, language from the file extension;
+missing files report instead of crashing. BOOT RESTRUCTURED: no render
+before the splash - textarea/palette fill only after choice (or timeout);
+tour now fires post-splash, not on a module timer. GATE: splash section
+added (shown/C-preselected/default-c/recents/choose-cpp->cpp-session+
+iostream sample/dismissed) - fixed-position overlay needed computed-display
+visibility check (offsetParent is null for fixed elements); stale
+'default buffer is C' assertion moved BEFORE the C++ choice. Screenshot:
+splash card verified visually; auto-start verified (post-timeout capture
+shows C session, status 'parsed clean (C)'). vitest 35/35; ALL FOURTEEN
+gates PASS exit 0 (42 UI assertions).
+state=SUCCESS | next: user eyes-on; vanilla install drill (manual, Gate 5)
+```
+
+```
 RUN 33: trigger=user: add C++ language
 expect: C++ subset pack per D3 amendment - parse/render/diag/run .cpp files;
 tcc never selected for C++; gates green

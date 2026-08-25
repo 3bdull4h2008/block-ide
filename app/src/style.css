@@ -702,6 +702,137 @@ select:focus-visible,
   font-size: 12px;
 }
 
+/* ---- launch splash (Blender-style: language + recents, C auto-starts) ---- */
+
+#splash {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(7, 32, 42, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+#splash-card {
+  width: min(460px, 92vw);
+  background: var(--panel, #fff);
+  border: 3px solid rgba(8, 145, 178, 0.35);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(7, 32, 42, 0.45);
+  padding: 22px 24px 16px;
+  text-align: center;
+}
+
+:root[data-theme='dark'] #splash-card {
+  background: #0f3d4f;
+}
+
+#splash-card h1 {
+  margin: 0;
+  font-size: 26px;
+  color: var(--accent, #0891b2);
+}
+
+.splash-sub {
+  color: var(--fg-dim);
+  font-size: 12px;
+  margin: 4px 0 14px;
+}
+
+.splash-langs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.splash-lang {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  padding: 14px 10px;
+  border-radius: 14px;
+  border: 2px solid transparent;
+  background: var(--accent-soft, #e0f2fe);
+  cursor: pointer;
+}
+
+.splash-lang b {
+  font-size: 22px;
+  color: var(--fg);
+}
+
+.splash-lang span {
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+
+.splash-lang:hover {
+  border-color: var(--accent, #0891b2);
+  transform: translateY(-1px);
+}
+
+.splash-lang.active {
+  border-color: var(--accent, #0891b2);
+  box-shadow: 0 3px 0 rgba(21, 94, 117, 0.3);
+}
+
+.splash-recent {
+  margin-top: 14px;
+  text-align: left;
+  font-size: 12px;
+}
+
+.splash-recent > b {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+#recent-list {
+  max-height: 108px;
+  overflow-y: auto;
+}
+
+.recent-item {
+  padding: 5px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-item:hover {
+  background: rgba(8, 145, 178, 0.12);
+}
+
+#splash-bar {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--accent-soft, #e0f2fe);
+  margin: 14px 0 6px;
+  overflow: hidden;
+}
+
+#splash-bar-i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--accent, #0891b2);
+  border-radius: 3px;
+}
+
+.splash-hint {
+  font-size: 10px;
+  color: var(--fg-dim);
+}
+
 #view-modes {
   display: inline-flex;
   background: var(--accent-soft);

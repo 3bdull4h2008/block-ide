@@ -1,8 +1,9 @@
 // G-UI-E2E: scripted end-to-end checks against a running app (Gate 5).
 // Usage: node cdp-uie2e.mjs <port>
-// Asserts: default split view; view toggles hide/show panes; Ctrl+1/2/3;
-// cursor-semantic map across view switches; Ctrl+Enter runs through the
-// real backend; academy populated.
+// Asserts: launch splash (C default, C++ choice loads cpp sample + session);
+// view toggles/Ctrl+1-3; cursor-semantic map; Ctrl+Enter run through the real
+// backend; academy populated; mode split; loop mouths; typed slots; palette
+// categories + Make-a-Variable/List; operators; cpp language mapping.
 import { writeFileSync } from 'node:fs';
 
 const port = process.argv[2];
@@ -50,6 +51,28 @@ const visible = (sel) =>
 await ev("localStorage.setItem('tour-done','1'); localStorage.setItem('theme','light'); localStorage.setItem('mode','sandbox'); 'ok'");
 await send('Page.reload');
 await new Promise((r) => setTimeout(r, 1600));
+
+// 0. launch splash (Blender-style): C preselected; choosing C++ loads cpp
+const splashShown = () =>
+  ev(`getComputedStyle(document.getElementById('splash')).display !== 'none'`);
+check('splash: shown at launch', (await splashShown()) === true);
+check(
+  'splash: C card preselected (default language C)',
+  (await ev(`document.querySelector('.splash-lang[data-lang=\"c\"]').classList.contains('active')`)) === true,
+);
+check('splash: session defaults to C before choice', (await ev(`window.__activeLang()`)) === 'c');
+check(
+  'splash: recent section present',
+  (await ev(`!!document.getElementById('recent-list')`)) === true,
+);
+await ev(`document.querySelector('.splash-lang[data-lang=\"cpp\"]').click()`);
+await new Promise((r) => setTimeout(r, 400));
+check('splash: dismissed after choice', (await splashShown()) === false);
+check('splash: C++ session loaded', (await ev(`window.__activeLang()`)) === 'cpp');
+check(
+  'splash: cpp sample in editor',
+  String(await ev(`document.getElementById('src').value`)).includes('iostream'),
+);
 
 // 1. default split: editor + canvas both visible
 check('split default: editor visible', await visible('#src'));
@@ -245,7 +268,6 @@ check(
   'cpp: extension detection',
   (await ev(`window.__langOf('main.cpp') === 'cpp' && window.__langOf('main.cc') === 'cpp' && window.__langOf('main.c') === 'c'`)) === true,
 );
-check('cpp: default buffer is C', (await ev(`window.__activeLang()`)) === 'c');
 
 await shot(process.env.TEMP + '\\ui-e2e.png');
 console.log(failures === 0 ? '[G-UI-E2E] PASS' : `[G-UI-E2E] FAIL (${failures})`);

@@ -67,6 +67,21 @@ int main(void) {
 }
 `
 
+/** C++ mirror of SAMPLE — same statement shape (total/for/return) so the
+ *  scripted gate assertions hold for either launch language. */
+const CPP_SAMPLE = `#include <iostream>
+
+int main() {
+    std::cout << "hello\\n";
+    int total = 0;
+    for (int i = 0; i < 5; i++) {
+        total = total + i;
+    }
+    std::cout << total << "\\n";
+    return 0;
+}
+`
+
 const srcEl = document.getElementById('src') as HTMLTextAreaElement
 const statusEl = document.getElementById('status') as HTMLSpanElement
 const hostEl = document.getElementById('canvas-host') as HTMLDivElement
@@ -1136,6 +1151,7 @@ async function openTab(rel: string): Promise<void> {
   tab.addEventListener('click', () => activateTab(rel))
   tabsEl.appendChild(tab)
   activateTab(rel)
+  if (workspace) pushRecent(workspace, rel)
 }
 
 function activateTab(rel: string): void {
@@ -1196,6 +1212,7 @@ async function saveActive(): Promise<void> {
   savedCache.set(activePath, src)
   markDirty()
   void invoke('journal_clear')
+  pushRecent(workspace, activePath)
   consoleEl.textContent = `saved ${activePath}`
 }
 
@@ -1725,7 +1742,6 @@ document.getElementById('check-btn')?.addEventListener('click', async () => {
 
 void refreshProfile()
 void refreshLevels()
-void recoverJournal()
 setMode(appMode) // apply persisted sandbox/academy split (D7)
 renderPalette() // Scratch-style grouped palette (1.10)
 
@@ -1811,25 +1827,123 @@ function journalSchedule(): void {
   }, 2000)
 }
 
-async function recoverJournal(): Promise<void> {
+// --------------------------------------------------- launch splash (Blender-style)
+// Language choice + recent files at every launch; C starts automatically when
+// nobody interacts (countdown bar). Chosen language loads its sample/blocks.
+interface RecentEntry {
+  root: string
+  rel: string
+  ts: number
+}
+
+function recentList(): RecentEntry[] {
   try {
-    const j = await invoke<{ path: string; content: string; age_secs: number } | null>('journal_read')
-    if (!j || !j.content.trim()) return
-    // template-identical buffers carry no user work — restoring them just
-    // surfaces confusing "unsaved work" banners on every launch
-    if (j.content === SAMPLE || j.content === NEW_TEMPLATE) {
-      void invoke('journal_clear')
-      return
+    return JSON.parse(localStorage.getItem('blockide-recent') ?? '[]') as RecentEntry[]
+  } catch {
+    return []
+  }
+}
+
+function pushRecent(root: string, rel: string): void {
+  const list = recentList().filter((r) => !(r.root === root && r.rel === rel))
+  list.unshift({ root, rel, ts: Date.now() })
+  localStorage.setItem('blockide-recent', JSON.stringify(list.slice(0, 6)))
+}
+
+async function beginSession(lang: 'c' | 'cpp'): Promise<void> {
+  activeLang = lang
+  src = lang === 'cpp' ? CPP_SAMPLE : SAMPLE
+  caretAnchor = null
+  // unsaved work from a previous session overrides the sample (its language
+  // rides with the journaled path when there is one)
+  try {
+    const j = await invoke<{ path: string; content: string; age_secs: number } | null>(
+      'journal_read',
+    )
+    if (j && j.content.trim()) {
+      if (
+        j.content === SAMPLE ||
+        j.content === NEW_TEMPLATE ||
+        j.content === CPP_SAMPLE
+      ) {
+        void invoke('journal_clear')
+      } else {
+        src = j.content
+        if (j.path) activeLang = langOf(j.path)
+        consoleEl.textContent = `[recovery] unsaved work from ${Math.round(j.age_secs)}s ago restored${j.path ? ` (${j.path})` : ''} — Ctrl+S to keep it`
+      }
     }
-    caretAnchor = null
-    src = j.content
-    srcEl.value = src
-    void render(src)
-    consoleEl.textContent = `[recovery] unsaved work from ${Math.round(j.age_secs)}s ago restored${j.path ? ` (${j.path})` : ''} — Ctrl+S to keep it`
   } catch {
     /* no journal */
   }
+  splashEl.style.display = 'none'
+  srcEl.value = src
+  void render(src)
+  void refreshDiags()
+  if (!localStorage.getItem('tour-done')) setTimeout(startTour, 600)
 }
+
+async function beginFromRecent(entry: RecentEntry): Promise<void> {
+  workspace = entry.root
+  await refreshFiles()
+  try {
+    await openTab(entry.rel) // sets activeLang from the extension + renders
+  } catch {
+    consoleEl.textContent = `recent file missing: ${entry.rel}`
+    return
+  }
+  splashEl.style.display = 'none'
+  if (!localStorage.getItem('tour-done')) setTimeout(startTour, 600)
+}
+
+const splashEl = document.getElementById('splash') as HTMLDivElement
+function wireSplash(): void {
+  // recent files (top 5, newest first)
+  const list = document.getElementById('recent-list') as HTMLDivElement
+  const recents = recentList().slice(0, 5)
+  list.innerHTML = ''
+  if (recents.length === 0) {
+    list.innerHTML = '<span class="m-free">no recent files yet</span>'
+  }
+  for (const r of recents) {
+    const el = document.createElement('div')
+    el.className = 'recent-item'
+    el.textContent = `${r.rel.split('/').pop()} — ${r.root}`
+    el.title = r.rel
+    el.addEventListener('click', () => void beginFromRecent(r))
+    list.appendChild(el)
+  }
+  // language cards
+  splashEl.querySelectorAll<HTMLButtonElement>('.splash-lang').forEach((b) => {
+    b.addEventListener('click', () => {
+      blip(740, 0.07, 'sine', 0.06)
+      beginSession(b.dataset.lang as 'c' | 'cpp')
+    })
+  })
+  // auto-start with C unless the user interacts with the splash
+  const bar = document.getElementById('splash-bar-i') as HTMLElement
+  bar.style.transition = 'none'
+  bar.style.width = '100%'
+  requestAnimationFrame(() => {
+    bar.style.transition = 'width 8s linear'
+    bar.style.width = '0%'
+  })
+  let engaged = false
+  splashEl.addEventListener(
+    'pointerdown',
+    () => {
+      engaged = true
+      bar.style.transition = 'none'
+      bar.style.width = '100%'
+    },
+    { once: true },
+  )
+  setTimeout(() => {
+    if (!engaged && splashEl.style.display !== 'none') beginSession('c')
+  }, 8200)
+}
+
+wireSplash()
 
 srcEl.addEventListener('input', () => journalSchedule())
 window.addEventListener('beforeunload', () => {
@@ -1895,9 +2009,5 @@ function startTour(): void {
     show()
   }
 }
-if (!localStorage.getItem('tour-done')) setTimeout(startTour, 400)
+// tour is triggered by beginSession (after the splash) — not on a timer
 
-
-srcEl.value = src
-void render(src)
-void refreshDiags()
