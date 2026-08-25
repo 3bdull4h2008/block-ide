@@ -210,6 +210,7 @@ comment anchors) remain open — see P1.2 residual note.
 | 1.12 | Boolean HEX sockets (Scratch boolean shape): control-statement conditions become hexagonal editable slots — if/while/switch inner-expression (parens stay as text), for keeps init/update granular with only the condition hex; merge-barrier keeps `;` tokens separate; any non-empty condition accepted (broken code stays editable, Rule 5) | ✅ (RUN 31) | vitest bool-sockets suite; G-UI-E2E hex commit/reject |
 | 1.13 | Operators category (Scratch green #59C059): round arithmetic reporters (+ - * / %) drop into round sockets; hex comparison/logic reporters (== != < > <= >= && \|\| !) drop into condition sockets — shape-checked drops with wrong-shape feedback; expression validator (operator-bearing or bare operand, boolean ops round-socket-refused); Functions group gains call proc + define fn (toplevel file-scope splice — C definitions never nest); printf %d / scanf %d I/O chips; operators unlock tier 5 | ✅ (RUN 32) | vitest operators/toplevel suite; G-UI-E2E operators+shape checks |
 | 1.14 | C++ SUBSET PACK (D3 amendment 2026-08-25): Lang enum + tree-sitter-cpp grammar; language rides with file extension; parse/canonicalize/diag/run all language-aware; C++ routes to clang backend (tcc is C-only, memtrace C-only v1); workspace lists .cpp/.cc/.cxx/.hpp/.hh; cpp new-file template (iostream); classes render as declaration-mouths; status shows active language | ✅ (RUN 33) | rust cpp tests (parse+backend, clang run verified); vitest cpp blocks; G-UI-E2E lang mapping |
+| 1.15 | MULTI-LANGUAGE PACKS (D11, 2026-08-25): Python (.py) + JavaScript (.js/.mjs) + Rust (.rs). core-parser: 3 grammar crates + CTree.lang; blocks: per-lang body-container kind (block/statement_block) + control/fn/class kind maps; runner: interpreter backends (python/node in the job-object jail) + rustc two-phase compile+run, all detected at runtime (missing = console hint); palette: per-lang Control/Loops/Code chips + split logic operators (and/or/not vs &&/||/!); splash: 5 language cards; new-file templates; var/list chips gated to C/C++ | ✅ (RUN 36) | rust per-lang parse units; vitest py/js/rust blocks; G-UI-E2E python splash session |
 
 **Gate 1:** ❌ NOT MET. `G-EDIT-E2E` scripted flows (build fizzbuzz entirely
 in blocks; fix injected bug found via blocks only).
@@ -304,6 +305,7 @@ passes. Laws (adopted from B2S discipline):
 | D1 | Block engine | Custom canvas renderer (PixiJS-class). NO Blockly library |
 | D2 | Shell | Tauri (Rust) first; Electron fallback only if OS-webview blockers appear |
 | D3 | Language scope | **AMENDED 2026-08-25 (user request): C++ SUBSET pack added** — language rides with the file extension (.cpp/.cc/.cxx/.hpp/.hh); tree-sitter-cpp parsing into the SAME canonical model; execution via clang++ backend (tcc stays C-only, D4 untouched); diagnostics via clang -x driver-inferred C++; classes/structs/namespaces render as containers, exotic C++ nodes stay editable mystery blocks (Rule 5). Templates/metaprogramming have no special block UI — they render from the tree like everything else. Academy remains C-authored (levels are C). |
+| D11 | **AMENDED 2026-08-25 (user request): MULTI-LANGUAGE PACKS — Python, JavaScript, Rust join C/C++.** Rationale: each has a tree-sitter grammar crate + an on-machine toolchain (python/py launcher, node, rustc) detectable at runtime like clang. Per language: own grammar, own palette (Control/Loops/Code chips + split logic operators — python uses and/or/not), own sample, own backend (interpreters run staged files in the same job-object jail; rustc compiles then runs). Block renderer is language-generic: per-lang BODY-container kind (compound_statement / block / statement_block) + control-kind map. Diagnostics block-mapping stays clang-only (C/C++) in v1 — other languages surface errors via run stderr. Missing toolchain = friendly console message (detection seam, no vendoring). Extensions: .py, .js/.mjs, .rs. Splash gains 5 language cards; recents/samples follow. |
 | D4 | Compiler bundle | **DECIDED 2026-08-23:** tcc 0.9.27 win64 vendored to `third_party/tcc/` as default EXECUTION backend via `tcc -run` (hello-world run→output median **18.5 ms** vs clang path ~170 ms). clang stays diagnostic authority (`diag_c`) + fallback backend. Gate criterion met with 8× headroom. |
 | D5 | Truth model | File-on-disk is truth; no persisted block graphs |
 | D6 | Views | Per-tab Blocks/Split/Text toggle — never force all-or-nothing |
@@ -313,6 +315,56 @@ passes. Laws (adopted from B2S discipline):
 | D10 | Pointers | In v1 core (memory viz = differentiator), but palette-unlocked late in Academy |
 
 **Post-v1 backlog (explicitly deferred):** second-language plugin packs beyond the C++ subset · online leaderboards/multiplayer co-op · AI hint tutor · cloud project sync · mobile/tablet touch layout.
+
+---
+
+## Branding & Logo Assets (2026-08-25)
+
+Three official logo lockups, shipped as PNGs in `branding/`. Use the RIGHT
+lockup for the space — never stretch, recolor, or rebuild them.
+
+### 1. `branding/1.png` — Stacked / Vertical Logo
+
+The icon sits directly ABOVE the typography. Best in spaces that are square
+or taller than they are wide, or when the logo is the central focus.
+
+| Use case | Notes |
+|---|---|
+| Mobile app splash screens | Centered while the app loads — **Block-IDE launch splash card** |
+| Merchandise & apparel | T-shirts, tote bags, mugs — centered, compact |
+| Centered document headers | Cover pages of reports, menus, proposals |
+| Social media posts | Square (1:1) Instagram/promo graphics |
+| Large signage | Posters, standing banners — vertical space abundant |
+
+### 2. `branding/brand.png` — Horizontal / Landscape Logo
+
+Icon ALONGSIDE the typography. The most versatile digital format, especially
+where vertical height is limited.
+
+| Use case | Notes |
+|---|---|
+| Website navigation bars | Top-left or center header |
+| Email signatures | Bottom of emails without pushing text down |
+| Presentation slides | Top/bottom corners of slide decks |
+| Letterheads & invoices | Top of official stationery |
+| Sponsorship banners | Horizontal step-and-repeat / event boards |
+
+### 3. `branding/logo.png` — Logomark / Icon
+
+Standalone symbol, NO text. For extreme space limits or when the brand name
+is already established by surrounding context.
+
+| Use case | Notes |
+|---|---|
+| App icons | iOS/Android home screen — **Block-IDE window/taskbar icon** |
+| Social media profile pictures | Circular avatars (name written beside it) |
+| Website favicons | Browser-tab icon — **installer/desktop shortcut icon** |
+| Watermarks | Translucent overlay on images/video |
+| Small UI elements | Buttons, loading animations inside the software |
+
+**Product wiring (where each lands in Block-IDE):** splash card → `1.png` ·
+toolbar brand + about dialog → `brand.png` · window/taskbar/installer/
+favicon → `logo.png`.
 
 ---
 
