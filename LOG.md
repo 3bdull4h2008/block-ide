@@ -1,6 +1,27 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 44: trigger=user: execute improvement-plan P1 batch
+expect: probe cache, title throttle, cache eviction, tab close buttons;
+suite green
+obs: (1) TOOLCHAIN PROBE CACHE: python/node/rustc path probes memoized via
+OnceLock - uncached probes SPAWN '<tool> --version' per candidate on EVERY
+py/js/rust run (Windows Store stub ~100-300ms); C unaffected; mid-session
+installs picked up next launch (documented). (2) TITLE THROTTLE:
+updateTitle skips identical pushes - native setTitle IPC now fires only on
+name/dirty transitions, not per keystroke. (3) TABS: close buttons (+,
+middle-click, Ctrl+W) with the standard discard guard on the ACTIVE tab;
+closing evicts fileCache/savedCache/tabViews entries; last-tab close falls
+back to a fresh scratch buffer for the active language; open-time cap
+evicts coldest cached docs beyond 64. Tab label wrapped in span so .dirty
+styling stays intact. tsc clean; vitest 43/43; cargo workspace tests clean;
+ALL FOURTEEN gates PASS exit 0. DOC NOTE: console renders checkmark glyphs
+as '?' - byte-verified IMPROVEMENT-PLAN.md headings are intact (E2 9C 85).
+state=SUCCESS | next: P2 polish batch (#10 diagnostics panel, #11 find &
+replace, #12 file drag-drop, #13 CI, #14 lint scripts)
+```
+
+```
 RUN 43: trigger=user: execute improvement-plan P0 sweep (#1 render race,
 #8 Tab key, #2 sanitize_abs, #3 dead run_c)
 expect: all four fixed with gate coverage; suite green

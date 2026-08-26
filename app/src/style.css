@@ -476,6 +476,23 @@ select:focus-visible,
   background: var(--accent-soft);
 }
 
+.tab-label {
+  pointer-events: none;
+}
+
+.tab-x {
+  margin-left: 7px;
+  padding: 0 3px;
+  border-radius: 4px;
+  opacity: 0.45;
+  font-weight: 400;
+}
+
+.tab-x:hover {
+  opacity: 1;
+  background: rgba(229, 72, 77, 0.25);
+}
+
 .tab.active {
   color: var(--fg);
   background: var(--bg-editor);

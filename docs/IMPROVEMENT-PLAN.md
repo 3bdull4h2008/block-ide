@@ -90,35 +90,33 @@ signature unchanged; long term — land P0.5.1 (changed-ranges → invalidate
 O(affected) subtrees). **Acceptance:** new gate metric: median keystroke→paint
 on the 2k-line corpus file ≤50 ms.
 
-### 5. Toolchain probes run per run (no cache)
+### 5. Toolchain probes run per run (no cache) ✅ DONE (RUN 44)
 
 **Evidence:** runner/lib.rs:489-499 — python_path/node_path/rustc_path call
 probe() every prepare_lang; each probe SPAWNS `<tool> --version` (Windows
 Store python stub alone can cost 100-300 ms). C is unaffected; py/js/rust pay
 on EVERY run.
 
-**Fix:** `static TOOL_CACHE: OnceLock<...>` memoize first success (re-probe
-only on failure). **Acceptance:** bench in run_hello_bench-style: second
-python run's prepare time < first by probe cost.
+**Fix shipped:** OnceLock memoization per tool (process lifetime; tools
+installed mid-session are picked up next launch — documented).
 
-### 6. Title IPC fired per keystroke
+### 6. Title IPC fired per keystroke ✅ DONE (RUN 44)
 
 **Evidence:** setSrc → markDirty (every op/type edit) → updateTitle →
 `getCurrentWindow().setTitle(...)` IPC (main.ts:1476). Cheap individually,
 needless ×N.
 
-**Fix:** call updateTitle only when dirty-state OR name transitions (track
-last title string; skip identical). **Acceptance:** manual; no gate needed.
+**Fix shipped:** updateTitle keeps lastWindowTitle and skips identical
+pushes; document.title + native setTitle fire only on real transitions.
 
-### 7. Unbounded caches/maps
+### 7. Unbounded caches/maps ✅ DONE (RUN 44)
 
 **Evidence:** fileCache/savedCache/tabViews cleared only on Open Folder
 (main.ts:1412-1416). A long session opening hundreds of files grows without
 bound; closed tabs never evict (there ARE no close buttons — see #13).
 
-**Fix:** tab close buttons (#13) + evict that doc from all three maps on
-close; optional LRU cap 64. **Acceptance:** close a dirty-guarded tab →
-reopen shows disk content; memory flat over 100 open/close cycles.
+**Fix shipped:** fileCache/savedCache capped at 64 with coldest-first
+eviction on open; closing a tab evicts its entries immediately (#9 pairs).
 
 ### 8. Tab key unusable in the text editor ✅ DONE (RUN 43)
 

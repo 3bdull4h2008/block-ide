@@ -1423,13 +1423,66 @@ async function refreshFiles(): Promise<void> {
 function createTab(path: string, content: string): void {
   fileCache.set(path, content)
   savedCache.set(path, content)
+  // cache cap (#7): open docs are the hot set — evict the coldest entries
+  for (const key of fileCache.keys()) {
+    if (fileCache.size <= 64) break
+    if (key !== path && key !== activePath) {
+      fileCache.delete(key)
+      savedCache.delete(key)
+    }
+  }
   const tab = document.createElement('div')
   tab.className = 'tab'
   tab.dataset.path = path
-  tab.textContent = baseName(path)
+  tab.title = path
+  const label = document.createElement('span')
+  label.className = 'tab-label'
+  label.textContent = baseName(path)
+  const x = document.createElement('span')
+  x.className = 'tab-x'
+  x.textContent = '×'
+  x.title = 'Close (Ctrl+W)'
+  x.addEventListener('click', (e) => {
+    e.stopPropagation()
+    void closeTab(path)
+  })
+  tab.append(label, x)
   tab.addEventListener('click', () => void guardedOpenTab(path))
+  tab.addEventListener('auxclick', (e) => {
+    if ((e as MouseEvent).button === 1) {
+      e.preventDefault()
+      void closeTab(path) // middle-click close (#9)
+    }
+  })
   tabsEl.appendChild(tab)
   activateTab(path)
+}
+
+/** Close a doc tab: discard-guard the ACTIVE one, evict its caches, and
+ *  fall back to a fresh scratch buffer when no documents remain. */
+async function closeTab(path: string): Promise<void> {
+  const isActive = activePath === path
+  if (isActive && !(await confirmDiscard())) return
+  const el = Array.from(tabsEl.children).find((t) => (t as HTMLElement).dataset.path === path)
+  el?.remove()
+  fileCache.delete(path)
+  savedCache.delete(path)
+  tabViews.delete(path)
+  if (!isActive) return
+  const next = tabsEl.querySelector('.tab') as HTMLElement | null
+  if (next?.dataset.path) {
+    activateTab(next.dataset.path)
+    return
+  }
+  activePath = null
+  hist.reset()
+  caretAnchor = null
+  src = NEW_TEMPLATES[activeLang]
+  savedSnapshot = src
+  srcEl.value = src
+  void render(src)
+  markDirty()
+  consoleEl.textContent = 'closed — New File or Open Folder to continue'
 }
 
 /** Unsaved-changes gate for every navigation that would REPLACE the single
@@ -1538,12 +1591,16 @@ function statusFlash(msg: string): void {
   }, 2500)
 }
 
+let lastWindowTitle = ''
 function updateTitle(): void {
   const dirty = activePath !== null && src !== savedSnapshot ? ' •' : ''
   const name = activePath ? baseName(activePath) : 'Cade'
-  document.title = `${name}${dirty} - Cade`
+  const title = `${name}${dirty} - Cade`
+  if (title === lastWindowTitle) return // per-keystroke IPC throttle (#6)
+  lastWindowTitle = title
+  document.title = title
   getCurrentWindow()
-    .setTitle(`${name}${dirty} - Cade`)
+    .setTitle(title)
     .catch(() => {})
 }
 
@@ -1605,6 +1662,10 @@ window.addEventListener('keydown', (e) => {
   if (e.key.toLowerCase() === 's') {
     e.preventDefault()
     void saveActive(e.shiftKey) // Ctrl+Shift+S = Save As
+  } else if (e.key.toLowerCase() === 'w') {
+    // close active tab (Ctrl+W) — discard-guarded like every navigation
+    e.preventDefault()
+    if (activePath !== null) void closeTab(activePath)
   } else if (e.key === 'z' && !e.shiftKey) {
     e.preventDefault()
     const prev = hist.undo(src)

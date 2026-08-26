@@ -486,16 +486,29 @@ fn probe(candidates: &[&str], version_flag: &str) -> Option<String> {
     None
 }
 
+/// Probe results are memoized for the process lifetime (IMPROVEMENT-PLAN #5):
+/// each uncached probe SPAWNS `<tool> --version` per candidate — the Windows
+/// Store python stub alone costs 100-300 ms, paid on EVERY py/js/rust run.
+/// Tools installed mid-session are picked up on next app launch.
 pub fn python_path() -> Option<String> {
-    probe(&["python", "py", "python3"], "--version")
+    static CACHE: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    CACHE
+        .get_or_init(|| probe(&["python", "py", "python3"], "--version"))
+        .clone()
 }
 
 pub fn node_path() -> Option<String> {
-    probe(&["node", "node.exe"], "--version")
+    static CACHE: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    CACHE
+        .get_or_init(|| probe(&["node", "node.exe"], "--version"))
+        .clone()
 }
 
 pub fn rustc_path() -> Option<String> {
-    probe(&["rustc"], "--version")
+    static CACHE: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    CACHE
+        .get_or_init(|| probe(&["rustc"], "--version"))
+        .clone()
 }
 
 /// Execute a compiled binary (clang backend).
