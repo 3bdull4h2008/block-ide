@@ -6,6 +6,7 @@ use crate::canonical::{CNode, CTree};
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::os::windows::process::CommandExt;
 
 /// Locate a usable clang-format.exe. Order: env override → PATH → known dirs.
 pub fn detect_clang_format() -> Option<PathBuf> {
@@ -41,6 +42,7 @@ fn which_exists(name: &str) -> bool {
         .arg("--version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
         .status()
         .is_ok()
 }
@@ -61,6 +63,7 @@ pub fn clang_format(code: &str) -> Result<String, String> {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
         .spawn()
         .map_err(|e| e.to_string())?;
     // Write stdin from a helper thread: for documents whose formatted output

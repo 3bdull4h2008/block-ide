@@ -206,8 +206,8 @@ Gate assertion added ("editor: Tab indents, focus stays").
 | 14 | ESLint + Prettier + `npm test` script wired into gates pre-flight | package.json has no test/lint/format scripts; TS quality is eyeballed | PARTIAL (RUN 45) |
 | 15 | Version 0.2.0 + rebuilt NSIS installer + CHANGELOG.md | exe shipped at v0.1.0 predates EVERYTHING since; version stale | DONE 0.2.0 (RUN 45; vanilla drill manual) |
 | 16 | Zoom-to-fit button + fit-on-load for block canvas | wheel-zoom exists; newcomers get lost on big programs | S |
-| 17 | Save/Unsave on close via X | journal was disabled per user; re-enable with explicit save-on-close or prompt for unsaved changes on window close | S |
-| 18 | Window flash fix | cmd.exe flash on process spawn; verify CREATE_NO_WINDOW on all spawns including retries | S |
+| 17 | Save/Unsave on close via X | journal was disabled per user; re-enable with explicit save-on-close or prompt for unsaved changes on window close | ✅ RUN 49 |
+| 18 | Window flash fix | cmd.exe flash on process spawn; verify CREATE_NO_WINDOW on all spawns including retries | ✅ RUN 49 |
 
 ## P3 — tracked big rocks (already on PLAN; ordered by leverage)
 

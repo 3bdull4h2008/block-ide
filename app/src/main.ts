@@ -2953,9 +2953,13 @@ document.getElementById('diag-toggle')?.addEventListener('click', () => {
 })
 
 // Close-time crash checkpoint ONLY (not autosave): one journal write when
-// crash journal disabled per user request
-  window.addEventListener('beforeunload', () => {
-    /* journal_write disabled */
+// Save-on-close: prompt for unsaved changes when closing the window
+  // (replaces the old silent journal_write with an explicit confirmation)
+  window.addEventListener('beforeunload', (e) => {
+    if (activePath !== null && src.trim() && src !== savedSnapshot) {
+      e.preventDefault()
+      e.returnValue = 'You have unsaved changes. Are you sure you want to quit?'
+    }
   })
 
 // keybindings: Ctrl+Enter / F5 run, Ctrl+B sidebar toggle

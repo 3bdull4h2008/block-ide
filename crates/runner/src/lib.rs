@@ -216,6 +216,7 @@ pub fn prepare_lang(
                     .arg("-o")
                     .arg(&exe)
                     .current_dir(&dir)
+                    .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
                     .output()
                     .map_err(|e| e.to_string())?;
                 if !out.status.success() || !exe.is_file() {
@@ -478,6 +479,7 @@ fn probe(candidates: &[&str], version_flag: &str) -> Option<String> {
             .arg(version_flag)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
+            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
             .status()
             .map(|s| s.success())
             .unwrap_or(false)
