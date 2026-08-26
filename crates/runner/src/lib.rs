@@ -247,6 +247,7 @@ pub fn prepare_lang(
                     .arg("-o")
                     .arg(&exe)
                     .current_dir(&dir)
+                    .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
                     .output()
                     .map_err(|e| e.to_string())?;
                 if !out.status.success() || !exe.is_file() {
