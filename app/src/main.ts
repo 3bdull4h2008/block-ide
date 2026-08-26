@@ -2649,48 +2649,7 @@ async function beginSession(lang: Lang): Promise<void> {
   savedSnapshot = src // fresh sample session = clean baseline
   activePath = null
   caretAnchor = null
-  // unsaved work from a previous session overrides the sample (its language
-  // rides with the journaled path when there is one)
-  let restored = false
-  try {
-    const j = await invoke<{ path: string; content: string; age_secs: number } | null>(
-      'journal_read',
-    )
-    if (j && j.content.trim()) {
-      if (Object.values(SAMPLES).includes(j.content) || j.content === NEW_TEMPLATE) {
-        void invoke('journal_clear')
-      } else {
-        src = j.content
-        if (j.path) activeLang = langOf(j.path)
-        consoleEl.textContent = `[recovery] unsaved work from ${Math.round(j.age_secs)}s ago restored${j.path ? ` (${j.path})` : ''} - Ctrl+S to keep it`
-        restored = true
-      }
-    }
-  } catch {
-    /* no journal */
-  }
-  if (!restored) {
-    // live journal missing — salvage the newest backup snapshot (rotation
-    // keeps five; Tynker's "lost my progress" must be structurally impossible)
-    try {
-      const b = await invoke<{ path: string; content: string; age_secs: number } | null>(
-        'journal_restore_backup',
-        { slot: 1 },
-      )
-      if (
-        b &&
-        b.content.trim() &&
-        !Object.values(SAMPLES).includes(b.content) &&
-        b.content !== NEW_TEMPLATE
-      ) {
-        src = b.content
-        if (b.path) activeLang = langOf(b.path)
-        consoleEl.textContent = `[recovery] no live journal - restored BACKUP snapshot (${Math.round(b.age_secs / 60)} min old)${b.path ? ` (${b.path})` : ''} - Ctrl+S to keep it`
-      }
-    } catch {
-      /* no backups either */
-    }
-  }
+  // crash journal disabled per user request
   splashEl.style.display = 'none'
   srcEl.value = src
   void render(src)
@@ -2930,14 +2889,10 @@ document.getElementById('diag-toggle')?.addEventListener('click', () => {
 })
 
 // Close-time crash checkpoint ONLY (not autosave): one journal write when
-// the window goes away with unsaved work, so a hard kill mid-session still
-// recovers. Normal editing never touches the journal — explicit Save is the
-// workflow; discard guards cover navigation.
-window.addEventListener('beforeunload', () => {
-  if (activePath !== null && src.trim() && src !== savedSnapshot) {
-    void invoke('journal_write', { path: activePath ?? '', content: src })
-  }
-})
+// crash journal disabled per user request
+  window.addEventListener('beforeunload', () => {
+    /* journal_write disabled */
+  })
 
 // keybindings: Ctrl+Enter / F5 run, Ctrl+B sidebar toggle
 window.addEventListener('keydown', (e) => {
