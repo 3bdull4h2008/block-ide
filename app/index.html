@@ -56,7 +56,7 @@
           <button class="vm" data-view="text" title="Text only (Ctrl+3)">Text</button>
           <button id="graduate" title="The off-ramp: switch to real-code view. Blocks come back with Ctrl+1.">🎓 Graduate</button>
         </span>
-        <span class="hint">Ctrl+Enter run · Ctrl+S save · Ctrl+Shift+S save as · / filter blocks · double-click a block to edit</span>
+        <span class="hint">Ctrl+Enter run · Ctrl+S save · Ctrl+F find · / filter blocks · drag files in · double-click a block to edit</span>
         <button id="theme-toggle" title="Toggle light/dark theme">☾</button>
         <button id="run">▶ Run</button>
         <span id="status"></span>
@@ -78,9 +78,26 @@
       <div id="main-col">
         <div id="tabs"></div>
         <textarea id="src" spellcheck="false"></textarea>
+        <div id="findbar" style="display:none">
+          <input id="find-input" placeholder="find" spellcheck="false" autocomplete="off" />
+          <span id="find-count"></span>
+          <button id="find-prev" title="previous match">↑</button>
+          <button id="find-next" title="next match">↓</button>
+          <input id="repl-input" placeholder="replace" spellcheck="false" autocomplete="off" />
+          <button id="repl-one" title="replace current">Repl</button>
+          <button id="repl-all" title="replace all">All</button>
+          <button id="find-close" title="close (Esc)">×</button>
+        </div>
       </div>
       <div id="canvas-host"></div>
-      <pre id="console">console</pre>
+      <div id="console-wrap">
+        <div id="diag-bar">
+          <button id="diag-toggle" title="toggle problem list">problems ▾</button>
+          <span id="diag-count"></span>
+        </div>
+        <div id="diag-list" style="display:none"></div>
+        <pre id="console">console</pre>
+      </div>
       <div id="console-input-row" style="display:none">
         <input id="console-input" placeholder="input for the program… (Enter to send)" autocomplete="off" />
         <button id="console-send" title="Send to program">▶</button>

@@ -420,14 +420,52 @@ function drawDiagOverlay(ds: Diag[]): void {
   overlay.addChild(g)
 }
 
+// ------------------------------------------------ diagnostics panel (#10)
+let lastDiags: Diag[] = []
+
+function renderDiagList(ds: Diag[]): void {
+  lastDiags = ds
+  const list = document.getElementById('diag-list') as HTMLDivElement
+  const count = document.getElementById('diag-count') as HTMLSpanElement
+  const errs = ds.filter((d) => d.severity.includes('error')).length
+  count.textContent = ds.length === 0 ? 'no problems' : `${ds.length} (${errs} errors)`
+  if (list.style.display === 'none') return
+  list.innerHTML = ''
+  for (const d of ds) {
+    const b = document.createElement('button')
+    b.className = `diag-row ${d.severity.includes('error') ? 'err' : 'warn'}`
+    const sev = document.createElement('span')
+    sev.className = 'diag-sev'
+    sev.textContent = d.severity.includes('error') ? '✖' : '▲'
+    const loc = document.createElement('span')
+    loc.className = 'diag-loc'
+    loc.textContent = `L${d.line}:${d.col}`
+    b.append(sev, loc, document.createTextNode(d.message))
+    b.addEventListener('click', () => jumpToOffset(d.offset))
+    list.appendChild(b)
+  }
+}
+
+/** Jump the editor to a byte offset: split view, focused, scrolled. */
+function jumpToOffset(offset: number): void {
+  setView('split')
+  requestAnimationFrame(() => {
+    srcEl.focus({ preventScroll: true })
+    const lineEnd = src.indexOf('\n', offset)
+    srcEl.setSelectionRange(offset, lineEnd === -1 ? Math.min(src.length, offset + 80) : lineEnd)
+    const line = src.slice(0, offset).split('\n').length - 1
+    const lh = parseFloat(getComputedStyle(srcEl).lineHeight || '19') || 19
+    srcEl.scrollTop = Math.max(0, line * lh - srcEl.clientHeight / 2)
+  })
+}
+
 async function refreshDiags(): Promise<void> {
   try {
     const ds = await invoke<Diag[]>('diag_c', { src, lang: activeLang })
     drawDiagOverlay(ds)
-    if (ds.length > 0) {
-      consoleEl.textContent =
-        ds.map((d) => `[${d.severity}] line ${d.line}:${d.col} — ${d.message}`).join('\n') + '\n'
-    }
+    // problems live in their own scannable panel now — the console keeps
+    // PROGRAM OUTPUT only (run results were being clobbered before)
+    renderDiagList(ds)
   } catch {
     /* diagnostics are best-effort */
   }
@@ -1666,6 +1704,12 @@ window.addEventListener('keydown', (e) => {
     // close active tab (Ctrl+W) — discard-guarded like every navigation
     e.preventDefault()
     if (activePath !== null) void closeTab(activePath)
+  } else if (e.key.toLowerCase() === 'f') {
+    e.preventDefault()
+    openFind(false)
+  } else if (e.key.toLowerCase() === 'h') {
+    e.preventDefault()
+    openFind(true)
   } else if (e.key === 'z' && !e.shiftKey) {
     e.preventDefault()
     const prev = hist.undo(src)
@@ -2671,6 +2715,167 @@ document.getElementById('brand-logo')?.addEventListener('click', () => {
 })
 aboutEl.addEventListener('click', () => {
   aboutEl.style.display = 'none'
+})
+
+// ------------------------------------------------- find & replace (#11)
+const findbar = document.getElementById('findbar') as HTMLDivElement
+const findInput = document.getElementById('find-input') as HTMLInputElement
+const replInput = document.getElementById('repl-input') as HTMLInputElement
+const findCount = document.getElementById('find-count') as HTMLSpanElement
+let findHits: number[] = []
+let findIdx = -1
+
+function computeHits(): number[] {
+  const q = findInput.value
+  if (q.length === 0) return []
+  const hay = src.toLowerCase()
+  const needle = q.toLowerCase()
+  const hits: number[] = []
+  let i = 0
+  while ((i = hay.indexOf(needle, i)) !== -1) {
+    hits.push(i)
+    i += needle.length
+  }
+  return hits
+}
+
+function showHit(i: number): void {
+  if (findHits.length === 0) {
+    findCount.textContent = findInput.value ? '0' : ''
+    return
+  }
+  findIdx = ((i % findHits.length) + findHits.length) % findHits.length
+  const at = findHits[findIdx]
+  findCount.textContent = `${findIdx + 1} of ${findHits.length}`
+  srcEl.focus({ preventScroll: true })
+  srcEl.setSelectionRange(at, at + findInput.value.length)
+  const line = src.slice(0, at).split('\n').length - 1
+  const lh = parseFloat(getComputedStyle(srcEl).lineHeight || '19') || 19
+  srcEl.scrollTop = Math.max(0, line * lh - srcEl.clientHeight / 2)
+}
+
+function refreshFind(): void {
+  const prevAt = findHits[findIdx]
+  findHits = computeHits()
+  findIdx = prevAt === undefined ? -1 : Math.max(0, nearestHitIndex(prevAt))
+  if (findHits.length > 0 && findIdx >= 0) {
+    // keep count in sync without moving the caret
+    findCount.textContent =
+      findHits.length === 0 ? '' : `${Math.min(findIdx + 1, findHits.length)} of ${findHits.length}`
+  } else {
+    findCount.textContent = findInput.value ? '0' : ''
+  }
+}
+
+function nearestHitIndex(at: number): number {
+  for (let i = 0; i < findHits.length; i++) if (findHits[i] >= at) return i
+  return findHits.length - 1
+}
+
+function openFind(replaceMode: boolean): void {
+  findbar.style.display = 'flex'
+  if (replaceMode) replInput.focus()
+  else {
+    findInput.focus()
+    findInput.select()
+  }
+  refreshFind()
+}
+
+function closeFind(): void {
+  findbar.style.display = 'none'
+  void canonicalize()
+}
+
+findInput.addEventListener('input', () => {
+  findHits = computeHits()
+  findIdx = -1
+  showHit(0)
+})
+findInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    showHit(e.shiftKey ? findIdx - 1 : findIdx + 1)
+  } else if (e.key === 'Escape') closeFind()
+})
+replInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeFind()
+})
+document.getElementById('find-next')?.addEventListener('click', () => {
+  findHits = computeHits()
+  showHit(findIdx + 1)
+})
+document.getElementById('find-prev')?.addEventListener('click', () => {
+  findHits = computeHits()
+  showHit(findIdx - 1)
+})
+document.getElementById('find-close')?.addEventListener('click', closeFind)
+
+document.getElementById('repl-one')?.addEventListener('click', () => {
+  findHits = computeHits()
+  if (findHits.length === 0) return
+  const i = findIdx === -1 ? 0 : findIdx
+  const at = findHits[i]
+  const q = findInput.value
+  setSrc(src.slice(0, at) + replInput.value + src.slice(at + q.length))
+  tourHooks.advance?.('edit')
+  blip(660, 0.05, 'sine', 0.06)
+  requestAnimationFrame(() => {
+    findHits = computeHits()
+    findIdx = nearestHitIndex(at + replInput.value.length) 
+    showHit(findIdx)
+  })
+})
+
+document.getElementById('repl-all')?.addEventListener('click', () => {
+  const q = findInput.value
+  if (!q) return
+  let n = 0
+  let out = ''
+  let rest = src
+  let at: number
+  while ((at = rest.toLowerCase().indexOf(q.toLowerCase())) !== -1) {
+    out += rest.slice(0, at) + replInput.value
+    rest = rest.slice(at + q.length)
+    n++
+  }
+  if (n === 0) return
+  setSrc(out + rest)
+  tourHooks.advance?.('edit')
+  blip(740, 0.07, 'sine', 0.06)
+  consoleEl.textContent = `[replace] ${n} occurrence(s) replaced`
+  requestAnimationFrame(() => refreshFind())
+})
+
+// ------------------------------------------------ drag & drop files (#12)
+// Dropping source files onto the window opens them as tabs — same guard
+// rules as every other navigation.
+getCurrentWindow()
+  .onDragDropEvent(async (ev) => {
+    if (ev.payload.type !== 'drop') return
+    if (!(await confirmDiscard())) return
+    const exts = ['c', 'cpp', 'cc', 'cxx', 'hpp', 'hh', 'py', 'js', 'mjs', 'rs']
+    let opened = 0
+    for (const raw of ev.payload.paths) {
+      const p = normSlashes(raw)
+      const ext = p.split('.').pop()?.toLowerCase() ?? ''
+      if (!exts.includes(ext)) continue
+      await openTab(asRelInWorkspace(p) ?? p)
+      opened++
+    }
+    if (opened > 0) consoleEl.textContent = `opened ${opened} dropped file(s)`
+  })
+  .catch(() => {})
+
+// diagnostics strip toggle
+const diagListEl = document.getElementById('diag-list') as HTMLDivElement
+document.getElementById('diag-toggle')?.addEventListener('click', () => {
+  const showing = diagListEl.style.display !== 'none'
+  diagListEl.style.display = showing ? 'none' : 'block'
+  ;(document.getElementById('diag-toggle') as HTMLButtonElement).textContent = showing
+    ? 'problems ▸'
+    : 'problems ▾'
+  if (!showing) renderDiagList(lastDiags)
 })
 
 // Close-time crash checkpoint ONLY (not autosave): one journal write when

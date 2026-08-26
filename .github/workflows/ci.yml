@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # rust side: unit + integration tests (round-trip, recovery, perf)
+      - name: cargo test
+        run: cargo test --workspace
+        env:
+          BLOCKIDE_DATA_DIR: ${{ runner.temp }}/blockide-ci-data
+
+      # frontend: types + headless editor-model suites
+      - name: npm ci
+        working-directory: app
+        run: npm ci
+
+      - name: typecheck
+        working-directory: app
+        run: npx tsc --noEmit
+
+      - name: vitest
+        working-directory: app
+        run: npx vitest run

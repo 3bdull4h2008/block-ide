@@ -533,8 +533,77 @@ select:focus-visible,
   display: block;
 }
 
-#console {
+#console-wrap {
   grid-column: 2 / 3;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* diagnostics strip: scannable problem list above the run output (#10) */
+#diag-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  background: var(--bg-panel);
+  border-top: var(--clay-border) solid var(--border-strong);
+  font-size: 11px;
+}
+
+#diag-toggle {
+  font-size: 11px;
+  padding: 1px 8px;
+}
+
+#diag-count {
+  color: var(--fg-dim);
+}
+
+#diag-list {
+  max-height: 96px;
+  overflow-y: auto;
+  background: var(--bg-deep);
+  border-top: 1px solid rgba(8, 145, 178, 0.25);
+  font-family: Consolas, monospace;
+  font-size: 12px;
+}
+
+.diag-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 2px 12px;
+  background: none;
+  border: none;
+  color: #eaf6fb;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.diag-row:hover {
+  background: rgba(8, 145, 178, 0.18);
+}
+
+.diag-row .diag-loc {
+  color: #7ee2c7;
+  margin-right: 8px;
+}
+
+.diag-row.err .diag-sev {
+  color: #ff8a8a;
+  margin-right: 6px;
+}
+
+.diag-row.warn .diag-sev {
+  color: #ffd479;
+  margin-right: 6px;
+}
+
+#console {
+  flex: 1;
+  min-height: 0;
   background: var(--bg-deep);
   color: #7ee2c7;
   font-family: Consolas, monospace;
@@ -966,6 +1035,49 @@ select:focus-visible,
   color: #fff;
 }
 
+/* find & replace bar (#11) */
+#findbar {
+  position: absolute;
+  top: 40px;
+  right: 14px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--panel, #fff);
+  border: 2px solid rgba(8, 145, 178, 0.35);
+  border-radius: 12px;
+  box-shadow: 0 10px 26px rgba(7, 32, 42, 0.3);
+}
+
+#main-col {
+  position: relative;
+}
+
+#findbar input {
+  width: 130px;
+  font-family: 'Comic Neue', monospace;
+  font-size: 12px;
+  padding: 3px 8px;
+  border: 1.5px solid rgba(8, 145, 178, 0.35);
+  border-radius: 8px;
+  background: var(--bg, #eaf6fb);
+  color: var(--fg, #164e63);
+  outline: none;
+}
+
+#findbar input:focus {
+  border-color: var(--accent, #0891b2);
+}
+
+#find-count {
+  font-size: 11px;
+  color: var(--fg-dim);
+  min-width: 46px;
+  text-align: center;
+}
+
 /* dependency-gated chips: block exists only when its prerequisite does */.pal.pal-dep {
   opacity: 0.45;
   border: 2px dashed rgba(100, 116, 139, 0.6);
@@ -1093,7 +1205,7 @@ select:focus-visible,
   grid-column: 2 / 3;
 }
 
-#app[data-view='blocks'] #console {
+#app[data-view='blocks'] #console-wrap {
   grid-column: 2 / 3;
 }
 
@@ -1111,7 +1223,7 @@ select:focus-visible,
 }
 
 #app[data-view='text'] #main-col,
-#app[data-view='text'] #console {
+#app[data-view='text'] #console-wrap {
   grid-column: 2 / 3;
 }
 

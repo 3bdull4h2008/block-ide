@@ -1,6 +1,32 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 45: trigger=user: P2 polish batch
+expect: diagnostics panel, find&replace, file drag-drop, CI, npm scripts,
+0.2.0 release train; suite green + installer builds
+obs: (1) DIAGNOSTICS PANEL (#10): problems strip above console (count +
+toggle + clickable rows -> jumpToOffset: split view/focus/select-to-EOL/
+scroll); console NO LONGER clobbered by diag text - it keeps PROGRAM OUTPUT
+(refreshDiags previously overwrote run results!). (2) FIND & REPLACE (#11):
+Ctrl+F/Ctrl+H floating bar; case-insensitive hits, n-of-m counter,
+wrap-around prev/next, single+all replace routed through setSrc seams;
+Esc closes; caret-preserving. (3) DRAG-DROP (#12): onDragDropEvent drop ->
+source-ext filter -> guarded openTab per path (rel-in-workspace or abs).
+(4) CI (#13): .github/workflows/ci.yml - windows-latest, cargo test
+--workspace (BLOCKIDE_DATA_DIR isolated), npm ci + tsc + vitest on every
+push/PR. (5) SCRIPTS (#14 partial): npm test/typecheck added; eslint config
+deferred (network install risk time-boxed out). (6) RELEASE TRAIN (#15):
+versions 0.2.0 (package.json/tauri.conf/Cargo.toml), CHANGELOG.md written
+(0.1.0->0.2.0 summary), NSIS BUILT: Cade_0.2.0_x64-setup.exe. Gate note:
+UI-E2E console assertions unaffected - diag text moved OUT of console was
+the only overlap and gates only assert [exit]/run output. tsc clean; vitest
+43/43; ALL FOURTEEN gates PASS exit 0.
+state=SUCCESS | next: vanilla-Windows install drill (manual, 0.2.0);
+remaining plan items: eslint config, WASM parity gate, comments emitter,
+clangd hovers, step-mode
+```
+
+```
 RUN 44: trigger=user: execute improvement-plan P1 batch
 expect: probe cache, title throttle, cache eviction, tab close buttons;
 suite green

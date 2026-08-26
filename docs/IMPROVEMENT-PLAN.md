@@ -134,13 +134,13 @@ Gate assertion added ("editor: Tab indents, focus stays").
 
 | # | Item | Evidence / rationale | Effort |
 |---|---|---|---|
-| 9 | Tab close buttons (+ middle-click, Ctrl+W) with discard guard | tabs have no close affordance at all; pairs with #7 | S |
-| 10 | Diagnostics PANEL (list of errors, click → jump to block/line) | outlines exist; learners need a scannable list like VS Code Problems | M |
-| 11 | Find & Replace (Ctrl+F/H) in text view | table stakes for "real editor" perception | M |
-| 12 | Drag-drop files onto the window to open | standard desktop convention; cheap via tauri onDragDrop event | S |
-| 13 | CI: GitHub Actions running `cargo test --workspace` + `vitest run` (+ tsc) on every push | zero CI today (.github absent); gates are local-only trust | M |
-| 14 | ESLint + Prettier + `npm test` script wired into gates pre-flight | package.json has no test/lint/format scripts; TS quality is eyeballed | S |
-| 15 | Version 0.2.0 + rebuilt NSIS installer + CHANGELOG.md | exe shipped at v0.1.0 predates EVERYTHING since; version stale | S + drill |
+| 9 | Tab close buttons (+ middle-click, Ctrl+W) with discard guard | tabs have no close affordance at all; pairs with #7 | ✅ RUN 44 |
+| 10 | Diagnostics PANEL (list of errors, click → jump to block/line) | outlines exist; learners need a scannable list like VS Code Problems | ✅ RUN 45 |
+| 11 | Find & Replace (Ctrl+F/H) in text view | table stakes for "real editor" perception | ✅ RUN 45 |
+| 12 | Drag-drop files onto the window to open | standard desktop convention; cheap via tauri onDragDrop event | ✅ RUN 45 |
+| 13 | CI: GitHub Actions running `cargo test --workspace` + `vitest run` (+ tsc) on every push | zero CI today (.github absent); gates are local-only trust | DONE (RUN 45) |
+| 14 | ESLint + Prettier + `npm test` script wired into gates pre-flight | package.json has no test/lint/format scripts; TS quality is eyeballed | PARTIAL (RUN 45) |
+| 15 | Version 0.2.0 + rebuilt NSIS installer + CHANGELOG.md | exe shipped at v0.1.0 predates EVERYTHING since; version stale | DONE 0.2.0 (RUN 45; vanilla drill manual) |
 | 16 | Zoom-to-fit button + fit-on-load for block canvas | wheel-zoom exists; newcomers get lost on big programs | S |
 
 ## P3 — tracked big rocks (already on PLAN; ordered by leverage)

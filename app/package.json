@@ -1,7 +1,7 @@
 {
     "name": "app",
     "private": true,
-    "version": "0.1.0",
+    "version": "0.2.0",
     "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,6 +11,8 @@
     "tauri": "tauri",
     "app": "npm run build && npm run copytcc && tauri dev",
     "app:hmr": "tauri dev --config tauri-dev.conf.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
     "installer": "tauri build --bundles nsis"
   },
     "devDependencies": {
