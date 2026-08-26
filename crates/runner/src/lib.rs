@@ -347,6 +347,8 @@ fn run_job_opts(
         Ok(c) => c,
         Err(first) => {
             thread::sleep(Duration::from_millis(60));
+            // Re-apply CREATE_NO_WINDOW for the retry
+            cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
             cmd.spawn().map_err(|e| {
                 format!("launch failed: {e} (first attempt: {first})")
             })?
