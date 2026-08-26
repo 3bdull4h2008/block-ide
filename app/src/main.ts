@@ -374,8 +374,13 @@ async function render(source: string): Promise<void> {
 
 async function canonicalize(): Promise<void> {
   try {
-    const clean = await invoke<string>('canonicalize_c', { src, lang: activeLang })
-    if (clean !== src) {
+    // snapshot the buffer+lang: a blur-triggered canonicalize that resolves
+    // after a tab/lang switch must NOT write into the NEW document
+    const buf = src
+    const lang = activeLang
+    const clean = await invoke<string>('canonicalize_c', { src: buf, lang })
+    if (clean !== buf || src !== buf || activeLang !== lang) {
+      if (src !== buf) return // buffer moved on — nothing to format anymore
       // Formatting rewrites the buffer UNDER the user — map the caret onto
       // the freshly parsed tree WITHOUT stealing focus from wherever they went.
       const anchor = pickAnchor(roots, srcEl.selectionStart ?? 0)
@@ -1095,8 +1100,17 @@ function keyToCode(e: KeyboardEvent): number | null {
   return null
 }
 
+// Stage-key forwarding must NEVER swallow typing: while a program runs, the
+// console stdin box / find bar / palette filter keep their own keys.
+const isTextEntryTarget = (e: Event): boolean => {
+  const t = e.target as HTMLElement | null
+  if (!t) return false
+  if (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT') return true
+  return !!t.closest('#console-input-row, #findbar, #pal-filter')
+}
+
 window.addEventListener('keydown', (e) => {
-  if (!running) return
+  if (!running || isTextEntryTarget(e)) return
   const code = keyToCode(e)
   if (code !== null) {
     e.preventDefault()
@@ -1104,7 +1118,7 @@ window.addEventListener('keydown', (e) => {
   }
 })
 window.addEventListener('keyup', (e) => {
-  if (!running) return
+  if (!running || isTextEntryTarget(e)) return
   const code = keyToCode(e)
   if (code !== null) {
     e.preventDefault()
@@ -1206,6 +1220,7 @@ async function startRun(): Promise<void> {
         if (r) {
           running = false
           clearInterval(pollTimer)
+          clearInterval(memTimer)
           stopBtn.style.display = 'none'
           consoleInputRow.style.display = 'none'
           fpsEl.textContent = ''
@@ -1216,6 +1231,7 @@ async function startRun(): Promise<void> {
       .catch((e) => {
         running = false
         clearInterval(pollTimer)
+        clearInterval(memTimer)
         stopBtn.style.display = 'none'
         consoleInputRow.style.display = 'none'
         consoleEl.textContent = `[poll] ${String(e)}`
@@ -1459,6 +1475,9 @@ async function refreshFiles(): Promise<void> {
 }
 
 function createTab(path: string, content: string): void {
+  // Save-As onto an already-open path must not duplicate the tab element
+  const dup = Array.from(tabsEl.children).find((t) => (t as HTMLElement).dataset.path === path)
+  dup?.remove()
   fileCache.set(path, content)
   savedCache.set(path, content)
   // cache cap (#7): open docs are the hot set — evict the coldest entries
@@ -1600,6 +1619,14 @@ document.getElementById('new-file')?.addEventListener('click', async () => {
   if (!name) return
   const withExt = /\.[a-z]+$/i.test(name) ? name : `${name}.c`
   if (workspace !== null) {
+    const exists = files.includes(withExt)
+    const overwrite =
+      !exists ||
+      (await ask(`"${withExt}" already exists in this folder.\n\nOverwrite it?`, {
+        title: 'Overwrite file?',
+        kind: 'warning',
+      }))
+    if (!overwrite) return
     const content = NEW_TEMPLATES[langOf(withExt)]
     await invoke('write_file', { root: workspace, rel: withExt, content })
     await refreshFiles()
@@ -1611,6 +1638,19 @@ document.getElementById('new-file')?.addEventListener('click', async () => {
       filters: [{ name: 'Source files', extensions: ['c', 'cpp', 'cc', 'cxx', 'hh', 'py', 'js', 'mjs', 'rs'] }],
     })
     if (typeof picked !== 'string' || !picked) return
+    const exists = await invoke<unknown>('read_abs', { path: picked }).then(
+      () => true,
+      () => false,
+    )
+    if (
+      exists &&
+      !(await ask(`"${baseName(picked)}" already exists.\n\nOverwrite it?`, {
+        title: 'Overwrite file?',
+        kind: 'warning',
+      }))
+    ) {
+      return
+    }
     const content = NEW_TEMPLATES[langOf(picked)]
     await invoke('write_abs', { path: picked, content })
     await openTab(normSlashes(picked))
@@ -1860,16 +1900,19 @@ hostEl.addEventListener(
 // ------------------------------------------------------- Scratch palette
 // Category rail + colored sections (docs/SCRATCH-BLOCKS-REFERENCE.md);
 // Variables section owns Make-a-Variable / Make-a-List and per-var chips.
-const knownVars: string[] = JSON.parse(localStorage.getItem('blockide-vars') ?? '[]')
-const knownLists: string[] = JSON.parse(localStorage.getItem('blockide-lists') ?? '[]')
-/** declared type per variable (C/C++ need the declaration to exist first) */
-const varTypesMap: Record<string, string> = (() => {
+// One corrupted localStorage key must never take the whole app down.
+function readJsonStore<T>(key: string, fallback: T): T {
   try {
-    return JSON.parse(localStorage.getItem('blockide-vartypes') ?? '{}') as Record<string, string>
+    const v = JSON.parse(localStorage.getItem(key) ?? 'null')
+    return (v ?? fallback) as T
   } catch {
-    return {}
+    return fallback
   }
-})()
+}
+const knownVars: string[] = readJsonStore<string[]>('blockide-vars', [])
+const knownLists: string[] = readJsonStore<string[]>('blockide-lists', [])
+/** declared type per variable (C/C++ need the declaration to exist first) */
+const varTypesMap: Record<string, string> = readJsonStore<Record<string, string>>('blockide-vartypes', {})
 let harvestedVars: string[] = [] // declared in the open file (file is truth)
 let paletteSignature = ''
 let programKinds = new Set<string>()
@@ -2218,6 +2261,18 @@ function applyPalFilter(): void {
 /** Enter on a highlighted chip splices it through the same seams as a drag:
  *  includes → top, toplevel → file scope, statements → at your caret. */
 function keyboardActivateChip(el: HTMLElement): void {
+  // keyboard path obeys the SAME gates as pointer drags: academy locks and
+  // dependency gating live on the element itself
+  if (el.classList.contains('locked')) {
+    consoleEl.textContent = 'locked - complete more Academy levels to unlock this category'
+    blip(200, 0.08, 'square', 0.04)
+    return
+  }
+  if (el.classList.contains('pal-dep')) {
+    consoleEl.textContent = el.title || 'this block needs its prerequisite first'
+    blip(200, 0.08, 'square', 0.04)
+    return
+  }
   if (el.id === 'make-var' || el.id === 'make-list') {
     ;(el as HTMLButtonElement).click()
     return
@@ -2304,12 +2359,8 @@ let hintTier = 0
 // and SPACED MASTERY — passed levels resurface for review on a Leitner
 // ladder (1/3/7/14-day intervals). Both offline in localStorage.
 const nowSec = (): number => Math.floor(Date.now() / 1000)
-const levelSols = JSON.parse(
-  localStorage.getItem('blockide-levelsol') ?? '{}',
-) as Record<string, string>
-const mastery = JSON.parse(
-  localStorage.getItem('blockide-mastery') ?? '{}',
-) as Record<string, MasteryState>
+const levelSols = readJsonStore<Record<string, string>>('blockide-levelsol', {})
+const mastery = readJsonStore<Record<string, MasteryState>>('blockide-mastery', {})
 let levelsCache: LevelInfo[] = []
 
 // --------------------------------------------- D7 mode split: sandbox|academy

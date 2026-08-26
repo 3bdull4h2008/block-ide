@@ -1,4 +1,4 @@
-# Improvement Plan — code-scan findings (2026-08-25, RUN 42)
+# Improvement Plan — code-scan findings (2026-08-25, RUN 42; subagent sweep 2026-08-26, RUN 46)
 
 Method: full scan of `app/src/main.ts` (2,581 lines), `blocks.ts`, `palette.ts`,
 `history.ts`, `ops.ts`, `caret.ts`, `commands.rs` (835), `runner/lib.rs`,
@@ -16,6 +16,70 @@ debt that scales badly · P2 = commercial polish · P3 = tracked big rocks.
   deadline (`academy_check → run_prepared(&prepared, 10_000, …)`) so the
   interactive-timeout change (RUN_TIMEOUT_MS=0) cannot hang grading.
 - History coalescing with cap (200 snapshots); single-seam discipline holds.
+
+---
+
+## Subagent sweep — new findings (2026-08-26, RUN 46)
+
+Three parallel scans (frontend TS / Rust backend / tooling+CI). Fixed
+immediately where small + high-value; the rest is triaged below.
+
+### Fixed in this sweep
+
+1. **[P0] CI could never pass**: tauri codegen embeds `../dist` at compile
+   time but dist is gitignored → `cargo test` failed at step 1 on a clean
+   runner. ci.yml now: npm ci → frontend build → cargo test (perf wall-clock
+   asserts skipped on shared runners) → parser bins for vitest → tsc → vitest;
+   npm cache + concurrency-safe ordering.
+2. **[P1] clang-format stdin deadlock** (emitter.rs): docs whose formatted
+   output exceeded the ~64 KB pipe buffer deadlocked canonicalize forever.
+   stdin writer now runs on a helper thread; child leak on write-failure also
+   fixed.
+3. **[P1] Stage keys swallowed typing during runs**: global keydown
+   preventDefault'd printable keys while `running` — kids couldn't type into
+   the cin/input prompt. Text-entry targets are now exempt.
+4. **[P1] canonicalize raced tab/lang switches**: a blur-triggered format that
+   resolved after activateTab wrote the PREVIOUS document's code into the new
+   tab. Snapshot guard added.
+5. **[P1] Gate release rebuild exit code unchecked** — a failed relink would
+   silently test a stale binary again. Now fails the gate loudly.
+6. **[P2] Keyboard palette bypassed academy locks + dependency gating** —
+   Enter-on-chip now honors locked/pal-dep like pointer drags.
+7. **[P2] New File overwrote existing files silently** — overwrite confirm
+   (workspace listing or read-probe) added.
+8. **[P2] memTimer leak**: poll-error path cleared pollTimer but not memTimer.
+9. **[P2] localStorage JSON.parse at module top could kill boot** — one
+   guarded `readJsonStore` helper for all five stores.
+10. **[P3] Save-As onto an open path duplicated tab elements** — createTab
+    dedups.
+
+### Triaged backlog (evidence-cited, not yet scheduled)
+
+- [P1] STOP_FLAG cross-talk: console Stop button can kill an in-flight
+  academy hidden test; per-run cancellation token needed (runner/lib.rs:413).
+- [P2] Job-object assign result unchecked; spawn not CREATE_SUSPENDED
+  (runner/lib.rs:355).
+- [P2] Staging TOCTOU: concurrent identical-source runs race the same
+  prog-{tag}.exe; compile-to-temp + atomic rename + per-tag mutex.
+- [P2] Unbounded temp accumulation in %TEMP%\blockide-run — prune by age/count.
+- [P2] Unbounded recursion on deeply-nested source can abort the process
+  (canonical.rs build + friends) — explicit stack or depth cap.
+- [P2] `"csp": null` ships no Content-Security-Policy — baseline CSP wanted.
+- [P2] Byte-vs-UTF16 offsets: diag jumps/splices use byte offsets against
+  UTF-16 selection APIs — wrong span around non-ASCII text.
+- [P2] Gate assertions hardcode exact counts (30 levels / 4 chips / 3 list
+  chips / 14 operators) — floors or derive from src constants.
+- [P3] stage_frame exit race surfaces "frame vanished" on clean exit →
+  Ok(None); MemStateOut.live stays true after exit; LiveHeap O(n²) churn;
+  runner mutex unwrap() poisoning; academy level-id mismatch check;
+  resolve_in_workspace symlink/junction canonicalization; VCVARS env
+  interpolation validation; friendlier pipe/vcvars error strings; src clone
+  per non-memtrace prepare.
+- [P3] Frontend hygiene: walkSig dead code; __ipcLog unbounded (cap/ring);
+  drag listeners miss pointercancel/blur teardown; renderPaletteLocks wipes
+  dependency tooltips; refreshFiles/fsRead unhandled rejections can strand
+  the splash; tabs/rows/chips lack button semantics (a11y); exact-count gate
+  assertions → floors; per-gate log artifacts.
 
 ---
 

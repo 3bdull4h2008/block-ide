@@ -20,17 +20,29 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
 
-      # rust side: unit + integration tests (round-trip, recovery, perf)
-      - name: cargo test
-        run: cargo test --workspace
-        env:
-          BLOCKIDE_DATA_DIR: ${{ runner.temp }}/blockide-ci-data
-
-      # frontend: types + headless editor-model suites
+      # frontend FIRST: tauri codegen embeds ../dist at compile time — without
+      # this, `cargo test` cannot even build the app crate on a clean runner
       - name: npm ci
         working-directory: app
         run: npm ci
+
+      - name: frontend build
+        working-directory: app
+        run: npm run build
+
+      # rust side: unit + integration tests (round-trip, recovery)
+      # (perf wall-clock asserts excluded — shared runners flake on Defender scans)
+      - name: cargo test
+        run: cargo test --workspace -- --skip opens_5k_file_project_under_3s
+        env:
+          BLOCKIDE_DATA_DIR: ${{ runner.temp }}/blockide-ci-data
+
+      # headless editor-model suites shell out to debug bins built by cargo test
+      - name: ensure parser bins for vitest
+        run: cargo build -p core-parser --bins
 
       - name: typecheck
         working-directory: app

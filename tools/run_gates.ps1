@@ -86,12 +86,22 @@ Add-Gate -Id 'G-PERF' -Pass ($LASTEXITCODE -eq 0) -Metrics @{ tail = (($pfOut | 
 # ------------------------------------------------------- G-UI-E2E (@P5)
 # The release exe EMBEDS the frontend at compile time — rebuild dist + binary
 # so this gate always exercises the CURRENT code, never a stale binary.
+$outFile = Join-Path $gatesDir ("{0}-gate-report.json" -f (Get-Date -Format 'yyyy-MM-dd'))
 Push-Location (Join-Path $repo 'app')
 npm run build 2>&1 | Tee-Object -Variable uiBuildOut | Out-Null
-if ($LASTEXITCODE -ne 0) { Add-Gate -Id 'G-UI-E2E' -Pass $false -Metrics @{ tail = 'frontend build failed' } }
+$feExit = $LASTEXITCODE
 Pop-Location
-if ($LASTEXITCODE -eq 0) {
-    cargo build --release -p app 2>&1 | Out-Null
+if ($feExit -ne 0) {
+    Add-Gate -Id 'G-UI-E2E' -Pass $false -Metrics @{ tail = 'frontend build failed' }
+    $results | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $outFile
+    exit 1
+}
+cargo build --release -p app 2>&1 | Tee-Object -Variable relOut | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    # a failed release rebuild would silently test a STALE binary — fail loudly
+    Add-Gate -Id 'G-UI-E2E' -Pass $false -Metrics @{ tail = 'release rebuild failed'; log = ($relOut | Select-Object -Last 5) }
+    $results | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $outFile
+    exit 1
 }
 $uiPort = 9339
 $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$uiPort"
@@ -119,7 +129,6 @@ $report = [ordered]@{
     runAt  = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
     gates  = $results
 }
-$outFile = Join-Path $gatesDir ("{0}-gate-report.json" -f (Get-Date -Format 'yyyy-MM-dd'))
 $report | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $outFile
 Write-Host "report -> $outFile"
 if ($results | Where-Object { -not $_.pass }) { exit 1 } else { exit 0 }

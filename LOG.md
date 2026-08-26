@@ -1,6 +1,34 @@
 # LOG.md — Run Receipts (PLAN.md Loop Discipline)
 
 ```
+RUN 46: trigger=user: scan the src using subagents
+expect: three parallel scans (frontend/rust/tooling), findings triaged,
+quick wins fixed, suite green
+obs: 3 explore agents returned 45 evidence-cited findings. FIXED IN SWEEP
+(10): (P0) ci.yml could never pass - tauri codegen embeds ../dist which is
+gitignored; now npm build BEFORE cargo test, perf wall-clock skipped on CI,
+parser-bins step for vitest, npm cache; (P1) clang-format stdin deadlock for
+>64KB docs - stdin writer thread + child-leak fix (emitter.rs); (P1) stage
+key forwarding swallowed typing into cin/input during runs - text-entry
+targets exempt; (P1) canonicalize raced tab switches - snapshot guard;
+(P1) gates release-rebuild exit code unchecked -> stale-binary testing -
+fails loudly now; (P2) keyboard palette bypassed academy locks/dep gates;
+(P2) New File overwrote existing files silently - overwrite confirm both
+paths; (P2) memTimer leak on poll-error path; (P2) localStorage JSON.parse
+at module top could kill boot - readJsonStore guard x5 stores; (P3)
+Save-As-onto-open-path duplicated tabs. TRIAGED BACKLOG written into
+IMPROVEMENT-PLAN.md: STOP_FLAG cross-talk (console Stop kills academy test),
+job-object assign unchecked + no CREATE_SUSPENDED, staging TOCTOU, temp-dir
+accumulation, deep-recursion abort risk, CSP null, byte-vs-UTF16 offsets,
+exact-count gate assertions, a11y semantics, per-gate log artifacts.
+VERIFIED NON-ISSUES praised by agents: single edit seam in ops.ts, pipe-
+drain ordering dodge, capability minimality, poll-over-sleep discipline.
+tsc clean; vitest 43/43; ALL FOURTEEN gates PASS exit 0.
+state=SUCCESS | next: triaged backlog top picks = STOP_FLAG token, staging
+TOCTOU lock, CSP baseline, recursion depth cap
+```
+
+```
 RUN 45: trigger=user: P2 polish batch
 expect: diagnostics panel, find&replace, file drag-drop, CI, npm scripts,
 0.2.0 release train; suite green + installer builds

@@ -63,13 +63,27 @@ pub fn clang_format(code: &str) -> Result<String, String> {
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| e.to_string())?;
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(code.as_bytes())
-        .map_err(|e| e.to_string())?;
+    // Write stdin from a helper thread: for documents whose formatted output
+    // exceeds the ~64 KB pipe buffer, the child blocks writing stdout while
+    // we block writing stdin — a deadlock. Draining happens in
+    // wait_with_output, so the writer must run concurrently (and closing our
+    // stdin handle afterwards is what signals EOF to the child).
+    let mut stdin = child.stdin.take().ok_or("stdin unavailable")?;
+    let payload = code.as_bytes().to_vec();
+    let writer =
+        std::thread::spawn(move || -> std::io::Result<()> {
+            use std::io::Write;
+            stdin.write_all(&payload)?;
+            Ok(())
+        });
     let out = child.wait_with_output().map_err(|e| e.to_string())?;
+    let write_result = writer
+        .join()
+        .map_err(|_| "stdin writer panicked".to_string())
+        .and_then(|r| r.map_err(|e| e.to_string()));
+    if let Err(e) = write_result {
+        return Err(e);
+    }
     if !out.status.success() {
         return Err(String::from_utf8_lossy(&out.stderr).into_owned());
     }
