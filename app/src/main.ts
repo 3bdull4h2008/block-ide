@@ -1465,12 +1465,38 @@ async function refreshFiles(): Promise<void> {
   if (!workspace) return
   files = await invoke<string[]>('list_c_files', { root: workspace })
   filesEl.innerHTML = ''
+
+  // Group files by directory for tree view
+  const fileMap = new Map<string, string[]>()
   for (const f of files) {
-    const el = document.createElement('div')
-    el.className = 'file'
-    el.textContent = f
-    el.addEventListener('click', () => void guardedOpenTab(f))
-    filesEl.appendChild(el)
+    const dir = f.includes('/') ? f.substring(0, f.lastIndexOf('/')) : ''
+    if (!fileMap.has(dir)) fileMap.set(dir, [])
+    fileMap.get(dir)!.push(f)
+  }
+
+  // Sort directories (root first, then alphabetically)
+  const sortedDirs = Array.from(fileMap.keys()).sort((a, b) => {
+    if (a === '') return -1
+    if (b === '') return 1
+    return a.localeCompare(b)
+  })
+
+  for (const dir of sortedDirs) {
+    const dirFiles = fileMap.get(dir)!.sort()
+    if (dir) {
+      const dirEl = document.createElement('div')
+      dirEl.className = 'file-dir'
+      dirEl.style.cssText = 'padding:4px 8px;font-size:11px;color:var(--fg-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--border);margin-top:8px'
+      dirEl.textContent = dir
+      filesEl.appendChild(dirEl)
+    }
+for (const f of dirFiles) {
+      const el = document.createElement('div')
+      el.className = 'file'
+      el.textContent = f
+      el.addEventListener('click', () => void guardedOpenTab(f))
+      filesEl.appendChild(el)
+    }
   }
 }
 
@@ -1615,9 +1641,47 @@ document.getElementById('open-file')?.addEventListener('click', async () => {
 
 document.getElementById('new-file')?.addEventListener('click', async () => {
   if (!(await confirmDiscard())) return
+
+  // Language selector modal for new file
+  const lang = await new Promise<string | null>((resolve) => {
+    const modal = document.createElement('div')
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:100'
+    modal.innerHTML = `
+      <div style="background:var(--panel);padding:24px;border-radius:12px;min-width:300px;box-shadow:0 20px 40px rgba(0,0,0,0.3)">
+        <h3 style="margin:0 0 16px;font-size:16px">New file language</h3>
+        <select id="new-lang" style="width:100%;padding:8px 12px;font-family:inherit;font-size:14px;border:2px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg)">
+          <option value="c">C</option>
+          <option value="cpp">C++</option>
+          <option value="python">Python</option>
+          <option value="javascript">JavaScript</option>
+          <option value="rust">Rust</option>
+        </select>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+          <button id="lang-cancel" style="padding:8px 16px;background:transparent;border:1px solid var(--border);border-radius:6px;cursor:pointer">Cancel</button>
+          <button id="lang-ok" style="padding:8px 16px;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer">Create</button>
+        </div>
+      </div>
+    `
+    document.body.appendChild(modal)
+    const select = modal.querySelector('#new-lang') as HTMLSelectElement
+    const okBtn = modal.querySelector('#lang-ok') as HTMLButtonElement
+    const cancelBtn = modal.querySelector('#lang-cancel') as HTMLButtonElement
+
+    const cleanup = () => modal.remove()
+    cancelBtn.onclick = () => { cleanup(); resolve(null) }
+    okBtn.onclick = () => { cleanup(); resolve(select.value) }
+    modal.onclick = (e) => { if (e.target === modal) { cleanup(); resolve(null) } }
+    select.focus()
+  })
+  if (!lang) return
+
   const name = window.prompt('New file name:', 'main.c')
   if (!name) return
-  const withExt = /\.[a-z]+$/i.test(name) ? name : `${name}.c`
+
+  const extMap: Record<string, string> = { c: '.c', cpp: '.cpp', python: '.py', javascript: '.js', rust: '.rs' }
+  const ext = extMap[lang]
+  const withExt = /\.[a-z]+$/i.test(name) ? name : `${name}${ext}`
+
   if (workspace !== null) {
     const exists = files.includes(withExt)
     const overwrite =
@@ -1627,7 +1691,7 @@ document.getElementById('new-file')?.addEventListener('click', async () => {
         kind: 'warning',
       }))
     if (!overwrite) return
-    const content = NEW_TEMPLATES[langOf(withExt)]
+    const content = NEW_TEMPLATES[lang as SourceLang]
     await invoke('write_file', { root: workspace, rel: withExt, content })
     await refreshFiles()
     await openTab(withExt)
@@ -1651,7 +1715,7 @@ document.getElementById('new-file')?.addEventListener('click', async () => {
     ) {
       return
     }
-    const content = NEW_TEMPLATES[langOf(picked)]
+    const content = NEW_TEMPLATES[lang as SourceLang]
     await invoke('write_abs', { path: picked, content })
     await openTab(normSlashes(picked))
   }
