@@ -33,6 +33,10 @@ jobs:
         working-directory: app
         run: npm run build
 
+      # parser binaries needed by integration tests and vitest
+      - name: build parser binaries
+        run: cargo build -p core-parser --bins
+
       # rust side: unit + integration tests (round-trip, recovery)
       # (perf wall-clock asserts excluded — shared runners flake on Defender scans)
       - name: cargo test
@@ -41,8 +45,7 @@ jobs:
           BLOCKIDE_DATA_DIR: ${{ runner.temp }}/blockide-ci-data
 
       # headless editor-model suites shell out to debug bins built by cargo test
-      - name: ensure parser bins for vitest
-        run: cargo build -p core-parser --bins
+      # (parser bins already built above)
 
       - name: typecheck
         working-directory: app
