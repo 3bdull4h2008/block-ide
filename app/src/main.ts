@@ -682,10 +682,41 @@ let drag: DragPayload | null = null
 
 function startHtmlDrag(e: PointerEvent, payload: DragPayload): void {
   drag = payload
-  ghost.textContent = payload.label
+  // Create a proper block-shaped ghost that matches the palette item
+  ghost.innerHTML = '' // Clear any existing content
+  function startHtmlDrag(e: PointerEvent, payload: DragPayload): void {
+  drag = payload
+  // Create a proper block-shaped ghost that matches the palette item
+  ghost.innerHTML = '' // Clear any existing content
+  const fill = catColor(payload.cat)
+  const g = new Graphics()
+  const w = Math.max(90, measure(payload.label))
+  g.roundRect(0, 0, ROW_H, Math.max(ROW_H, 34), 9)
+  g.fill({ color: fill, alpha: 0.3 })
+  g.roundRect(0, 0, w, Math.max(ROW_H, 34), 9)
+  g.stroke({ width: 2, color: fill, alpha: 0.65 })
+  const t = new Text({
+    text: payload.label,
+    style: {
+      fontFamily: "'Baloo 2', 'Segoe UI', sans-serif",
+      fontSize: 13,
+      fontWeight: '600',
+      fill: '#ffffff',
+    },
+  })
+  t.x = PAD
+  t.y = (ROW_H - 13) / 2
+  const container = new Container()
+  container.addChild(g)
+  container.addChild(t)
+  container.x = 0
+  container.y = 0
+  snapLayer.addChild(container) // Use snapLayer for rendering
+  ghost.innerHTML = '' // Clear text content
   ghost.style.display = 'block'
   ghost.style.left = `${e.clientX + 12}px`
   ghost.style.top = `${e.clientY - 14}px`
+  ghost.style.opacity = '0.5' // Semi-transparent during drag
   blip(520, 0.05, 'triangle', 0.05)
   window.addEventListener('pointermove', onDragMove)
   window.addEventListener('pointerup', onDragEnd, { once: true })
@@ -920,8 +951,21 @@ async function onDragEnd(e: PointerEvent): Promise<void> {
     return
   }
 
-  const target = findDropTarget(roots, w.x, w.y)
-  if (!target) return
+  let target = findDropTarget(roots, w.x, w.y)
+  if (!target) {
+    // Grid is empty or no container found - create a virtual root target at the top
+    const virtualRoot = roots.find(r => r.container && r.children.length === 0) || roots[0]
+    if (virtualRoot) {
+      target = { container: virtualRoot, index: 0, offset: virtualRoot.start + 1 }
+    } else {
+      // No blocks at all - insert at the beginning of the file
+      setSrc(d.snippet ?? '')
+      void canonicalize()
+      tourHooks.advance?.('edit')
+      blip(740, 0.07, 'sine', 0.08)
+      return
+    }
+  }
   if (d.move && isInsideRange(target.container, d.move)) return
 
   const text = src
