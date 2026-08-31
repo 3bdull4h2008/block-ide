@@ -684,10 +684,6 @@ function startHtmlDrag(e: PointerEvent, payload: DragPayload): void {
   drag = payload
   // Create a proper block-shaped ghost that matches the palette item
   ghost.innerHTML = '' // Clear any existing content
-  function startHtmlDrag(e: PointerEvent, payload: DragPayload): void {
-  drag = payload
-  // Create a proper block-shaped ghost that matches the palette item
-  ghost.innerHTML = '' // Clear any existing content
   const fill = catColor(payload.cat)
   const g = new Graphics()
   const w = Math.max(90, measure(payload.label))
