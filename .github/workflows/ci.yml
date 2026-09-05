@@ -37,6 +37,11 @@ jobs:
       - name: build parser binaries
         run: cargo build -p core-parser --bins
 
+      # tcc resources dir required by tauri codegen during cargo test
+      - name: copy tcc resources
+        working-directory: app
+        run: npm run copytcc
+
       # rust side: unit + integration tests (round-trip, recovery)
       # (perf wall-clock asserts excluded — shared runners flake on Defender scans)
       - name: cargo test
