@@ -41,7 +41,15 @@ pub struct DiagOut {
 pub async fn diag_c(src: String, lang: Option<String>) -> Result<Vec<DiagOut>, String> {
     let l = lang_of(lang.as_deref());
     let stderr = core_parser::toolchain::syntax_check_stderr_lang(&src, l)?;
-    let raws = core_parser::parse_clang_diags(&stderr, &format!("main.{}", l.as_str()));
+    if stderr.is_empty() {
+        return Ok(vec![]);
+    }
+    let file_stem = format!("main.{}", l.file_ext());
+    let raws = if l.has_clang_diags() {
+        core_parser::parse_clang_diags(&stderr, &file_stem)
+    } else {
+        core_parser::parse_simple_diags(&stderr, &file_stem)
+    };
     let ct = core_parser::parse_canonical_lang(&src, l).ok_or("grammar failed to load")?;
     Ok(core_parser::map_diags(&src, &ct, &raws)
         .into_iter()

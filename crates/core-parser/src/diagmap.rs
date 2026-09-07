@@ -121,6 +121,120 @@ pub fn parse_clang_diags(stderr: &str, file_stem: &str) -> Vec<RawDiag> {
         .collect()
 }
 
+/// Parse lightweight diagnostic stderr from Python, Node, or rustc.
+///
+/// Each tool emits a slightly different format, but all share a common
+/// `filename:line:col…` prefix that we extract. Unrecognised lines are
+/// skipped so stray notes / stack frames don't produce garbage entries.
+///
+/// Patterns handled:
+///   Python  – `  File "main.py", line 3`  +  following `SyntaxError: …`
+///   Node    – `main.js:3` … then an error message line
+///   rustc   – `main.rs:3:5: error[E0308]: …`  (--error-format=short)
+pub fn parse_simple_diags(stderr: &str, file_stem: &str) -> Vec<RawDiag> {
+    let mut out = Vec::new();
+    let lines: Vec<&str> = stderr.lines().collect();
+    let needle = format!("{file_stem}:");
+
+    // --- try rustc short format first: `main.rs:L:C: severity: msg` ---
+    for line in &lines {
+        if let Some(rest) = strip_after_needle(line, &needle) {
+            if let Some(d) = parse_colon_diag(rest) {
+                out.push(d);
+            }
+        }
+    }
+    if !out.is_empty() {
+        return out;
+    }
+
+    // --- Python: `  File "main.py", line N` followed by a message ---
+    let py_file = format!("\"{}\"", file_stem);
+    let mut i = 0;
+    while i < lines.len() {
+        let l = lines[i].trim();
+        if l.starts_with("File ") && l.contains(&py_file) {
+            // extract line number from `File "main.py", line 3`
+            if let Some(line_no) = l.rsplit("line ").next().and_then(|s| {
+                s.trim().trim_end_matches(',').parse::<u32>().ok()
+            }) {
+                // scan forward for the error message (usually 2-3 lines down)
+                let mut msg = String::new();
+                for j in (i + 1)..lines.len().min(i + 5) {
+                    let candidate = lines[j].trim();
+                    if candidate.contains("Error") || candidate.contains("error") {
+                        msg = candidate.to_string();
+                        break;
+                    }
+                }
+                if msg.is_empty() && i + 1 < lines.len() {
+                    msg = lines[lines.len() - 1].trim().to_string();
+                }
+                if !msg.is_empty() {
+                    out.push(RawDiag { line: line_no, col: 1, severity: "error".into(), message: msg });
+                }
+            }
+        }
+        i += 1;
+    }
+    if !out.is_empty() {
+        return out;
+    }
+
+    // --- Node: `main.js:LINE`  … error on a nearby line ---
+    for (i, line) in lines.iter().enumerate() {
+        if let Some(rest) = strip_after_needle(line, &needle) {
+            if let Some(line_no) = rest.split(|c: char| !c.is_ascii_digit()).next()
+                .and_then(|s| s.parse::<u32>().ok())
+            {
+                // scan for "SyntaxError:" in nearby lines
+                let mut msg = String::new();
+                for j in i..lines.len().min(i + 6) {
+                    if let Some(pos) = lines[j].find("SyntaxError:") {
+                        msg = lines[j][pos..].to_string();
+                        break;
+                    }
+                }
+                if msg.is_empty() {
+                    // last line often has the error
+                    if let Some(last) = lines.last() {
+                        let t = last.trim();
+                        if t.contains("Error") {
+                            msg = t.to_string();
+                        }
+                    }
+                }
+                if !msg.is_empty() {
+                    out.push(RawDiag { line: line_no, col: 1, severity: "error".into(), message: msg });
+                }
+            }
+        }
+    }
+
+    out
+}
+
+/// Strip everything up to and including `needle` in `line`.
+fn strip_after_needle<'a>(line: &'a str, needle: &str) -> Option<&'a str> {
+    line.find(needle).map(|i| &line[i + needle.len()..])
+}
+
+/// Parse `line:col: severity: message` from the remainder after the filename.
+fn parse_colon_diag(rest: &str) -> Option<RawDiag> {
+    let mut it = rest.splitn(4, ':');
+    let line_no: u32 = it.next()?.trim().parse().ok()?;
+    let col: u32 = it.next()?.trim().parse().ok()?;
+    let severity_raw = it.next()?.trim().to_string();
+    let message = it.next()?.trim().to_string();
+    // normalise rustc `error[E0308]` → `error`
+    let severity = severity_raw.split('[').next().unwrap_or(&severity_raw).trim().to_string();
+    match severity.as_str() {
+        "error" | "warning" | "note" | "fatal error" | "help" => {}
+        _ => return None,
+    }
+    Some(RawDiag { line: line_no, col, severity, message })
+}
+
 pub fn map_diags(src: &str, tree: &CTree, diags: &[RawDiag]) -> Vec<MappedDiag> {
     diags
         .iter()

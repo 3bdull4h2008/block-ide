@@ -106,30 +106,73 @@ pub fn syntax_check_stderr(src: &str) -> Result<String, String> {
     syntax_check_stderr_lang(src, crate::Lang::C)
 }
 
-/// Language-aware variant: C++ sources stage as `main.cpp` so the clang
-/// driver compiles/links as C++ and diagnostics reference the right stem.
-/// Python/JavaScript/Rust diagnostics do NOT flow through clang (D11 v1:
-/// they surface via run stderr) — returns empty stderr for them.
+/// Language-aware syntax check: stages source as `main.<ext>` in a temp
+/// directory, invokes the appropriate toolchain, and returns raw stderr.
+///
+/// - C/C++: `clang -fsyntax-only`
+/// - Python: `python -m py_compile`
+/// - JavaScript: `node --check`
+/// - Rust: `rustc --edition 2021 --error-format=short --crate-type lib`
+///
+/// Returns `Ok("")` when no errors or when the required tool is absent
+/// (graceful degradation — diagnostics simply won't appear).
 pub fn syntax_check_stderr_lang(src: &str, lang: crate::Lang) -> Result<String, String> {
     let dir = std::env::temp_dir().join("blockide-syntax");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let cpath = dir.join(match lang {
-        crate::Lang::C => "main.c",
-        crate::Lang::Cpp => "main.cpp",
-        // D11 v1: non-clang languages surface errors via run stderr
-        crate::Lang::Python | crate::Lang::JavaScript | crate::Lang::Rust => {
-            return Ok(String::new());
-        }
-    });
+    let filename = format!("main.{}", lang.file_ext());
+    let cpath = dir.join(&filename);
     std::fs::write(&cpath, src).map_err(|e| e.to_string())?;
-    let out = clang_command()?
-        .arg("-O0")
-        .arg("-fno-color-diagnostics")
-        .arg("-fsyntax-only")
-        .arg(format!("-I{}", vendor_include_dir().display()))
-        .arg(&cpath)
-        .output()
-        .map_err(|e| e.to_string())?;
+    let out = match lang {
+        crate::Lang::C | crate::Lang::Cpp => {
+            clang_command()?
+                .arg("-O0")
+                .arg("-fno-color-diagnostics")
+                .arg("-fsyntax-only")
+                .arg(format!("-I{}", vendor_include_dir().display()))
+                .arg(&cpath)
+                .output()
+                .map_err(|e| e.to_string())?
+        }
+        crate::Lang::Python => {
+            match Command::new("python")
+                .arg("-m")
+                .arg("py_compile")
+                .arg(&cpath)
+                .creation_flags(0x0800_0000)
+                .output()
+            {
+                Ok(o) => o,
+                Err(_) => return Ok(String::new()),
+            }
+        }
+        crate::Lang::JavaScript => {
+            match Command::new("node")
+                .arg("--check")
+                .arg(&cpath)
+                .creation_flags(0x0800_0000)
+                .output()
+            {
+                Ok(o) => o,
+                Err(_) => return Ok(String::new()),
+            }
+        }
+        crate::Lang::Rust => {
+            match Command::new("rustc")
+                .arg("--edition=2021")
+                .arg("--error-format=short")
+                .arg("--crate-type")
+                .arg("lib")
+                .arg("-o")
+                .arg(dir.join("_check.rlib"))
+                .arg(&cpath)
+                .creation_flags(0x0800_0000)
+                .output()
+            {
+                Ok(o) => o,
+                Err(_) => return Ok(String::new()),
+            }
+        }
+    };
     Ok(String::from_utf8_lossy(&out.stderr).into_owned())
 }
 

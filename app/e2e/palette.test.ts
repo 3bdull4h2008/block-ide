@@ -80,11 +80,15 @@ describe('Scratch palette structure (1.10)', () => {
         top: (s) => parseClean(`def main():\n    return 0\n\n\nmain()\n\n\n${s}\n`, 'python'),
       },
       javascript: {
-        stmt: (s) =>
-          parseClean(
+        stmt: (s) => {
+          if (s.startsWith('constructor') || s.includes('myMethod()')) {
+            return parseClean(`class MyClass {\n    ${s}\n}\n`, 'javascript')
+          }
+          return parseClean(
             `function main() {\n    let x = 1;\n    ${s}\n    return 0;\n}\n\nmain();\n`,
             'javascript',
-          ),
+          )
+        },
         cond: (s) =>
           parseClean(
             `function main() {\n    let x = 1;\n    if (x) {\n        x = 2;\n    }\n    ${s}\n    return 0;\n}\n\nmain();\n`,
@@ -269,6 +273,8 @@ describe('Operators category (Scratch green)', () => {
     const toplevel = fns.items.filter((i) => i.toplevel)
     // one definition chip per language (+ cpp namespace), all file-scope
     expect(toplevel.map((i) => [i.name, i.langs?.[0] ?? 'c']).sort()).toEqual([
+      ['arrow fn', 'javascript'],
+      ['async fn', 'javascript'],
       ['def', 'python'],
       ['define fn', 'c'],
       ['fn', 'rust'],

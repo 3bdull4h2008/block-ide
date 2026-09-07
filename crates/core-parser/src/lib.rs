@@ -16,7 +16,7 @@ pub use canonical::{
     CNode, CTree,
 };
 pub use diagmap::{
-    map_diags, map_offset, parse_clang_diags, MappedDiag, RawDiag,
+    map_diags, map_offset, parse_clang_diags, parse_simple_diags, MappedDiag, RawDiag,
 };
 pub use emitter::{canonical_source, canonical_source_lang, clang_format, reflow};
 
