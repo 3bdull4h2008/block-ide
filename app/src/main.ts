@@ -74,6 +74,8 @@ import {
   masteryNextIn,
   previousLevel,
   updateStreak,
+  checkBadges,
+  BADGES,
   type StreakState,
   type MasteryState,
 } from './academy-extras'
@@ -2708,6 +2710,8 @@ const nowSec = (): number => Math.floor(Date.now() / 1000)
 const levelSols = readJsonStore<Record<string, string>>('blockide-levelsol', {})
 const mastery = readJsonStore<Record<string, MasteryState>>('blockide-mastery', {})
 let streakState = readJsonStore<StreakState | undefined>('blockide-streak', undefined)
+let badgesState = readJsonStore<string[]>('blockide-badges', [])
+let appStats = readJsonStore<{runs: number, fixes: number, loopsMastered: number}>('blockide-stats', {runs:0, fixes:0, loopsMastered:0})
 let levelsCache: LevelInfo[] = []
 
 // --------------------------------------------- D7 mode split: sandbox|academy
@@ -2821,6 +2825,16 @@ document.getElementById('check-btn')?.addEventListener('click', async () => {
       const oldStreak = streakState?.currentStreak ?? 0
       streakState = updateStreak(streakState, Date.now())
       writeJsonStore('blockide-streak', streakState)
+      
+      appStats.runs++
+      const newBadges = checkBadges(badgesState, streakState, appStats)
+      if (newBadges.length > 0) {
+        badgesState.push(...newBadges)
+        writeJsonStore('blockide-badges', badgesState)
+        const badgeNames = newBadges.map(id => BADGES.find(b => b.id === id)?.icon).join(' ')
+        toast(`New Badges Unlocked: ${badgeNames}`, 'success', 5000)
+      }
+      writeJsonStore('blockide-stats', appStats)
       
       const streakMsg = streakState.currentStreak > oldStreak 
         ? ` 🔥 ${streakState.currentStreak} Day Streak!` 

@@ -70,3 +70,34 @@ export function updateStreak(s: StreakState | undefined, nowMs: number): StreakS
     lastActivityDate: today
   }
 }
+
+export interface Badge {
+  id: string
+  name: string
+  description: string
+  icon: string
+}
+
+export const BADGES: Badge[] = [
+  { id: 'first_run', name: 'Hello World', description: 'Run your first program successfully.', icon: '🌟' },
+  { id: 'loop_master', name: 'Loop Master', description: 'Master 3 different looping concepts.', icon: '🔄' },
+  { id: 'bug_squasher', name: 'Bug Squasher', description: 'Fix a program that failed a hidden test.', icon: '🐛' },
+  { id: 'streak_3', name: '3-Day Streak', description: 'Practice for 3 days in a row.', icon: '🔥' },
+  { id: 'streak_7', name: '7-Day Streak', description: 'Practice for a full week.', icon: '📅' }
+]
+
+export interface BadgeState {
+  unlocked: string[] // list of badge IDs
+}
+
+export function checkBadges(currentUnlocks: string[], streak: StreakState, stats: { runs: number, fixes: number, loopsMastered: number }): string[] {
+  const newlyUnlocked: string[] = []
+  
+  if (!currentUnlocks.includes('first_run') && stats.runs > 0) newlyUnlocked.push('first_run')
+  if (!currentUnlocks.includes('loop_master') && stats.loopsMastered >= 3) newlyUnlocked.push('loop_master')
+  if (!currentUnlocks.includes('bug_squasher') && stats.fixes > 0) newlyUnlocked.push('bug_squasher')
+  if (!currentUnlocks.includes('streak_3') && streak.longestStreak >= 3) newlyUnlocked.push('streak_3')
+  if (!currentUnlocks.includes('streak_7') && streak.longestStreak >= 7) newlyUnlocked.push('streak_7')
+  
+  return newlyUnlocked
+}
