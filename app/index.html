@@ -363,7 +363,10 @@
       </div>
       <div id="main-col">
         <div id="tabs"></div>
-        <textarea id="src" aria-label="Code editor" spellcheck="false" placeholder="Type code here or drag blocks from the palette..."></textarea>
+        <div id="editor-wrap">
+          <textarea id="src" aria-label="Code editor" spellcheck="false" placeholder="Type code here or drag blocks from the palette..."></textarea>
+          <div id="cm-editor"></div>
+        </div>
         <div id="findbar" style="display:none">
           <input id="find-input" placeholder="find" spellcheck="false" autocomplete="off" />
           <span id="find-count"></span>

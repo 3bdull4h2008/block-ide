@@ -1,5 +1,6 @@
 import { Application, Container, Graphics, Text } from 'pixi.js'
 import { invoke as tauriInvoke } from '@tauri-apps/api/core'
+import { createCodeMirrorEditor, type CadeEditor } from './editor'
 
 // IPC observability (temporary diagnostics, RUN 43): count calls/pending per
 // command so hangs are attributable from the page itself.
@@ -141,6 +142,26 @@ const consoleInput = document.getElementById('console-input') as HTMLInputElemen
 const paletteEl = document.getElementById('palette') as HTMLDivElement
 const tabsEl = document.getElementById('tabs') as HTMLDivElement
 const filesEl = document.getElementById('files') as HTMLDivElement
+const cmContainer = document.getElementById('cm-editor') as HTMLDivElement
+
+// ---- CodeMirror 6 editor ----
+let editor: CadeEditor | null = null
+
+function initEditor(): void {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark'
+  editor = createCodeMirrorEditor(cmContainer, src, activeLang, dark)
+  editor.onUpdate = (newSrc: string) => {
+    if (srcSetting) return
+    src = newSrc
+    srcEl.value = newSrc
+    hist.push(prevSrcForUndo, 'type')
+    prevSrcForUndo = newSrc
+    void render(newSrc)
+    markDirty()
+    scheduleAutoSave()
+  }
+}
+let prevSrcForUndo = ''
 
 const app = new Application()
 await app.init({ resizeTo: hostEl, background: '#dff3fa', antialias: true })
@@ -224,6 +245,58 @@ let workspace: string | null = null
 let savedSnapshot = ''
 let activePath: string | null = null
 const savedCache = new Map<string, string>()
+
+// ---- Auto-save: debounced persist to localStorage every 2s ----
+let autoSaveTimer = 0
+function scheduleAutoSave(): void {
+  clearTimeout(autoSaveTimer)
+  autoSaveTimer = window.setTimeout(() => {
+    if (activePath !== null && src !== savedSnapshot) {
+      localStorage.setItem(`blockide-autosave:${activePath}`, JSON.stringify({
+        src, lang: activeLang, ts: Date.now()
+      }))
+    } else if (activePath === null && src.trim().length > 0 && src !== SAMPLES[activeLang]) {
+      localStorage.setItem('blockide-autosave:scratch', JSON.stringify({
+        src, lang: activeLang, ts: Date.now()
+      }))
+    }
+  }, 2000)
+}
+
+function recoverSession(): void {
+  if (activePath !== null) {
+    const saved = localStorage.getItem(`blockide-autosave:${activePath}`)
+    if (saved) {
+      try {
+        const { src: savedSrc, ts } = JSON.parse(saved)
+        if (savedSrc && savedSrc !== src) {
+          toast(`Recovered unsaved changes from ${new Date(ts).toLocaleTimeString()}`, 'info', 5000)
+          src = savedSrc
+          srcEl.value = src
+          editor?.setSource(src)
+          void render(src)
+          markDirty()
+        }
+      } catch { /* corrupt autosave — ignore */ }
+    }
+  }
+  const scratchSaved = localStorage.getItem('blockide-autosave:scratch')
+  if (scratchSaved && activePath === null) {
+    try {
+      const { src: savedSrc, lang: savedLang, ts } = JSON.parse(scratchSaved) as { src: string; lang: Lang; ts: number }
+      if (savedSrc && savedSrc !== SAMPLES[savedLang]) {
+        toast(`Recovered unsaved scratch buffer from ${new Date(ts).toLocaleTimeString()}`, 'info', 5000)
+        src = savedSrc
+        activeLang = savedLang
+        editor?.setLang(activeLang)
+        srcEl.value = src
+        editor?.setSource(src)
+        void render(src)
+        markDirty()
+      }
+    } catch { /* corrupt autosave — ignore */ }
+  }
+}
 const fileCache = new Map<string, string>()
 let files: string[] = []
 
@@ -410,6 +483,7 @@ function setSrc(next: string, kind: 'op' | 'type' = 'op'): Promise<void> {
   src = next
   srcSetting = true
   srcEl.value = next
+  editor?.setSource(next)
   srcSetting = false
   const p = render(next)
   markDirty()
@@ -1695,6 +1769,7 @@ async function closeTab(path: string): Promise<void> {
   el?.remove()
   fileCache.delete(path)
   savedCache.delete(path)
+  localStorage.removeItem(`blockide-autosave:${path}`)
   tabViews.delete(path)
   if (!isActive) return
   const next = tabsEl.querySelector('.tab') as HTMLElement | null
@@ -1708,6 +1783,7 @@ async function closeTab(path: string): Promise<void> {
   src = NEW_TEMPLATES[activeLang]
   savedSnapshot = src
   srcEl.value = src
+  editor?.setSource(src)
   void render(src)
   markDirty()
   consoleEl.textContent = 'closed — New File or Open Folder to continue'
@@ -1747,9 +1823,11 @@ function activateTab(rel: string): void {
   caretAnchor = null // different buffer — old node ids are meaningless here
   activePath = rel
   activeLang = langOf(rel)
+  editor?.setLang(activeLang)
   src = fileCache.get(rel) ?? ''
   savedSnapshot = src // fresh load = clean baseline
   srcEl.value = src
+  editor?.setSource(src)
   renderPalette()
   void render(src)
   markDirty()
@@ -1933,11 +2011,14 @@ async function saveActive(saveAs = false): Promise<void> {
     tabViews.delete(activePath ?? '')
     activePath = target
     activeLang = langOf(target)
+    editor?.setLang(activeLang)
     createTab(target, src)
   } else {
     savedCache.set(target, src)
   }
   savedSnapshot = src // explicit save = clean baseline
+  if (activePath !== null) localStorage.removeItem(`blockide-autosave:${activePath}`)
+  else localStorage.removeItem('blockide-autosave:scratch')
   markDirty()
   void invoke('journal_clear')
   if (workspace !== null && !isWinPath(target)) pushRecent(workspace, target)
@@ -1978,6 +2059,7 @@ window.addEventListener('keydown', (e) => {
     if (prev !== null) {
       src = prev
       srcEl.value = prev
+      editor?.setSource(prev)
       void render(prev)
       markDirty()
     }
@@ -1987,6 +2069,7 @@ window.addEventListener('keydown', (e) => {
     if (next !== null) {
       src = next
       srcEl.value = next
+      editor?.setSource(next)
       void render(next)
       markDirty()
     }
@@ -1999,6 +2082,7 @@ srcEl.addEventListener('input', () => {
   src = srcEl.value
   void render(src)
   markDirty()
+  scheduleAutoSave()
 })
 srcEl.addEventListener('scroll', () => {
   if (viewMode !== 'split') return
@@ -2017,6 +2101,7 @@ srcEl.addEventListener('blur', () => void canonicalize())
 // python colons — the basics a "real editor" is judged by.
 function editTextArea(next: string, caret: number): void {
   srcEl.value = next
+  editor?.setSource(next)
   srcEl.setSelectionRange(caret, caret)
   srcEl.dispatchEvent(new Event('input'))
 }
@@ -2829,6 +2914,7 @@ function setTheme(t: 'dark' | 'light'): void {
   themeBtn.textContent = t === 'dark' ? '☾' : '☀'
   localStorage.setItem('theme', t)
   app.renderer.background.color = t === 'dark' ? 0x0c3543 : 0xdff3fa
+  editor?.setTheme(t === 'dark')
   world.emit('blockide:theme', t)
 }
 
@@ -2870,6 +2956,9 @@ async function beginSession(lang: Lang, mode?: AppMode): Promise<void> {
   caretAnchor = null
   splashEl.style.display = 'none'
   srcEl.value = src
+  if (!editor) initEditor()
+  editor?.setSource(src)
+  editor?.setLang(lang)
   applySettings()
   renderPalette()
   void render(src)
@@ -2877,6 +2966,7 @@ async function beginSession(lang: Lang, mode?: AppMode): Promise<void> {
   markDirty()
   updateTitle()
   if (!localStorage.getItem('tour-done')) setTimeout(startTour, 600)
+  recoverSession()
 }
 
 async function beginFromRecent(entry: RecentEntry): Promise<void> {
