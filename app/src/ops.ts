@@ -3,7 +3,7 @@ import type { BBlock } from './blocks'
 /** Pure source-splice operations shared by the UI and the E2E tests.
  *  Every block gesture reduces to one of these edits on the .c text. */
 
-export function cutRange(
+function cutRange(
   text: string,
   range: { start: number; end: number },
 ): { text: string; snippet: string } {
@@ -13,7 +13,7 @@ export function cutRange(
   }
 }
 
-export function adjustOffset(offset: number, cut: { start: number; end: number }): number {
+function adjustOffset(offset: number, cut: { start: number; end: number }): number {
   if (offset > cut.end) return offset - (cut.end - cut.start)
   return offset
 }
@@ -54,8 +54,7 @@ export function spliceMove(
   rawOffset: number,
 ): string | null {
   if (overlaps(rawOffset, move)) return null
-  const { snippet } = cutRange(text, move)
-  let t = cutRange(text, move).text
+  const { text: t, snippet } = cutRange(text, move)
   const offset = adjustOffset(rawOffset, move)
   return spliceInsert(t, offset, snippet)
 }

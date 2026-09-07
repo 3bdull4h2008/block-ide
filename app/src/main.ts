@@ -192,6 +192,19 @@ function blip(freq: number, dur = 0.06, type: OscillatorType = 'sine', gain = 0.
   }
 }
 
+const blipError = (): void => blip(200, 0.08, 'square', 0.04)
+const blipSuccess = (): void => blip(740, 0.07, 'sine', 0.08)
+const blipDrop = (): void => { blip(740, 0.07, 'sine', 0.08); setTimeout(() => blip(980, 0.05, 'sine', 0.05), 60) }
+const blipSlot = (): void => blip(660, 0.05, 'sine', 0.06)
+
+const WHITE_LABEL = {
+  fontFamily: "'Baloo 2', 'Segoe UI', sans-serif",
+  fontSize: 13,
+  fontWeight: '600' as const,
+  fill: 0xffffff,
+}
+const DARK_LABEL: typeof WHITE_LABEL = { ...WHITE_LABEL, fill: 0x0c3543 }
+
 // Toast notification system — standard desktop app feedback
 const toastsEl = document.getElementById('toasts') as HTMLDivElement
 function toast(msg: string, kind: 'success' | 'error' | 'info' = 'info', durationMs = 3000): void {
@@ -253,10 +266,13 @@ getCurrentWindow().onCloseRequested(async (event) => {
     exitHandled = true
     const shouldClose = await showExitDialog()
     if (shouldClose) {
+      await saveWindowState()
       await getCurrentWindow().destroy()
     } else {
       exitHandled = false
     }
+  } else {
+    await saveWindowState()
   }
 })
 
@@ -281,11 +297,7 @@ function langOf(path: string | null): Lang {
 
 // ---- Settings helpers (read/write before splashEl exists) ----
 function readSetting<T>(key: string, fallback: T): T {
-  try {
-    return (JSON.parse(localStorage.getItem(`blockide-set-${key}`) ?? 'null') as T) ?? fallback
-  } catch {
-    return fallback
-  }
+  return readJsonStore<T>(`blockide-set-${key}`, fallback)
 }
 function writeSetting(key: string, val: unknown): void {
   localStorage.setItem(`blockide-set-${key}`, JSON.stringify(val))
@@ -392,10 +404,13 @@ function updateTabsHeight(): void {
 // advance hook; real user actions fire events — never timers.
 const tourHooks: { advance?: (ev: 'edit' | 'run' | 'check') => void } = {}
 
+let srcSetting = false // guard: prevents input listener from double-counting undo
 function setSrc(next: string, kind: 'op' | 'type' = 'op'): Promise<void> {
   hist.push(src, kind)
   src = next
+  srcSetting = true
   srcEl.value = next
+  srcSetting = false
   const p = render(next)
   markDirty()
   return p
@@ -686,21 +701,9 @@ function drawBlock(b: BBlock): void {
     g.stroke({ width: 3, color: edge })
   }
   // header content: literal text chunks + typed input slots (Scratch fields)
-  const whiteLabel = {
-    fontFamily: "'Baloo 2', 'Segoe UI', sans-serif",
-    fontSize: 13,
-    fontWeight: '600',
-    fill: '#ffffff',
-  } as const
-  const darkLabel = {
-    fontFamily: "'Baloo 2', 'Segoe UI', sans-serif",
-    fontSize: 13,
-    fontWeight: '600',
-    fill: '#0c3543',
-  } as const
   const header: (Text | Graphics)[] = []
   if (b.parts.length === 0) {
-    const t = new Text({ text: b.label || b.nodeKind, style: whiteLabel })
+    const t = new Text({ text: b.label || b.nodeKind, style: WHITE_LABEL })
     t.x = b.x + PAD
     t.y = b.y + (ROW_H - t.height) / 2
     header.push(t)
@@ -709,7 +712,7 @@ function drawBlock(b: BBlock): void {
     for (const p of b.parts) {
       const w = partWidth(p)
       if (p.type === 'text') {
-        const t = new Text({ text: p.text, style: whiteLabel })
+        const t = new Text({ text: p.text, style: WHITE_LABEL })
         t.x = cx
         t.y = b.y + (ROW_H - t.height) / 2
         header.push(t)
@@ -736,7 +739,7 @@ function drawBlock(b: BBlock): void {
         box.lineTo(cx, y0 + h / 2)
         box.closePath()
         box.stroke({ width: 2, color: edge, alpha: 0.5 })
-        const t = new Text({ text: p.text, style: darkLabel })
+        const t = new Text({ text: p.text, style: DARK_LABEL })
         t.x = cx + (w - t.width) / 2
         t.y = b.y + (ROW_H - t.height) / 2
         header.push(box, t)
@@ -747,7 +750,7 @@ function drawBlock(b: BBlock): void {
         box.fill({ color: 0xf6fbff })
         box.roundRect(cx, b.y + 6, w, ROW_H - 12, 7)
         box.stroke({ width: 2, color: edge, alpha: 0.5 })
-        const t = new Text({ text: p.text, style: darkLabel })
+        const t = new Text({ text: p.text, style: DARK_LABEL })
         t.x = cx + (w - t.width) / 2
         t.y = b.y + (ROW_H - t.height) / 2
         header.push(box, t)
@@ -793,12 +796,7 @@ function startHtmlDrag(e: PointerEvent, payload: DragPayload): void {
   g.stroke({ width: 3, color: BORDER[(payload.cat as Cat) ?? 'statement'] ?? BORDER.statement })
   const t = new Text({
     text: payload.label,
-    style: {
-      fontFamily: "'Baloo 2', 'Segoe UI', sans-serif",
-      fontSize: 13,
-      fontWeight: '600',
-      fill: '#ffffff',
-    },
+    style: WHITE_LABEL,
   })
   t.x = PAD
   t.y = (ROW_H - 13) / 2
@@ -867,12 +865,7 @@ function drawSnapGhost(
   g.stroke({ width: 3, color: fill, alpha: 0.6 })
   const t = new Text({
     text: label,
-    style: {
-      fontFamily: "'Baloo 2', 'Segoe UI', sans-serif",
-      fontSize: 13,
-      fontWeight: '600',
-      fill: '#ffffff',
-    },
+    style: WHITE_LABEL,
   })
   t.alpha = 0.55
   t.x = gx + PAD
@@ -1026,7 +1019,7 @@ async function onDragEnd(e: PointerEvent): Promise<void> {
     const s = slotUnderWorldPoint(w.x, w.y) ?? nearestCompatibleSlot(w.x, w.y, d.slotKind)
     if (!s) return
     if (!reporterFits(d.slotKind, s.part.type)) {
-      blip(200, 0.08, 'square', 0.04)
+      blipError()
       consoleEl.textContent = `that block fits a ${
         d.slotKind === 'bool' ? 'hex condition' : 'round'
       } socket — wrong shape here`
@@ -1034,7 +1027,7 @@ async function onDragEnd(e: PointerEvent): Promise<void> {
     }
     const err = commitSlotValue(s, d.slotValue)
     if (err !== null) {
-      blip(200, 0.08, 'square', 0.04)
+      blipError()
       consoleEl.textContent = err
     }
     return
@@ -1045,7 +1038,7 @@ async function onDragEnd(e: PointerEvent): Promise<void> {
     setSrc(insertTopLevel(src, roots, d.snippet ?? ''))
     void canonicalize()
     tourHooks.advance?.('edit')
-    blip(740, 0.07, 'sine', 0.08)
+    blipSuccess()
     return
   }
 
@@ -1054,7 +1047,7 @@ async function onDragEnd(e: PointerEvent): Promise<void> {
     setSrc(`${d.snippet ?? ''}\n${src}`)
     void canonicalize()
     tourHooks.advance?.('edit')
-    blip(740, 0.07, 'sine', 0.08)
+    blipSuccess()
     return
   }
 
@@ -1069,7 +1062,7 @@ async function onDragEnd(e: PointerEvent): Promise<void> {
       setSrc(d.snippet ?? '')
       void canonicalize()
       tourHooks.advance?.('edit')
-      blip(740, 0.07, 'sine', 0.08)
+      blipSuccess()
       return
     }
   }
@@ -1084,8 +1077,7 @@ async function onDragEnd(e: PointerEvent): Promise<void> {
     next = spliceInsert(text, target.offset, d.snippet ?? '', needsIndent)
   }
   if (next === null) return
-  blip(740, 0.07, 'sine', 0.08)
-  setTimeout(() => blip(980, 0.05, 'sine', 0.05), 60)
+  blipDrop()
   setSrc(next)
   void canonicalize()
   tourHooks.advance?.('edit')
@@ -1124,7 +1116,7 @@ function commitSlotValue(s: SlotHit, raw: string): string | null {
   setSrc(src.slice(0, s.part.start) + final + src.slice(s.part.end))
   void canonicalize()
   tourHooks.advance?.('edit')
-  blip(660, 0.05, 'sine', 0.06)
+  blipSlot()
   return null
 }
 
@@ -1145,7 +1137,7 @@ function closeSlotEditor(commit: boolean): void {
       // reopen on invalid input so the user can fix it (strings self-quote)
       openSlotEditor(s)
       slotEditor.classList.add('bad')
-      blip(200, 0.08, 'square', 0.04)
+      blipError()
     }
   }
 }
@@ -1325,6 +1317,18 @@ function finishRun(r: {
   }
 }
 
+function stopRun(msg?: string): void {
+  running = false
+  window.removeEventListener('keydown', stageKeyDown)
+  window.removeEventListener('keyup', stageKeyUp)
+  clearInterval(pollTimer)
+  clearInterval(memTimer)
+  stopBtn.style.display = 'none'
+  consoleInputRow.style.display = 'none'
+  fpsEl.textContent = ''
+  if (msg !== undefined) consoleEl.textContent = msg
+}
+
 async function startRun(): Promise<void> {
   consoleEl.textContent = 'running…'
   tourHooks.advance?.('run')
@@ -1345,12 +1349,7 @@ async function startRun(): Promise<void> {
     await invoke('run_start', { src, traceMem: tracing, lang: activeLang })
     ;(window as unknown as { __runStarted?: boolean }).__runStarted = true
   } catch (e) {
-    running = false
-    window.removeEventListener('keydown', stageKeyDown)
-    window.removeEventListener('keyup', stageKeyUp)
-    stopBtn.style.display = 'none'
-    consoleInputRow.style.display = 'none'
-    consoleEl.textContent = `[launch] ${String(e)}`
+    stopRun(`[launch] ${String(e)}`)
     blip(200, 0.1, 'square', 0.05)
     return
   }
@@ -1374,27 +1373,13 @@ async function startRun(): Promise<void> {
     void invoke<unknown>('run_poll')
       .then((r) => {
         if (r) {
-          running = false
-          window.removeEventListener('keydown', stageKeyDown)
-          window.removeEventListener('keyup', stageKeyUp)
-          clearInterval(pollTimer)
-          clearInterval(memTimer)
-          stopBtn.style.display = 'none'
-          consoleInputRow.style.display = 'none'
-          fpsEl.textContent = ''
+          stopRun()
           finishRun(r as Parameters<typeof finishRun>[0])
           reportLeaks()
         }
       })
       .catch((e) => {
-        running = false
-        window.removeEventListener('keydown', stageKeyDown)
-        window.removeEventListener('keyup', stageKeyUp)
-        clearInterval(pollTimer)
-        clearInterval(memTimer)
-        stopBtn.style.display = 'none'
-        consoleInputRow.style.display = 'none'
-        consoleEl.textContent = `[poll] ${String(e)}`
+        stopRun(`[poll] ${String(e)}`)
       })
   }, 120)
 }
@@ -1571,7 +1556,7 @@ ctxMenu.addEventListener('click', async (e) => {
     const slice = src.slice(b.start, b.end)
     setSrc(src.slice(0, b.end) + '\n' + slice + src.slice(b.end))
     void canonicalize()
-    blip(740, 0.07, 'sine', 0.08)
+    blipSuccess()
   } else if (act === 'del') {
     const lineStart = src.lastIndexOf('\n', b.start - 1) + 1
     let end = b.end
@@ -2009,6 +1994,7 @@ window.addEventListener('keydown', (e) => {
 })
 
 srcEl.addEventListener('input', () => {
+  if (srcSetting) return // setSrc already pushed to history — don't double-count
   hist.push(src, 'type')
   src = srcEl.value
   void render(src)
@@ -2255,7 +2241,7 @@ varMenu.addEventListener('click', (e) => {
     const next = validateVarName(raw)
     if (next === null || knownVars.includes(next) || knownLists.includes(next)) {
       consoleEl.textContent = `cannot rename to "${raw}"`
-      blip(200, 0.08, 'square', 0.04)
+      blipError()
       return
     }
     if (knownVars.includes(old)) knownVars[knownVars.indexOf(old)] = next
@@ -2332,7 +2318,7 @@ function renderPalette(): void {
       }
       if (!depOk) {
         e.preventDefault()
-        blip(200, 0.08, 'square', 0.04)
+        blipError()
         consoleEl.textContent = `"${item.name}" needs ${item.requires!.kind ?? item.requires!.include!} in the program first`
         return
       }
@@ -2388,7 +2374,7 @@ function renderPalette(): void {
       const name = validateVarName(raw)
       if (name === null) {
         consoleEl.textContent = `"${raw}" is not a valid C variable name`
-        blip(200, 0.08, 'square', 0.04)
+        blipError()
         return
       }
       // C/C++ variables need a DECLARED TYPE — second step of the dialog
@@ -2398,7 +2384,7 @@ function renderPalette(): void {
       const type = traw.trim().toLowerCase()
       if (!types.includes(type)) {
         consoleEl.textContent = `"${type}" is not a type I know — use ${types.join('/')}`
-        blip(200, 0.08, 'square', 0.04)
+        blipError()
         return
       }
       if (!knownVars.includes(name)) knownVars.push(name)
@@ -2428,7 +2414,7 @@ function renderPalette(): void {
       const name = validateVarName(raw)
       if (name === null) {
         consoleEl.textContent = `"${raw}" is not a valid C array name`
-        blip(200, 0.08, 'square', 0.04)
+        blipError()
         return
       }
       if (!knownLists.includes(name)) knownLists.push(name)
@@ -2502,12 +2488,12 @@ function keyboardActivateChip(el: HTMLElement): void {
   // dependency gating live on the element itself
   if (el.classList.contains('locked')) {
     consoleEl.textContent = 'locked - complete more Academy levels to unlock this category'
-    blip(200, 0.08, 'square', 0.04)
+    blipError()
     return
   }
   if (el.classList.contains('pal-dep')) {
     consoleEl.textContent = el.title || 'this block needs its prerequisite first'
-    blip(200, 0.08, 'square', 0.04)
+    blipError()
     return
   }
   if (el.id === 'make-var' || el.id === 'make-list') {
@@ -2522,7 +2508,7 @@ function keyboardActivateChip(el: HTMLElement): void {
     return
   }
   tourHooks.advance?.('edit')
-  blip(740, 0.07, 'sine', 0.08)
+  blipSuccess()
   if (item.top) {
     setSrc(`${item.snippet}\n${src}`)
     void canonicalize()
@@ -3205,10 +3191,6 @@ async function restoreWindowState(): Promise<void> {
   }
 }
 
-// Save window state before close
-getCurrentWindow().onCloseRequested(async () => {
-  await saveWindowState()
-})
 // Also save on resize/move (debounced)
 let stateSaveTimer = 0
 const debouncedSaveState = (): void => {
@@ -3352,7 +3334,7 @@ document.getElementById('repl-one')?.addEventListener('click', () => {
   const q = findInput.value
   setSrc(src.slice(0, at) + replInput.value + src.slice(at + q.length))
   tourHooks.advance?.('edit')
-  blip(660, 0.05, 'sine', 0.06)
+  blipSlot()
   requestAnimationFrame(() => {
     findHits = computeHits()
     findIdx = nearestHitIndex(at + replInput.value.length) 

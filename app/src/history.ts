@@ -34,5 +34,6 @@ export class History {
     this.past = []
     this.future = []
     this.lastKind = ''
+    this.lastAt = 0
   }
 }

@@ -134,7 +134,7 @@ let SHAPE: LangShape = LANG_SHAPES.c
 /** tree-sitter-c field names that hold a control statement's nested bodies */
 const BODY_FIELDS = new Set(['body', 'consequence', 'alternative'])
 
-export function isBrace(n: CNodeJSON): boolean {
+function isBrace(n: CNodeJSON): boolean {
   return !n.named && (n.text === '{' || n.text === '}')
 }
 
@@ -381,6 +381,7 @@ const widthCache = new Map<string, number>()
 export function measure(label: string): number {
   let w = widthCache.get(label)
   if (w === undefined) {
+    if (widthCache.size > 200) widthCache.clear()
     w = Math.max(90, label.length * CHAR_W + PAD * 2)
     widthCache.set(label, w)
   }

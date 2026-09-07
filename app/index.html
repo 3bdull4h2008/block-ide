@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -12,7 +12,7 @@
         <div id="splash-titlebar">
           <span class="titlebar-text">Cade</span>
           <div class="win-controls">
-            <button class="win-btn win-close" id="splash-quit" title="Quit Cade">&#10005;</button>
+            <button class="win-btn win-close" id="splash-quit" title="Quit Cade" aria-label="Quit Cade">&#10005;</button>
           </div>
         </div>
         <div id="splash-body">
@@ -337,13 +337,13 @@
         </nav>
         <div class="header-actions">
           <span class="hint">Ctrl+Enter run · Ctrl+S save · Ctrl+F find · / filter blocks</span>
-          <button id="theme-toggle" title="Toggle light/dark theme">☾</button>
+          <button id="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle light/dark theme">☾</button>
           <button id="run" aria-label="Run program (Ctrl+Enter)">▶ Run</button>
           <span id="status" role="status" aria-live="polite"></span>
           <div class="toolbar-win-controls">
-            <button class="twc-btn" id="tb-minimize" title="Minimize">&#9472;</button>
-            <button class="twc-btn" id="tb-maximize" title="Maximize">&#9633;</button>
-            <button class="twc-btn twc-close" id="tb-close" title="Close">&#10005;</button>
+            <button class="twc-btn" id="tb-minimize" title="Minimize" aria-label="Minimize">&#9472;</button>
+            <button class="twc-btn" id="tb-maximize" title="Maximize" aria-label="Maximize">&#9633;</button>
+            <button class="twc-btn twc-close" id="tb-close" title="Close" aria-label="Close">&#10005;</button>
           </div>
         </div>
       </header>
@@ -363,16 +363,16 @@
       </div>
       <div id="main-col">
         <div id="tabs"></div>
-        <textarea id="src" spellcheck="false" placeholder="Type code here or drag blocks from the palette..."></textarea>
+        <textarea id="src" aria-label="Code editor" spellcheck="false" placeholder="Type code here or drag blocks from the palette..."></textarea>
         <div id="findbar" style="display:none">
           <input id="find-input" placeholder="find" spellcheck="false" autocomplete="off" />
           <span id="find-count"></span>
-          <button id="find-prev" title="previous match">↑</button>
-          <button id="find-next" title="next match">↓</button>
+          <button id="find-prev" title="previous match" aria-label="Previous match">↑</button>
+          <button id="find-next" title="next match" aria-label="Next match">↓</button>
           <input id="repl-input" placeholder="replace" spellcheck="false" autocomplete="off" />
-          <button id="repl-one" title="replace current">Repl</button>
-          <button id="repl-all" title="replace all">All</button>
-          <button id="find-close" title="close (Esc)">×</button>
+          <button id="repl-one" title="replace current" aria-label="Replace current">Repl</button>
+          <button id="repl-all" title="replace all" aria-label="Replace all">All</button>
+          <button id="find-close" title="close (Esc)" aria-label="Close find">×</button>
         </div>
       </div>
       <div id="canvas-host"></div>
@@ -386,22 +386,22 @@
       </div>
       <div id="console-input-row">
         <input id="console-input" placeholder="input for the program… (Enter to send)" autocomplete="off" />
-        <button id="console-send" title="Send to program">▶</button>
+        <button id="console-send" title="Send to program" aria-label="Send to program">▶</button>
       </div>
       <div id="stage-wrap">
         <div id="stage-head">
           <span>Stage</span>
           <label id="mem-toggle"><input type="checkbox" id="mem-trace" /> memory</label>
           <span id="stage-fps"></span>
-          <button id="stage-stop" title="Stop program">&#9632;</button>
+          <button id="stage-stop" title="Stop program" aria-label="Stop program">&#9632;</button>
         </div>
         <canvas id="stage" width="320" height="240"></canvas>
         <div id="mem-list"></div>
       </div>
     </div>
-    <div id="exit-confirm" style="display:none">
+    <div id="exit-confirm" role="dialog" aria-modal="true" aria-labelledby="exit-title" style="display:none">
       <div id="exit-card">
-        <h3>Unsaved Changes</h3>
+        <h3 id="exit-title">Unsaved Changes</h3>
         <p>You have unsaved changes. Do you want to quit without saving?</p>
         <div class="exit-actions">
           <button id="exit-cancel" class="hero-btn">Cancel</button>
@@ -409,7 +409,7 @@
         </div>
       </div>
     </div>
-    <div id="tour" style="display:none">
+    <div id="tour" role="dialog" aria-modal="true" aria-labelledby="tour-title" style="display:none">
       <div id="tour-card">
         <h2 id="tour-title"></h2>
         <p id="tour-body"></p>
@@ -419,7 +419,7 @@
         </div>
       </div>
     </div>
-    <div id="about" style="display:none">
+    <div id="about" role="dialog" aria-modal="true" style="display:none">
       <div id="about-card" title="click outside to close" onclick="event.stopPropagation()">
         <img src="/logos/brand.png" alt="Cade" />
         <div class="about-tag">blocks that ARE the code — C · C++ · Python · JavaScript · Rust</div>
@@ -429,8 +429,8 @@
         </div>
       </div>
     </div>
-    <div id="toasts"></div>
-    <div id="shortcuts-dialog" style="display:none">
+    <div id="toasts" role="alert" aria-live="assertive"></div>
+    <div id="shortcuts-dialog" role="dialog" aria-modal="true" style="display:none">
       <div id="shortcuts-card" onclick="event.stopPropagation()">
         <h3>Keyboard Shortcuts</h3>
         <div class="shortcuts-grid">
