@@ -1446,46 +1446,6 @@ select:focus-visible,
   color: #fff;
 }
 
-/* find & replace bar (#11) */
-#findbar {
-  position: absolute;
-  top: 0;
-  right: 14px;
-  z-index: 60;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  background: var(--bg-panel);
-  border: 2px solid var(--border-strong);
-  border-radius: 12px;
-  box-shadow: 0 10px 26px rgba(7, 32, 42, 0.3);
-  transform: translateY(calc(var(--tabs-h, 37px)));
-}
-
-#findbar input {
-  width: 130px;
-  font-family: 'Comic Neue', monospace;
-  font-size: 12px;
-  padding: 3px 8px;
-  border: 1.5px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg);
-  color: var(--fg);
-  outline: none;
-}
-
-#findbar input:focus {
-  border-color: var(--accent);
-}
-
-#find-count {
-  font-size: 11px;
-  color: var(--fg-dim);
-  min-width: 46px;
-  text-align: center;
-}
-
 /* dependency-gated chips: block exists only when its prerequisite does */.pal.pal-dep {
   opacity: 0.45;
   border: 2px dashed rgba(100, 116, 139, 0.6);

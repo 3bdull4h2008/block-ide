@@ -79,6 +79,8 @@ import { registerCommands, togglePalette } from './palette-cmd'
 import './style.css'
 import { registerContextMenuProvider, initContextMenu } from './context-menu'
 import { initResizers } from './resize'
+import { initConsole } from './ui/console'
+import { initDialogs } from './ui/dialogs'
 
 interface DragPayload {
   label: string
@@ -1287,7 +1289,7 @@ const isTextEntryTarget = (e: Event): boolean => {
   const t = e.target as HTMLElement | null
   if (!t) return false
   if (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT') return true
-  return !!t.closest('#console-input-row, #findbar, #pal-filter')
+  return !!t.closest('#console-input-row, #pal-filter')
 }
 
 function stageKeyDown(e: KeyboardEvent): void {
@@ -1422,28 +1424,7 @@ async function startRun(): Promise<void> {
 }
 
 // ------------------------------------------------------- console stdin box
-async function sendConsoleLine(): Promise<void> {
-  const line = consoleInput.value
-  if (line.length === 0) return
-  consoleInput.value = ''
-  consoleEl.textContent += `\n> ${line}`
-  consoleEl.scrollTop = consoleEl.scrollHeight
-  try {
-    await invoke('run_stdin', { line })
-  } catch (e) {
-    consoleEl.textContent += `\n${String(e)}`
-  }
-}
-
-consoleInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault()
-    void sendConsoleLine()
-  }
-})
-document.getElementById('console-send')?.addEventListener('click', () => {
-  void sendConsoleLine()
-})
+initConsole(consoleEl, consoleInput)
 
 // ------------------------------------------------------------- memory view
 interface MemBox {
@@ -2024,12 +2005,6 @@ window.addEventListener('keydown', (e) => {
     // close active tab (Ctrl+W) — discard-guarded like every navigation
     e.preventDefault()
     if (activePath !== null) void closeTab(activePath)
-  } else if (e.key.toLowerCase() === 'f') {
-    e.preventDefault()
-    openFind(false)
-  } else if (e.key.toLowerCase() === 'h') {
-    e.preventDefault()
-    openFind(true)
   } else if (e.key === '/') {
     e.preventDefault()
     // Toggle keyboard shortcuts dialog
@@ -3034,8 +3009,7 @@ async function beginSession(lang: Lang, mode?: AppMode): Promise<void> {
     { id: 'file.new', label: 'New File', category: 'File', action: () => void (document.getElementById('new-file') as HTMLButtonElement)?.click() },
     { id: 'edit.undo', label: 'Undo', category: 'Edit', shortcut: 'Ctrl+Z', action: () => document.execCommand('undo') },
     { id: 'edit.redo', label: 'Redo', category: 'Edit', shortcut: 'Ctrl+Y', action: () => document.execCommand('redo') },
-    { id: 'edit.find', label: 'Find & Replace', category: 'Edit', shortcut: 'Ctrl+F', action: () => openFind(false) },
-    { id: 'edit.findReplace', label: 'Find & Replace (with Replace)', category: 'Edit', shortcut: 'Ctrl+H', action: () => openFind(true) },
+    { id: 'edit.find', label: 'Find & Replace', category: 'Edit', shortcut: 'Ctrl+F', action: () => editor?.view.focus() /* CodeMirror handles Ctrl+F */ },
     { id: 'run.start', label: 'Run Program', category: 'Run', shortcut: 'F5', action: () => void startRun() },
     { id: 'run.stop', label: 'Stop Program', category: 'Run', shortcut: 'Shift+F5', action: () => stopRun() },
     { id: 'run.check', label: 'Check Code', category: 'Run', shortcut: 'Ctrl+Shift+C', action: () => void (document.getElementById('check-btn') as HTMLButtonElement)?.click() },
@@ -3377,161 +3351,7 @@ initResizers()
 // does not mean the click handlers are wired yet
 ;(window as unknown as { __bootDone?: boolean }).__bootDone = true
 
-// about dialog: toolbar brand logo opens the horizontal lockup card; any
-// click on the overlay closes it
-const aboutEl = document.getElementById('about') as HTMLDivElement
-document.getElementById('brand-logo')?.addEventListener('click', () => {
-  blip(660, 0.06, 'sine', 0.05)
-  aboutEl.style.display = 'flex'
-})
-aboutEl.addEventListener('click', () => {
-  aboutEl.style.display = 'none'
-})
-
-// Keyboard shortcuts dialog
-const shortcutsDialog = document.getElementById('shortcuts-dialog') as HTMLDivElement
-document.getElementById('show-shortcuts')?.addEventListener('click', (e) => {
-  e.stopPropagation()
-  aboutEl.style.display = 'none'
-  shortcutsDialog.style.display = 'flex'
-})
-document.getElementById('close-shortcuts')?.addEventListener('click', () => {
-  shortcutsDialog.style.display = 'none'
-})
-shortcutsDialog.addEventListener('click', () => {
-  shortcutsDialog.style.display = 'none'
-})
-
-// ------------------------------------------------- find & replace (#11)
-const findbar = document.getElementById('findbar') as HTMLDivElement
-const findInput = document.getElementById('find-input') as HTMLInputElement
-const replInput = document.getElementById('repl-input') as HTMLInputElement
-const findCount = document.getElementById('find-count') as HTMLSpanElement
-let findHits: number[] = []
-let findIdx = -1
-
-function computeHits(): number[] {
-  const q = findInput.value
-  if (q.length === 0) return []
-  const hay = src.toLowerCase()
-  const needle = q.toLowerCase()
-  const hits: number[] = []
-  let i = 0
-  while ((i = hay.indexOf(needle, i)) !== -1) {
-    hits.push(i)
-    i += needle.length
-  }
-  return hits
-}
-
-function showHit(i: number): void {
-  if (findHits.length === 0) {
-    findCount.textContent = findInput.value ? '0' : ''
-    return
-  }
-  findIdx = ((i % findHits.length) + findHits.length) % findHits.length
-  const at = findHits[findIdx]
-  findCount.textContent = `${findIdx + 1} of ${findHits.length}`
-  srcEl.focus({ preventScroll: true })
-  srcEl.setSelectionRange(at, at + findInput.value.length)
-  const line = src.slice(0, at).split('\n').length - 1
-  const lh = parseFloat(getComputedStyle(srcEl).lineHeight || '19') || 19
-  srcEl.scrollTop = Math.max(0, line * lh - srcEl.clientHeight / 2)
-}
-
-function refreshFind(): void {
-  const prevAt = findHits[findIdx]
-  findHits = computeHits()
-  findIdx = prevAt === undefined ? -1 : Math.max(0, nearestHitIndex(prevAt))
-  if (findHits.length > 0 && findIdx >= 0) {
-    // keep count in sync without moving the caret
-    findCount.textContent =
-      findHits.length === 0 ? '' : `${Math.min(findIdx + 1, findHits.length)} of ${findHits.length}`
-  } else {
-    findCount.textContent = findInput.value ? '0' : ''
-  }
-}
-
-function nearestHitIndex(at: number): number {
-  if (findHits.length === 0) return -1
-  for (let i = 0; i < findHits.length; i++) if (findHits[i] >= at) return i
-  return findHits.length - 1
-}
-
-function openFind(replaceMode: boolean): void {
-  findbar.style.display = 'flex'
-  if (replaceMode) replInput.focus()
-  else {
-    findInput.focus()
-    findInput.select()
-  }
-  refreshFind()
-}
-
-function closeFind(): void {
-  findbar.style.display = 'none'
-  void canonicalize()
-}
-
-findInput.addEventListener('input', () => {
-  findHits = computeHits()
-  findIdx = -1
-  showHit(0)
-})
-findInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault()
-    showHit(e.shiftKey ? findIdx - 1 : findIdx + 1)
-  } else if (e.key === 'Escape') closeFind()
-})
-replInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeFind()
-})
-document.getElementById('find-next')?.addEventListener('click', () => {
-  findHits = computeHits()
-  showHit(findIdx + 1)
-})
-document.getElementById('find-prev')?.addEventListener('click', () => {
-  findHits = computeHits()
-  showHit(findIdx - 1)
-})
-document.getElementById('find-close')?.addEventListener('click', closeFind)
-
-document.getElementById('repl-one')?.addEventListener('click', () => {
-  findHits = computeHits()
-  if (findHits.length === 0) return
-  const i = findIdx === -1 ? 0 : findIdx
-  const at = findHits[i]
-  const q = findInput.value
-  setSrc(src.slice(0, at) + replInput.value + src.slice(at + q.length))
-  tourHooks.advance?.('edit')
-  blipSlot()
-  requestAnimationFrame(() => {
-    findHits = computeHits()
-    findIdx = nearestHitIndex(at + replInput.value.length) 
-    showHit(findIdx)
-  })
-})
-
-document.getElementById('repl-all')?.addEventListener('click', () => {
-  const q = findInput.value
-  if (!q) return
-  let n = 0
-  let out = ''
-  let rest = src
-  let at: number
-  while ((at = rest.toLowerCase().indexOf(q.toLowerCase())) !== -1) {
-    out += rest.slice(0, at) + replInput.value
-    rest = rest.slice(at + q.length)
-    n++
-  }
-  if (n === 0) return
-  setSrc(out + rest)
-  tourHooks.advance?.('edit')
-  blip(740, 0.07, 'sine', 0.06)
-  consoleEl.textContent = `[replace] ${n} occurrence(s) replaced`
-  requestAnimationFrame(() => refreshFind())
-})
+initDialogs()
 
 // ------------------------------------------------ drag & drop files (#12)
 // Dropping source files onto the window opens them as tabs — same guard
