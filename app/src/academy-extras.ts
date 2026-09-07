@@ -42,3 +42,31 @@ export function previousLevel<T extends ChainLevel>(levels: T[], id: string): T 
   const i = levels.findIndex((l) => l.id === id)
   return i > 0 ? levels[i - 1] : null
 }
+
+export interface StreakState {
+  currentStreak: number
+  longestStreak: number
+  lastActivityDate: string // YYYY-MM-DD local time
+}
+
+export function updateStreak(s: StreakState | undefined, nowMs: number): StreakState {
+  const d = new Date(nowMs)
+  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  
+  if (!s) return { currentStreak: 1, longestStreak: 1, lastActivityDate: today }
+  if (s.lastActivityDate === today) return s // already practiced today
+  
+  const lastDate = new Date(s.lastActivityDate)
+  // normalize both to midnight UTC to safely count days difference
+  const utcToday = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())
+  const utcLast = Date.UTC(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate())
+  
+  const diffDays = Math.floor((utcToday - utcLast) / (1000 * 60 * 60 * 24))
+  
+  const currentStreak = diffDays === 1 ? s.currentStreak + 1 : 1
+  return {
+    currentStreak,
+    longestStreak: Math.max(s.longestStreak, currentStreak),
+    lastActivityDate: today
+  }
+}

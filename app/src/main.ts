@@ -73,6 +73,8 @@ import {
   masteryDue,
   masteryNextIn,
   previousLevel,
+  updateStreak,
+  type StreakState,
   type MasteryState,
 } from './academy-extras'
 import { registerCommands, togglePalette } from './palette-cmd'
@@ -2244,6 +2246,9 @@ function readJsonStore<T>(key: string, fallback: T): T {
     return fallback
   }
 }
+function writeJsonStore<T>(key: string, value: T): void {
+  localStorage.setItem(key, JSON.stringify(value))
+}
 const knownVars: string[] = readJsonStore<string[]>('blockide-vars', [])
 const knownLists: string[] = readJsonStore<string[]>('blockide-lists', [])
 /** declared type per variable (C/C++ need the declaration to exist first) */
@@ -2702,6 +2707,7 @@ let hintTier = 0
 const nowSec = (): number => Math.floor(Date.now() / 1000)
 const levelSols = readJsonStore<Record<string, string>>('blockide-levelsol', {})
 const mastery = readJsonStore<Record<string, MasteryState>>('blockide-mastery', {})
+let streakState = readJsonStore<StreakState | undefined>('blockide-streak', undefined)
 let levelsCache: LevelInfo[] = []
 
 // --------------------------------------------- D7 mode split: sandbox|academy
@@ -2787,7 +2793,7 @@ function updateHintBtn(): void {
 
 hintBtn?.addEventListener('click', () => {
   if (hintTier >= hints.length) return
-  consoleEl.textContent += `\n[hint ${hintTier + 1}/3] ${hints[hintTier]}`
+  consoleEl.textContent += `\n[hint ${hintTier + 1}/${hints.length}] ${hints[hintTier]}`
   consoleEl.scrollTop = consoleEl.scrollHeight
   hintTier++
   updateHintBtn()
@@ -2811,10 +2817,19 @@ document.getElementById('check-btn')?.addEventListener('click', async () => {
       mastery[id] = nextMastery(mastery[id], nowSec())
       localStorage.setItem('blockide-mastery', JSON.stringify(mastery))
       const review = masteryNextIn(mastery[id])
+      
+      const oldStreak = streakState?.currentStreak ?? 0
+      streakState = updateStreak(streakState, Date.now())
+      writeJsonStore('blockide-streak', streakState)
+      
+      const streakMsg = streakState.currentStreak > oldStreak 
+        ? ` 🔥 ${streakState.currentStreak} Day Streak!` 
+        : ` (Streak: ${streakState.currentStreak} 🔥)`
+
       consoleEl.textContent =
         r.xp_awarded > 0
-          ? `[academy] PASSED ✓  +${r.xp_awarded} XP (total ${r.total_xp}) · solution saved — the next level starts from it · next ⟳review in ${review}`
-          : `[academy] PASSED ✓  (already completed before — no extra XP) · next ⟳review in ${review}`
+          ? `[academy] PASSED ✓  +${r.xp_awarded} XP (total ${r.total_xp}) · solution saved — the next level starts from it · next ⟳review in ${review}... ${streakMsg}`
+          : `[academy] PASSED ✓  (already completed before — no extra XP) · next ⟳review in ${review}... ${streakMsg}`
       await refreshProfile()
       await refreshLevels()
     } else {
