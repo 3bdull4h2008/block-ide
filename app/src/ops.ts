@@ -22,10 +22,27 @@ export function overlaps(offset: number, cut: { start: number; end: number }): b
   return offset >= cut.start && offset <= cut.end
 }
 
-export function spliceInsert(text: string, offset: number, snippet: string): string {
+export function spliceInsert(
+  text: string,
+  offset: number,
+  snippet: string,
+  autoIndent = false,
+): string {
   let insert = snippet
   const pre = text.slice(0, offset)
-  if (pre.length > 0 && !pre.endsWith('\n')) insert = '\n' + insert
+  if (pre.length > 0 && !pre.endsWith('\n')) {
+    if (autoIndent) {
+      const lastNl = pre.lastIndexOf('\n')
+      const linePart = lastNl >= 0 ? pre.slice(lastNl + 1) : pre
+      const m = linePart.match(/^(\s+)/)
+      if (m && m[1].length > 0) {
+        const indent = m[1]
+        insert = '\n' + indent + snippet.split('\n').join('\n' + indent)
+        return text.slice(0, lastNl + 1) + insert + text.slice(offset)
+      }
+    }
+    insert = '\n' + insert
+  }
   const post = text.slice(offset)
   if (!post.startsWith('\n') && !insert.endsWith('\n')) insert += '\n'
   return text.slice(0, offset) + insert + post

@@ -29,6 +29,7 @@ function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
 }
 import { open as openDialog, save as saveDialog, ask } from '@tauri-apps/plugin-dialog'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { LogicalSize, LogicalPosition } from '@tauri-apps/api/dpi'
 import {
   buildBlocks,
   harvestVars,
@@ -45,6 +46,7 @@ import {
   partWidth,
   type BBlock,
   type BlockPart,
+  type Cat,
   type CNodeJSON,
   type CTreeJSON,
 } from './blocks'
@@ -190,6 +192,19 @@ function blip(freq: number, dur = 0.06, type: OscillatorType = 'sine', gain = 0.
   }
 }
 
+// Toast notification system — standard desktop app feedback
+const toastsEl = document.getElementById('toasts') as HTMLDivElement
+function toast(msg: string, kind: 'success' | 'error' | 'info' = 'info', durationMs = 3000): void {
+  const el = document.createElement('div')
+  el.className = `toast toast-${kind}`
+  el.textContent = msg
+  toastsEl.appendChild(el)
+  setTimeout(() => {
+    el.classList.add('toast-exit')
+    el.addEventListener('animationend', () => el.remove())
+  }, durationMs)
+}
+
 let workspace: string | null = null
 /** Buffer content as last LOADED or explicitly SAVED — the dirty baseline
  *  for title dots, discard guards, and the close-time checkpoint. */
@@ -198,6 +213,60 @@ let activePath: string | null = null
 const savedCache = new Map<string, string>()
 const fileCache = new Map<string, string>()
 let files: string[] = []
+
+// ---- Exit alert: intercept window close and show confirmation ----
+function hasUnsavedChanges(): boolean {
+  return (
+    (activePath !== null && src !== savedSnapshot) ||
+    (activePath === null && src.trim().length > 0 && src !== SAMPLES[activeLang])
+  )
+}
+
+function showExitDialog(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const el = document.getElementById('exit-confirm') as HTMLDivElement
+    el.style.display = 'flex'
+    const cancel = document.getElementById('exit-cancel') as HTMLButtonElement
+    const quit = document.getElementById('exit-quit') as HTMLButtonElement
+    const close = (val: boolean) => {
+      el.style.display = 'none'
+      cancel.removeEventListener('click', onCancel)
+      quit.removeEventListener('click', onQuit)
+      el.removeEventListener('click', onOverlay)
+      resolve(val)
+    }
+    const onCancel = () => close(false)
+    const onQuit = () => close(true)
+    const onOverlay = (e: MouseEvent) => { if (e.target === el) close(false) }
+    cancel.addEventListener('click', onCancel)
+    quit.addEventListener('click', onQuit)
+    el.addEventListener('click', onOverlay)
+  })
+}
+
+// Use Tauri's closeRequested event — fires when user clicks X or Alt+F4
+let exitHandled = false
+getCurrentWindow().onCloseRequested(async (event) => {
+  if (exitHandled) return
+  if (hasUnsavedChanges()) {
+    event.preventDefault()
+    exitHandled = true
+    const shouldClose = await showExitDialog()
+    if (shouldClose) {
+      await getCurrentWindow().destroy()
+    } else {
+      exitHandled = false
+    }
+  }
+})
+
+// Also handle beforeunload for web/dev mode
+window.addEventListener('beforeunload', (e) => {
+  if (hasUnsavedChanges()) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+})
 
 // Multi-language packs (D11): language rides with the FILE
 type Lang = SourceLang
@@ -208,6 +277,29 @@ function langOf(path: string | null): Lang {
   if (['js', 'mjs', 'cjs'].includes(ext)) return 'javascript'
   if (ext === 'rs') return 'rust'
   return 'c'
+}
+
+// ---- Settings helpers (read/write before splashEl exists) ----
+function readSetting<T>(key: string, fallback: T): T {
+  try {
+    return (JSON.parse(localStorage.getItem(`blockide-set-${key}`) ?? 'null') as T) ?? fallback
+  } catch {
+    return fallback
+  }
+}
+function writeSetting(key: string, val: unknown): void {
+  localStorage.setItem(`blockide-set-${key}`, JSON.stringify(val))
+}
+
+/** Apply all saved settings to the editor on startup */
+function applySettings(): void {
+  srcEl.style.fontSize = `${readSetting('fontSize', '13')}px`
+  srcEl.style.fontFamily = `'${readSetting('fontFamily', 'Consolas')}', monospace`
+  srcEl.style.lineHeight = readSetting('lineHeight', '1.5')
+  srcEl.style.whiteSpace = readSetting('wordWrap', false) ? 'pre-wrap' : 'pre'
+  srcEl.style.tabSize = String(readSetting('tabSize', '4'))
+  // Line numbers, bracket matching, etc. are visual-only in a textarea —
+  // they take effect when the palette/settings panel renders next.
 }
 let activeLang: Lang = 'c'
 
@@ -287,6 +379,12 @@ function markDirty(): void {
     t.classList.toggle('active', t.dataset.path === activePath)
   }
   updateTitle()
+  updateTabsHeight()
+}
+
+function updateTabsHeight(): void {
+  const mainCol = document.getElementById('main-col')
+  if (mainCol) mainCol.style.setProperty('--tabs-h', `${tabsEl.offsetHeight}px`)
 }
 
 // Context-aware instructions (Blockly's proven rule: a popup only closes
@@ -323,11 +421,9 @@ async function render(source: string): Promise<void> {
     // (dependency-gated chips re-evaluate when the signature changes)
     const kinds = new Set<string>()
     const includes = new Set<string>()
-    const walkSig = (n: { kind: string; children: unknown[]; text: string | null; pre: string }): string => {
+    const walkSig = (n: { kind: string; children: unknown[] }): void => {
       kinds.add(n.kind)
-      let acc = n.pre + (n.text ?? '')
       for (const c of n.children as never[]) walkSig(c as never)
-      return acc
     }
     const walkInc = (n: CNodeJSON): void => {
       if (n.kind === 'preproc_include') {
@@ -571,8 +667,6 @@ function drawBlock(b: BBlock): void {
 
   if (b.container) {
     // Scratch C-block: mouth header + light body + tabbed floor
-    g.roundRect(b.x + 2, b.y + 4, b.w, b.h + TD, 12)
-    g.fill({ color: 0x0c3543, alpha: 0.18 })
     cBodyPath(g, b.x, b.y, b.w, ROW_H, b.h, true)
     g.fill({ color: mixWhite(fill, 0.62) })
     cHeaderPath(g, b.x, b.y, b.w, ROW_H)
@@ -584,8 +678,6 @@ function drawBlock(b: BBlock): void {
     cBodyPath(g, b.x, b.y, b.w, ROW_H, b.h, false)
     g.stroke({ width: 3, color: edge })
   } else {
-    g.roundRect(b.x + 2, b.y + 4, b.w, b.h + TD, 9)
-    g.fill({ color: 0x0c3543, alpha: 0.18 })
     statementPath(g, b.x, b.y, b.w, b.h)
     g.fill({ color: fill })
     g.roundRect(b.x + 3, b.y + 3, Math.max(0, b.w - 6), 3, 2)
@@ -682,15 +774,23 @@ let drag: DragPayload | null = null
 
 function startHtmlDrag(e: PointerEvent, payload: DragPayload): void {
   drag = payload
-  // Create a proper block-shaped ghost that matches the palette item
-  ghost.innerHTML = '' // Clear any existing content
+  ghost.innerHTML = ''
   const fill = catColor(payload.cat)
-  const g = new Graphics()
   const w = Math.max(90, measure(payload.label))
-  g.roundRect(0, 0, ROW_H, Math.max(ROW_H, 34), 9)
-  g.fill({ color: fill, alpha: 0.3 })
-  g.roundRect(0, 0, w, Math.max(ROW_H, 34), 9)
-  g.stroke({ width: 2, color: fill, alpha: 0.65 })
+  const h = Math.max(ROW_H, 34)
+  const g = new Graphics()
+  // Shadow
+  g.roundRect(2, 4, w, h + TD, 9)
+  g.fill({ color: 0x0c3543, alpha: 0.18 })
+  // Block shape
+  statementPath(g, 0, 0, w, h)
+  g.fill({ color: fill })
+  // Highlight strip
+  g.roundRect(3, 3, Math.max(0, w - 6), 3, 2)
+  g.fill({ color: 0xffffff, alpha: 0.35 })
+  // Border
+  statementPath(g, 0, 0, w, h)
+  g.stroke({ width: 3, color: BORDER[(payload.cat as Cat) ?? 'statement'] ?? BORDER.statement })
   const t = new Text({
     text: payload.label,
     style: {
@@ -707,12 +807,12 @@ function startHtmlDrag(e: PointerEvent, payload: DragPayload): void {
   container.addChild(t)
   container.x = 0
   container.y = 0
-  snapLayer.addChild(container) // Use snapLayer for rendering
-  ghost.innerHTML = '' // Clear text content
+  snapLayer.addChild(container)
+  ghost.innerHTML = ''
   ghost.style.display = 'block'
   ghost.style.left = `${e.clientX + 12}px`
   ghost.style.top = `${e.clientY - 14}px`
-  ghost.style.opacity = '0.5' // Semi-transparent during drag
+  ghost.style.opacity = '0.5'
   blip(520, 0.05, 'triangle', 0.05)
   window.addEventListener('pointermove', onDragMove)
   window.addEventListener('pointerup', onDragEnd, { once: true })
@@ -729,6 +829,8 @@ function catColor(cat: string | undefined, fallback = COLORS.statement): number 
       return COLORS.function
     case 'structs':
       return 0xec4899
+    case 'operators':
+      return 0x59c059
     case 'comment':
       return COLORS.comment
     default:
@@ -749,11 +851,20 @@ function drawSnapGhost(
   label: string,
 ): void {
   const fill = catColor(cat)
+  const hh = Math.max(ROW_H, h)
   const g = new Graphics()
-  g.roundRect(gx, gy, w, Math.max(ROW_H, h), 9)
-  g.fill({ color: fill, alpha: 0.3 })
-  g.roundRect(gx, gy, w, Math.max(ROW_H, h), 9)
-  g.stroke({ width: 2, color: fill, alpha: 0.65 })
+  // Shadow
+  g.roundRect(gx + 2, gy + 4, w, hh + TD, 9)
+  g.fill({ color: 0x0c3543, alpha: 0.18 })
+  // Block shape
+  statementPath(g, gx, gy, w, hh)
+  g.fill({ color: fill, alpha: 0.45 })
+  // Highlight strip
+  g.roundRect(gx + 3, gy + 3, Math.max(0, w - 6), 3, 2)
+  g.fill({ color: 0xffffff, alpha: 0.25 })
+  // Border
+  statementPath(g, gx, gy, w, hh)
+  g.stroke({ width: 3, color: fill, alpha: 0.6 })
   const t = new Text({
     text: label,
     style: {
@@ -966,10 +1077,11 @@ async function onDragEnd(e: PointerEvent): Promise<void> {
 
   const text = src
   let next: string | null
+  const needsIndent = activeLang === 'python' && !d.move
   if (d.move) {
     next = spliceMove(text, d.move, target.offset)
   } else {
-    next = spliceInsert(text, target.offset, d.snippet ?? '')
+    next = spliceInsert(text, target.offset, d.snippet ?? '', needsIndent)
   }
   if (next === null) return
   blip(740, 0.07, 'sine', 0.08)
@@ -1149,15 +1261,15 @@ const isTextEntryTarget = (e: Event): boolean => {
   return !!t.closest('#console-input-row, #findbar, #pal-filter')
 }
 
-window.addEventListener('keydown', (e) => {
+function stageKeyDown(e: KeyboardEvent): void {
   if (!running || isTextEntryTarget(e)) return
   const code = keyToCode(e)
   if (code !== null) {
     e.preventDefault()
     void invoke('stage_keys', { down: Array.from(downKeys.add(code)) })
   }
-})
-window.addEventListener('keyup', (e) => {
+}
+function stageKeyUp(e: KeyboardEvent): void {
   if (!running || isTextEntryTarget(e)) return
   const code = keyToCode(e)
   if (code !== null) {
@@ -1165,7 +1277,7 @@ window.addEventListener('keyup', (e) => {
     downKeys.delete(code)
     void invoke('stage_keys', { down: Array.from(downKeys) })
   }
-})
+}
 
 async function paintStage(): Promise<void> {
   try {
@@ -1219,6 +1331,8 @@ async function startRun(): Promise<void> {
   lastFrame = u32max
   downKeys.clear()
   running = true
+  window.addEventListener('keydown', stageKeyDown)
+  window.addEventListener('keyup', stageKeyUp)
   stopBtn.style.display = 'block'
   consoleInputRow.style.display = 'flex' // cin / scanf / input() need typing
   fpsT0 = performance.now()
@@ -1232,6 +1346,8 @@ async function startRun(): Promise<void> {
     ;(window as unknown as { __runStarted?: boolean }).__runStarted = true
   } catch (e) {
     running = false
+    window.removeEventListener('keydown', stageKeyDown)
+    window.removeEventListener('keyup', stageKeyUp)
     stopBtn.style.display = 'none'
     consoleInputRow.style.display = 'none'
     consoleEl.textContent = `[launch] ${String(e)}`
@@ -1259,6 +1375,8 @@ async function startRun(): Promise<void> {
       .then((r) => {
         if (r) {
           running = false
+          window.removeEventListener('keydown', stageKeyDown)
+          window.removeEventListener('keyup', stageKeyUp)
           clearInterval(pollTimer)
           clearInterval(memTimer)
           stopBtn.style.display = 'none'
@@ -1270,6 +1388,8 @@ async function startRun(): Promise<void> {
       })
       .catch((e) => {
         running = false
+        window.removeEventListener('keydown', stageKeyDown)
+        window.removeEventListener('keyup', stageKeyUp)
         clearInterval(pollTimer)
         clearInterval(memTimer)
         stopBtn.style.display = 'none'
@@ -1612,8 +1732,9 @@ async function closeTab(path: string): Promise<void> {
  *  buffer (tab/file/recent/folder/new/open). Commercial rule: never lose
  *  work silently, never nag when clean. */
 async function confirmDiscard(): Promise<boolean> {
-  if (activePath === null || src === savedSnapshot || src.trim().length === 0) return true
-  return await ask(`"${baseName(activePath)}" has unsaved changes.\n\nDiscard them?`, {
+  if (src.trim().length === 0 || src === SAMPLES[activeLang]) return true
+  if (activePath !== null && src === savedSnapshot) return true
+  return await ask(`"${activePath ? baseName(activePath) : 'Untitled'}" has unsaved changes.\n\nDiscard them?`, {
     title: 'Unsaved changes',
     kind: 'warning',
   })
@@ -1644,6 +1765,7 @@ function activateTab(rel: string): void {
   src = fileCache.get(rel) ?? ''
   savedSnapshot = src // fresh load = clean baseline
   srcEl.value = src
+  renderPalette()
   void render(src)
   markDirty()
   setView(tabViews.get(rel) ?? 'split')
@@ -1812,6 +1934,7 @@ async function saveActive(saveAs = false): Promise<void> {
     await fsWrite(target, src)
   } catch (e) {
     consoleEl.textContent = `save failed: ${String(e)}`
+    toast(`Save failed: ${String(e)}`, 'error')
     blip(200, 0.1, 'square', 0.05)
     return
   }
@@ -1835,6 +1958,7 @@ async function saveActive(saveAs = false): Promise<void> {
   if (workspace !== null && !isWinPath(target)) pushRecent(workspace, target)
   else if (isWinPath(target)) pushRecent(dirName(target), baseName(target))
   statusFlash('Saved ✓')
+  toast('Saved', 'success')
   blip(880, 0.07, 'sine', 0.05)
 }
 
@@ -1854,6 +1978,15 @@ window.addEventListener('keydown', (e) => {
   } else if (e.key.toLowerCase() === 'h') {
     e.preventDefault()
     openFind(true)
+  } else if (e.key === '/') {
+    e.preventDefault()
+    // Toggle keyboard shortcuts dialog
+    const sd = document.getElementById('shortcuts-dialog') as HTMLDivElement
+    if (sd.style.display === 'flex') {
+      sd.style.display = 'none'
+    } else {
+      sd.style.display = 'flex'
+    }
   } else if (e.key === 'z' && !e.shiftKey) {
     e.preventDefault()
     const prev = hist.undo(src)
@@ -1863,7 +1996,7 @@ window.addEventListener('keydown', (e) => {
       void render(prev)
       markDirty()
     }
-  } else if ((e.key === 'y' || (e.key === 'z' && e.shiftKey)) === true) {
+  } else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
     e.preventDefault()
     const next = hist.redo(src)
     if (next !== null) {
@@ -2029,7 +2162,7 @@ function saveVars(): void {
 }
 
 function isReporterChip(item: PaletteItem & { varName?: string }): boolean {
-  return item.snippet === ''
+  return item.reporter !== undefined
 }
 
 /** Operator/function reporter chips: oval (round) or hex (bool) pills that
@@ -2470,20 +2603,14 @@ let levelsCache: LevelInfo[] = []
 // --------------------------------------------- D7 mode split: sandbox|academy
 type AppMode = 'sandbox' | 'academy'
 const appElMode = document.getElementById('app') as HTMLDivElement
-const modeBtns = Array.from(document.querySelectorAll<HTMLButtonElement>('.mm'))
 let appMode: AppMode = (localStorage.getItem('mode') as AppMode) ?? 'sandbox'
 
 function setMode(m: AppMode): void {
   appMode = m
   localStorage.setItem('mode', m)
   appElMode.dataset.mode = m
-  modeBtns.forEach((b) => b.classList.toggle('active', b.dataset.mode === m))
   renderPaletteLocks() // sandbox = everything unlocked, always
 }
-
-modeBtns.forEach((b) =>
-  b.addEventListener('click', () => setMode(b.dataset.mode as AppMode)),
-)
 
 function renderPaletteLocks(): void {
   for (const chip of Array.from(paletteEl.children) as HTMLElement[]) {
@@ -2724,13 +2851,12 @@ themeBtn.addEventListener('click', () =>
   setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'),
 )
 
-// --------------------------------------------------- launch splash (Blender-style)
-// Language choice + recent files at every launch; C starts automatically when
-// nobody interacts (countdown bar). Chosen language loads its sample/blocks.
+// --------------------------------------------------- launch splash (macOS window)
 interface RecentEntry {
   root: string
   rel: string
   ts: number
+  mode?: 'sandbox' | 'academy'
 }
 
 function recentList(): RecentEntry[] {
@@ -2743,19 +2869,23 @@ function recentList(): RecentEntry[] {
 
 function pushRecent(root: string, rel: string): void {
   const list = recentList().filter((r) => !(r.root === root && r.rel === rel))
-  list.unshift({ root, rel, ts: Date.now() })
-  localStorage.setItem('blockide-recent', JSON.stringify(list.slice(0, 6)))
+  list.unshift({ root, rel, ts: Date.now(), mode: appMode })
+  localStorage.setItem('blockide-recent', JSON.stringify(list.slice(0, 8)))
 }
 
-async function beginSession(lang: Lang): Promise<void> {
+const splashEl = document.getElementById('splash') as HTMLDivElement
+
+async function beginSession(lang: Lang, mode?: AppMode): Promise<void> {
   activeLang = lang
+  if (mode) setMode(mode)
   src = SAMPLES[lang]
-  savedSnapshot = src // fresh sample session = clean baseline
+  savedSnapshot = src
   activePath = null
   caretAnchor = null
-  // crash journal disabled per user request
   splashEl.style.display = 'none'
   srcEl.value = src
+  applySettings()
+  renderPalette()
   void render(src)
   void refreshDiags()
   markDirty()
@@ -2768,53 +2898,327 @@ async function beginFromRecent(entry: RecentEntry): Promise<void> {
   workspace = entry.root
   await refreshFiles()
   try {
-    await openTab(entry.rel) // sets activeLang from the extension + renders
+    await openTab(entry.rel)
   } catch {
     consoleEl.textContent = `recent file missing: ${entry.rel}`
     return
   }
+  if (entry.mode) setMode(entry.mode)
   splashEl.style.display = 'none'
   if (!localStorage.getItem('tour-done')) setTimeout(startTour, 600)
 }
 
-const splashEl = document.getElementById('splash') as HTMLDivElement
-function wireSplash(): void {
-  // Blender-style recent files: bold name + dim path, hover highlight
+// ---- splash panel switching ----
+function showSplashPanel(id: string): void {
+  splashEl.querySelectorAll('.splash-panel').forEach((p) => {
+    p.classList.remove('active')
+    ;(p as HTMLElement).style.display = 'none'
+  })
+  const panel = document.getElementById(id)
+  if (panel) {
+    panel.style.display = 'flex'
+    panel.classList.add('active')
+  }
+  // Update sidebar active state
+  splashEl.querySelectorAll('.sidebar-row[data-panel]').forEach((r) => {
+    const row = r as HTMLElement
+    row.classList.toggle('active', row.dataset.panel === id.replace('splash-', ''))
+  })
+}
+
+// ---- recent projects ----
+function renderRecentProjects(): void {
   const list = document.getElementById('recent-list') as HTMLDivElement
   const recents = recentList().slice(0, 6)
   list.innerHTML = ''
   if (recents.length === 0) {
-    list.innerHTML = '<span class="m-free">no recent files yet — open a folder to begin</span>'
+    list.innerHTML = '<div class="splash-recent-empty">no recent projects</div>'
+    return
   }
   for (const r of recents) {
     const el = document.createElement('div')
     el.className = 'recent-item'
+    const info = document.createElement('div')
+    info.className = 'recent-item-info'
     const name = document.createElement('b')
     name.textContent = r.rel.split('/').pop() ?? r.rel
     const path = document.createElement('span')
     path.textContent = r.root
-    el.append(name, path)
+    info.append(name, path)
+    el.appendChild(info)
+    if (r.mode) {
+      const tag = document.createElement('span')
+      tag.className = `recent-tag ${r.mode}`
+      tag.textContent = r.mode
+      el.appendChild(tag)
+    }
     el.addEventListener('click', () => void beginFromRecent(r))
     list.appendChild(el)
   }
-  // language cards — the ONLY way past the splash (no timer)
-  splashEl.querySelectorAll<HTMLButtonElement>('.splash-lang').forEach((b) => {
-    b.addEventListener('click', () => {
-      blip(740, 0.07, 'sine', 0.06)
-      void beginSession(b.dataset.lang as Lang)
-    })
+}
+
+// ---- settings ----
+function initSplashSettings(): void {
+  // Theme
+  const themeSel = document.getElementById('set-theme') as HTMLSelectElement
+  const currentTheme = (localStorage.getItem('theme') as string) ?? 'light'
+  themeSel.value = currentTheme === 'auto' ? 'auto' : currentTheme
+  themeSel.addEventListener('change', () => {
+    const v = themeSel.value as 'light' | 'dark' | 'auto'
+    if (v === 'auto') {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+      setTheme(prefersDark ? 'dark' : 'light')
+    } else {
+      setTheme(v)
+    }
+    writeSetting('theme', v)
   })
-  // footer: Open Folder… (same dialog as the toolbar button)
-  document.getElementById('splash-open')?.addEventListener('click', () => {
-    void beginSession('c').then(() => {
-      window.setTimeout(() => {
-        document.getElementById('open-folder')?.click()
-      }, 150)
+
+  // Font size
+  const fontSizeSel = document.getElementById('set-font-size') as HTMLSelectElement
+  fontSizeSel.value = readSetting('fontSize', '13')
+  fontSizeSel.addEventListener('change', () => {
+    writeSetting('fontSize', fontSizeSel.value)
+    srcEl.style.fontSize = `${fontSizeSel.value}px`
+  })
+
+  // Font family
+  const fontFamilySel = document.getElementById('set-font-family') as HTMLSelectElement
+  fontFamilySel.value = readSetting('fontFamily', 'Consolas')
+  fontFamilySel.addEventListener('change', () => {
+    writeSetting('fontFamily', fontFamilySel.value)
+    srcEl.style.fontFamily = `'${fontFamilySel.value}', monospace`
+  })
+
+  // Tab size
+  const tabSizeSel = document.getElementById('set-tab-size') as HTMLSelectElement
+  tabSizeSel.value = readSetting('tabSize', '4')
+  tabSizeSel.addEventListener('change', () => writeSetting('tabSize', tabSizeSel.value))
+
+  // Line height
+  const lineHeightSel = document.getElementById('set-line-height') as HTMLSelectElement
+  lineHeightSel.value = readSetting('lineHeight', '1.5')
+  lineHeightSel.addEventListener('change', () => {
+    writeSetting('lineHeight', lineHeightSel.value)
+    srcEl.style.lineHeight = lineHeightSel.value
+  })
+
+  // Toggles
+  const setupToggle = (id: string, key: string, defaultVal = false): void => {
+    const btn = document.getElementById(id) as HTMLButtonElement
+    let on = readSetting(key, defaultVal)
+    btn.classList.toggle('on', on)
+    btn.textContent = on ? 'On' : 'Off'
+    btn.addEventListener('click', () => {
+      on = !on
+      btn.classList.toggle('on', on)
+      btn.textContent = on ? 'On' : 'Off'
+      writeSetting(key, on)
+    })
+  }
+
+  setupToggle('set-word-wrap', 'wordWrap', false)
+  setupToggle('set-minimap', 'minimap', false)
+  setupToggle('set-line-numbers', 'lineNumbers', true)
+  setupToggle('set-bracket-match', 'bracketMatch', true)
+  setupToggle('set-auto-brackets', 'autoBrackets', true)
+  setupToggle('set-highlight-line', 'highlightLine', true)
+  setupToggle('set-format-save', 'formatSave', true)
+  setupToggle('set-confirm-exit', 'confirmExit', true)
+  setupToggle('set-restore-session', 'restoreSession', true)
+  setupToggle('set-sounds', 'sounds', true)
+  setupToggle('set-animations', 'animations', true)
+  setupToggle('set-clear-run', 'clearRun', true)
+  setupToggle('set-mem-trace', 'memTrace', false)
+  setupToggle('set-show-xp', 'showXp', true)
+  setupToggle('set-spaced-rep', 'spacedRep', true)
+  setupToggle('set-ctrl-view', 'ctrlView', true)
+  setupToggle('set-slash-filter', 'slashFilter', true)
+  setupToggle('set-tab-indent', 'tabIndent', true)
+
+  // Selects
+  const setupSelect = (id: string, key: string, fallback: string): void => {
+    const sel = document.getElementById(id) as HTMLSelectElement
+    sel.value = readSetting(key, fallback)
+    sel.addEventListener('change', () => writeSetting(key, sel.value))
+  }
+  setupSelect('set-autosave', 'autosave', 'after-delay')
+  setupSelect('set-run-shortcut', 'runShortcut', 'ctrl+enter')
+  setupSelect('set-hint-limit', 'hintLimit', '3')
+  setupSelect('set-ghost-opacity', 'ghostOpacity', '0.5')
+  setupSelect('set-sidebar-style', 'sidebarStyle', 'source')
+
+  // Accent colors
+  const colorDots = splashEl.querySelectorAll('.color-dot')
+  let currentAccent = readSetting('accent', '#0891b2')
+  colorDots.forEach((dot) => {
+    const d = dot as HTMLElement
+    d.classList.toggle('active', d.dataset.accent === currentAccent)
+    d.addEventListener('click', () => {
+      currentAccent = d.dataset.accent ?? '#0891b2'
+      colorDots.forEach((c) => c.classList.remove('active'))
+      d.classList.add('active')
+      writeSetting('accent', currentAccent)
+      document.documentElement.style.setProperty('--accent', currentAccent)
     })
   })
 }
 
+// ---- academy carousel ----
+function initAcademyCarousel(): void {
+  const panel = document.getElementById('splash-academy') as HTMLDivElement
+  const slides = panel.querySelectorAll('.carousel-slide')
+  const dots = panel.querySelectorAll('.c-dot')
+  let cur = 0
+
+  const show = (i: number): void => {
+    slides.forEach((s) => s.classList.remove('active'))
+    dots.forEach((d) => d.classList.remove('active'))
+    slides[i]?.classList.add('active')
+    dots[i]?.classList.add('active')
+    cur = i
+  }
+
+  dots.forEach((d) => {
+    d.addEventListener('click', () => show(parseInt(d.getAttribute('data-slide') ?? '0')))
+  })
+
+  let timer = setInterval(() => {
+    if (cur < slides.length - 1) show(cur + 1)
+    else clearInterval(timer)
+  }, 4000)
+
+  show(0)
+}
+
+// ---- sidebar wiring ----
+function initSplashSidebar(): void {
+  let selectedLang: Lang = 'c'
+
+  // Sidebar nav rows: switch content panel
+  splashEl.querySelectorAll<HTMLElement>('.sidebar-row[data-panel]').forEach((row) => {
+    row.addEventListener('click', () => {
+      const panel = 'splash-' + row.dataset.panel
+      showSplashPanel(panel)
+    })
+  })
+
+  // Language cards inside sandbox panel
+  const langCards = splashEl.querySelectorAll<HTMLElement>('.lang-card')
+  langCards.forEach((card) => {
+    card.addEventListener('click', () => {
+      langCards.forEach((c) => c.classList.remove('selected'))
+      card.classList.add('selected')
+      selectedLang = (card.dataset.lang as Lang) ?? 'c'
+    })
+  })
+
+  // Start Coding button
+  document.getElementById('hero-start')?.addEventListener('click', () => {
+    blip(740, 0.07, 'sine', 0.06)
+    void beginSession(selectedLang, 'sandbox')
+  })
+
+  // Open Folder button
+  document.getElementById('hero-open')?.addEventListener('click', () => {
+    void beginSession('c').then(() => {
+      window.setTimeout(() => document.getElementById('open-folder')?.click(), 150)
+    })
+  })
+
+  // Academy Start button
+  document.getElementById('academy-start')?.addEventListener('click', () => {
+    blip(740, 0.07, 'sine', 0.06)
+    void beginSession(selectedLang, 'academy')
+  })
+}
+
+function wireSplash(): void {
+  renderRecentProjects()
+  initSplashSettings()
+  initSplashSidebar()
+  initAcademyCarousel()
+  showSplashPanel('splash-sandbox')
+}
+
 wireSplash()
+
+// Splash screen quit button — closes the entire application
+document.getElementById('splash-quit')?.addEventListener('click', () => {
+  getCurrentWindow().close()
+})
+
+// Toolbar window controls — minimize, maximize, close the main app window
+document.getElementById('tb-minimize')?.addEventListener('click', () => {
+  getCurrentWindow().minimize()
+})
+document.getElementById('tb-maximize')?.addEventListener('click', () => {
+  getCurrentWindow().toggleMaximize()
+})
+document.getElementById('tb-close')?.addEventListener('click', () => {
+  getCurrentWindow().close()
+})
+
+// Window state persistence — save/restore position and size between sessions
+async function saveWindowState(): Promise<void> {
+  try {
+    const win = getCurrentWindow()
+    const size = await win.outerSize()
+    const pos = await win.outerPosition()
+    const isMaximized = await win.isMaximized()
+    localStorage.setItem('blockide-window-state', JSON.stringify({
+      x: pos.x, y: pos.y,
+      w: size.width, h: size.height,
+      maximized: isMaximized,
+    }))
+  } catch {
+    /* window state is best-effort */
+  }
+}
+
+async function restoreWindowState(): Promise<void> {
+  try {
+    const raw = localStorage.getItem('blockide-window-state')
+    if (!raw) return
+    const state = JSON.parse(raw) as { x?: number; y?: number; w?: number; h?: number; maximized?: boolean }
+    const win = getCurrentWindow()
+    if (state.w && state.h) {
+      await win.setSize(new LogicalSize(state.w, state.h))
+    }
+    if (state.x !== undefined && state.y !== undefined) {
+      // Bounds check: ensure at least 100×100 px of the window is visible
+      const minVisible = 100
+      const scr = screen as Screen & { availLeft?: number; availTop?: number }
+      const scrLeft = scr.availLeft ?? 0
+      const scrTop = scr.availTop ?? 0
+      const scrW = scr.availWidth
+      const scrH = scr.availHeight
+      const x = Math.max(scrLeft, Math.min(state.x, scrLeft + scrW - minVisible))
+      const y = Math.max(scrTop, Math.min(state.y, scrTop + scrH - minVisible))
+      await win.setPosition(new LogicalPosition(x, y))
+    }
+    if (state.maximized) {
+      await win.maximize()
+    }
+  } catch {
+    /* window state restore is best-effort */
+  }
+}
+
+// Save window state before close
+getCurrentWindow().onCloseRequested(async () => {
+  await saveWindowState()
+})
+// Also save on resize/move (debounced)
+let stateSaveTimer = 0
+const debouncedSaveState = (): void => {
+  clearTimeout(stateSaveTimer)
+  stateSaveTimer = window.setTimeout(() => void saveWindowState(), 500)
+}
+window.addEventListener('resize', debouncedSaveState)
+
+// Restore on startup (after a short delay to let the window settle)
+setTimeout(() => void restoreWindowState(), 100)
 // module-eval-complete signal for headless drivers: static splash markup
 // exists BEFORE this line (top-level pixi await), so DOM presence alone
 // does not mean the click handlers are wired yet
@@ -2829,6 +3233,20 @@ document.getElementById('brand-logo')?.addEventListener('click', () => {
 })
 aboutEl.addEventListener('click', () => {
   aboutEl.style.display = 'none'
+})
+
+// Keyboard shortcuts dialog
+const shortcutsDialog = document.getElementById('shortcuts-dialog') as HTMLDivElement
+document.getElementById('show-shortcuts')?.addEventListener('click', (e) => {
+  e.stopPropagation()
+  aboutEl.style.display = 'none'
+  shortcutsDialog.style.display = 'flex'
+})
+document.getElementById('close-shortcuts')?.addEventListener('click', () => {
+  shortcutsDialog.style.display = 'none'
+})
+shortcutsDialog.addEventListener('click', () => {
+  shortcutsDialog.style.display = 'none'
 })
 
 // ------------------------------------------------- find & replace (#11)
@@ -2882,6 +3300,7 @@ function refreshFind(): void {
 }
 
 function nearestHitIndex(at: number): number {
+  if (findHits.length === 0) return -1
   for (let i = 0; i < findHits.length; i++) if (findHits[i] >= at) return i
   return findHits.length - 1
 }
@@ -2991,16 +3410,6 @@ document.getElementById('diag-toggle')?.addEventListener('click', () => {
     : 'problems ▾'
   if (!showing) renderDiagList(lastDiags)
 })
-
-// Close-time crash checkpoint ONLY (not autosave): one journal write when
-// Save-on-close: prompt for unsaved changes when closing the window
-  // (replaces the old silent journal_write with an explicit confirmation)
-  window.addEventListener('beforeunload', (e) => {
-    if (activePath !== null && src.trim() && src !== savedSnapshot) {
-      e.preventDefault()
-      e.returnValue = 'You have unsaved changes. Are you sure you want to quit?'
-    }
-  })
 
 // keybindings: Ctrl+Enter / F5 run, Ctrl+B sidebar toggle
 window.addEventListener('keydown', (e) => {

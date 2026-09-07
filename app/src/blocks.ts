@@ -486,7 +486,7 @@ export function findDropTarget(
   const { container, index } = (best as { t: DropTarget }).t
   let offset: number
   if (container.children.length === 0) {
-    offset = container.end - 1
+    offset = container.headerEnd > container.start ? container.headerEnd : container.end - 1
   } else if (index >= container.children.length) {
     const last = container.children[container.children.length - 1]
     offset = last.end

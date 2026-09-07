@@ -18,6 +18,7 @@ pub fn clang_path() -> Result<PathBuf, String> {
         .arg("--version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
+        .creation_flags(0x0800_0000)
         .status()
         .is_ok()
     {
@@ -57,6 +58,9 @@ pub fn vcvars_env() -> Result<&'static HashMap<String, String>, String> {
         let out = Command::new("cmd")
             .arg("/C")
             .raw_arg(format!("call \"{}\" >nul 2>&1 && set", vc.display()))
+            .creation_flags(0x0800_0000)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
             .output()
             .map_err(|e| e.to_string())?;
         if !out.status.success() {
@@ -80,6 +84,7 @@ pub fn vcvars_env() -> Result<&'static HashMap<String, String>, String> {
 
 pub fn clang_command() -> Result<Command, String> {
     let mut cmd = Command::new(clang_path()?);
+    cmd.creation_flags(0x0800_0000);
     if let Ok(env) = vcvars_env() {
         cmd.env_clear().envs(env);
     }
