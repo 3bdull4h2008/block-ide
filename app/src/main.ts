@@ -73,7 +73,10 @@ import {
   previousLevel,
   type MasteryState,
 } from './academy-extras'
+import { registerCommands, togglePalette } from './palette-cmd'
 import './style.css'
+import { registerContextMenuProvider, initContextMenu } from './context-menu'
+import { initResizers } from './resize'
 
 interface DragPayload {
   label: string
@@ -1648,6 +1651,29 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') hideCtxMenu()
 })
 
+// ---- generic context menu providers (context-menu.ts) ----
+registerContextMenuProvider((target) => {
+  if (!target.closest('#canvas-host')) return []
+  return [
+    { label: 'Undo', shortcut: 'Ctrl+Z', action: () => { const p = hist.undo(src); if (p !== null) { src = p; srcEl.value = p; editor?.setSource(p); void render(p); markDirty() } } },
+    { label: 'Redo', shortcut: 'Ctrl+Y', action: () => { const n = hist.redo(src); if (n !== null) { src = n; srcEl.value = n; editor?.setSource(n); void render(n); markDirty() } } },
+    { divider: true, label: '' },
+    { label: 'Select All', shortcut: 'Ctrl+A', action: () => { /* select all blocks */ } },
+  ]
+})
+
+registerContextMenuProvider((target) => {
+  if (!target.closest('#editor-wrap') && !target.closest('#cm-editor')) return []
+  return [
+    { label: 'Cut', shortcut: 'Ctrl+X', action: () => document.execCommand('cut') },
+    { label: 'Copy', shortcut: 'Ctrl+C', action: () => document.execCommand('copy') },
+    { label: 'Paste', shortcut: 'Ctrl+V', action: () => document.execCommand('paste') },
+    { divider: true, label: '' },
+    { label: 'Undo', shortcut: 'Ctrl+Z', action: () => document.execCommand('undo') },
+    { label: 'Redo', shortcut: 'Ctrl+Y', action: () => document.execCommand('redo') },
+  ]
+})
+
 
 // ------------------------------------------------------------- workspace/tabs
 // Documents are either workspace-RELATIVE (a folder is open) or ABSOLUTE
@@ -2106,6 +2132,65 @@ function editTextArea(next: string, caret: number): void {
   srcEl.dispatchEvent(new Event('input'))
 }
 
+// Block comment toggling — Ctrl+/ toggles line or block comment
+function toggleComment(): void {
+  const sel = srcEl.selectionStart ?? 0
+  const end = srcEl.selectionEnd ?? 0
+  const text = srcEl.value
+
+  // Determine comment prefix based on language
+  const prefix = activeLang === 'python' ? '# ' : '// '
+  const prefixLen = prefix.length
+
+  if (sel === end) {
+    // No selection — toggle comment on current line
+    const lineStart = text.lastIndexOf('\n', sel - 1) + 1
+    const lineEnd = text.indexOf('\n', sel)
+    const line = text.slice(lineStart, lineEnd === -1 ? undefined : lineEnd)
+
+    if (line.trimStart().startsWith(prefix)) {
+      // Uncomment: remove prefix
+      const indent = line.length - line.trimStart().length
+      const removeStart = lineStart + indent
+      const removeEnd = removeStart + prefixLen
+      const newText = text.slice(0, removeStart) + text.slice(removeEnd)
+      const newCaret = Math.max(lineStart, sel - prefixLen)
+      editTextArea(newText, newCaret)
+    } else {
+      // Comment: add prefix at start of non-empty content
+      const indent = line.length - line.trimStart().length
+      const insertPos = lineStart + indent
+      const newText = text.slice(0, insertPos) + prefix + text.slice(insertPos)
+      editTextArea(newText, sel + prefixLen)
+    }
+  } else {
+    // Selection — toggle comment on all selected lines
+    const lineStart = text.lastIndexOf('\n', sel - 1) + 1
+    const lineEnd = text.indexOf('\n', end)
+    const block = text.slice(lineStart, lineEnd === -1 ? undefined : lineEnd)
+    const lines = block.split('\n')
+
+    const allCommented = lines.every(l => l.trimStart().startsWith(prefix) || l.trim() === '')
+
+    const newLines = allCommented
+      ? lines.map(l => {
+          if (l.trim() === '') return l
+          const indent = l.length - l.trimStart().length
+          const removeStart = indent
+          return l.slice(0, removeStart) + l.slice(removeStart + prefixLen)
+        })
+      : lines.map(l => {
+          if (l.trim() === '') return l
+          const indent = l.length - l.trimStart().length
+          return l.slice(0, indent) + prefix + l.slice(indent)
+        })
+
+    const newText = text.slice(0, lineStart) + newLines.join('\n') + text.slice(lineEnd === -1 ? text.length : lineEnd)
+    const delta = allCommented ? -prefixLen * lines.filter(l => l.trim() !== '').length : prefixLen * lines.filter(l => l.trim() !== '').length
+    editTextArea(newText, Math.min(sel + delta, newText.length))
+  }
+}
+
 srcEl.addEventListener('keydown', (e) => {
   if (e.key !== 'Tab' && e.key !== 'Enter') return
   const start = srcEl.selectionStart ?? 0
@@ -2157,6 +2242,13 @@ srcEl.addEventListener('keydown', (e) => {
       return
     }
     editTextArea(value.slice(0, pos) + '\n' + indent + value.slice(end), pos + 1 + indent.length)
+  }
+})
+
+srcEl.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key === '/') {
+    e.preventDefault()
+    toggleComment()
   }
 })
 
@@ -2967,6 +3059,27 @@ async function beginSession(lang: Lang, mode?: AppMode): Promise<void> {
   updateTitle()
   if (!localStorage.getItem('tour-done')) setTimeout(startTour, 600)
   recoverSession()
+  registerCommands([
+    { id: 'file.save', label: 'Save', category: 'File', shortcut: 'Ctrl+S', action: () => void saveActive() },
+    { id: 'file.saveAs', label: 'Save As...', category: 'File', shortcut: 'Ctrl+Shift+S', action: () => void saveActive(true) },
+    { id: 'file.open', label: 'Open File...', category: 'File', shortcut: 'Ctrl+O', action: () => void guardedOpenTab('') },
+    { id: 'file.openFolder', label: 'Open Folder...', category: 'File', action: () => void (document.getElementById('open-folder') as HTMLButtonElement)?.click() },
+    { id: 'file.close', label: 'Close Tab', category: 'File', shortcut: 'Ctrl+W', action: () => { if (activePath) void closeTab(activePath) } },
+    { id: 'file.new', label: 'New File', category: 'File', action: () => void (document.getElementById('new-file') as HTMLButtonElement)?.click() },
+    { id: 'edit.undo', label: 'Undo', category: 'Edit', shortcut: 'Ctrl+Z', action: () => document.execCommand('undo') },
+    { id: 'edit.redo', label: 'Redo', category: 'Edit', shortcut: 'Ctrl+Y', action: () => document.execCommand('redo') },
+    { id: 'edit.find', label: 'Find & Replace', category: 'Edit', shortcut: 'Ctrl+F', action: () => openFind(false) },
+    { id: 'edit.findReplace', label: 'Find & Replace (with Replace)', category: 'Edit', shortcut: 'Ctrl+H', action: () => openFind(true) },
+    { id: 'run.start', label: 'Run Program', category: 'Run', shortcut: 'F5', action: () => void startRun() },
+    { id: 'run.stop', label: 'Stop Program', category: 'Run', shortcut: 'Shift+F5', action: () => stopRun() },
+    { id: 'run.check', label: 'Check Code', category: 'Run', shortcut: 'Ctrl+Shift+C', action: () => void (document.getElementById('check-btn') as HTMLButtonElement)?.click() },
+    { id: 'view.theme', label: 'Toggle Theme', category: 'View', action: () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark') },
+    { id: 'view.shortcuts', label: 'Keyboard Shortcuts', category: 'View', shortcut: 'Ctrl+/', action: () => { const sd = document.getElementById('shortcuts-dialog') as HTMLDivElement; sd.style.display = sd.style.display === 'flex' ? 'none' : 'flex' } },
+    { id: 'view.blocks', label: 'Blocks View', category: 'View', shortcut: 'Ctrl+1', action: () => setView('blocks') },
+    { id: 'view.split', label: 'Split View', category: 'View', shortcut: 'Ctrl+2', action: () => setView('split') },
+    { id: 'view.text', label: 'Text View', category: 'View', shortcut: 'Ctrl+3', action: () => setView('text') },
+    { id: 'view.sidebar', label: 'Toggle Sidebar', category: 'View', shortcut: 'Ctrl+B', action: () => { const sb = document.getElementById('sidebar') as HTMLElement; sb.style.display = sb.style.display === 'none' ? 'flex' : 'none'; window.dispatchEvent(new Event('resize')) } },
+  ])
 }
 
 async function beginFromRecent(entry: RecentEntry): Promise<void> {
@@ -3291,6 +3404,8 @@ window.addEventListener('resize', debouncedSaveState)
 
 // Restore on startup (after a short delay to let the window settle)
 setTimeout(() => void restoreWindowState(), 100)
+initContextMenu()
+initResizers()
 // module-eval-complete signal for headless drivers: static splash markup
 // exists BEFORE this line (top-level pixi await), so DOM presence alone
 // does not mean the click handlers are wired yet
@@ -3483,8 +3598,13 @@ document.getElementById('diag-toggle')?.addEventListener('click', () => {
   if (!showing) renderDiagList(lastDiags)
 })
 
-// keybindings: Ctrl+Enter / F5 run, Ctrl+B sidebar toggle
+// keybindings: Ctrl+Shift+P command palette, Ctrl+Enter / F5 run, Ctrl+B sidebar toggle
 window.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.shiftKey && e.key === 'P') {
+    e.preventDefault()
+    togglePalette()
+    return
+  }
   if (e.key === 'F5' || (e.ctrlKey && e.key === 'Enter')) {
     e.preventDefault()
     if (!running) void startRun()

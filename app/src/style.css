@@ -103,9 +103,17 @@ h1, h2, h3, strong, button, .tab, .pal {
 
 #app {
   display: grid;
-  grid-template-columns: 216px 420px 1fr;
+  grid-template-columns: 216px 1fr;
   grid-template-rows: 48px 1fr 196px;
   height: 100vh;
+}
+
+#app-row {
+  display: flex;
+  flex-direction: row;
+  grid-column: 2 / 3;
+  min-width: 0;
+  min-height: 0;
 }
 
 #toolbar {
@@ -1805,6 +1813,24 @@ select:focus-visible,
 
 #canvas-host:active {
   cursor: grabbing;
+}
+
+/* Resizable panel dividers */
+.panel-divider {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.panel-divider:hover {
+  background: var(--accent);
+}
+
+.panel-divider.active {
+  background: var(--accent);
 }
 
 /* Run = Scratch flag green, so "go" reads instantly */

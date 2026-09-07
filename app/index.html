@@ -361,24 +361,28 @@
           </div>
         </div>
       </div>
-      <div id="main-col">
-        <div id="tabs"></div>
-        <div id="editor-wrap">
-          <textarea id="src" aria-label="Code editor" spellcheck="false" placeholder="Type code here or drag blocks from the palette..."></textarea>
-          <div id="cm-editor"></div>
+      <div id="app-row">
+        <div class="panel-divider" data-resize="sidebar"></div>
+        <div id="main-col">
+          <div id="tabs"></div>
+          <div id="editor-wrap">
+            <textarea id="src" aria-label="Code editor" spellcheck="false" placeholder="Type code here or drag blocks from the palette..."></textarea>
+            <div id="cm-editor"></div>
+          </div>
+          <div id="findbar" style="display:none">
+            <input id="find-input" placeholder="find" spellcheck="false" autocomplete="off" />
+            <span id="find-count"></span>
+            <button id="find-prev" title="previous match" aria-label="Previous match">↑</button>
+            <button id="find-next" title="next match" aria-label="Next match">↓</button>
+            <input id="repl-input" placeholder="replace" spellcheck="false" autocomplete="off" />
+            <button id="repl-one" title="replace current" aria-label="Replace current">Repl</button>
+            <button id="repl-all" title="replace all" aria-label="Replace all">All</button>
+            <button id="find-close" title="close (Esc)" aria-label="Close find">×</button>
+          </div>
         </div>
-        <div id="findbar" style="display:none">
-          <input id="find-input" placeholder="find" spellcheck="false" autocomplete="off" />
-          <span id="find-count"></span>
-          <button id="find-prev" title="previous match" aria-label="Previous match">↑</button>
-          <button id="find-next" title="next match" aria-label="Next match">↓</button>
-          <input id="repl-input" placeholder="replace" spellcheck="false" autocomplete="off" />
-          <button id="repl-one" title="replace current" aria-label="Replace current">Repl</button>
-          <button id="repl-all" title="replace all" aria-label="Replace all">All</button>
-          <button id="find-close" title="close (Esc)" aria-label="Close find">×</button>
-        </div>
+        <div class="panel-divider" data-resize="canvas"></div>
+        <div id="canvas-host"></div>
       </div>
-      <div id="canvas-host"></div>
       <div id="console-wrap" role="log" aria-label="Program output">
         <div id="diag-bar">
           <button id="diag-toggle" title="toggle problem list" aria-expanded="false" aria-controls="diag-list">problems ▾</button>
