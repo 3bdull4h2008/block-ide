@@ -274,12 +274,12 @@ describe('Operators category (Scratch green)', () => {
     // one definition chip per language (+ cpp namespace), all file-scope
     expect(toplevel.map((i) => [i.name, i.langs?.[0] ?? 'c']).sort()).toEqual([
       ['arrow fn', 'javascript'],
-      ['async fn', 'javascript'],
       ['def', 'python'],
       ['define fn', 'c'],
       ['fn', 'rust'],
       ['function', 'javascript'],
       ['namespace', 'cpp'],
+      ['template', 'cpp'],
     ])
     for (const i of fns.items) {
       if (!i.toplevel) expect(i.name.startsWith('call'), i.name).toBe(true)

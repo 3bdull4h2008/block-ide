@@ -209,6 +209,11 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
         snippet: 'using namespace std;',
         langs: ['cpp'],
       },
+      { name: '#include <vector>', cat: 'statement', snippet: '#include <vector>', top: true, langs: ['cpp'] },
+      { name: 'vector', cat: 'statement', snippet: 'std::vector<int> items;', langs: ['cpp'] },
+      { name: 'push_back', cat: 'statement', snippet: 'items.push_back(value);', langs: ['cpp'] },
+      { name: 'new', cat: 'statement', snippet: 'int* p = new int(0);', langs: ['cpp'] },
+      { name: 'delete', cat: 'statement', snippet: 'delete p;', langs: ['cpp'] },
       { name: 'assign +=', cat: 'statement', snippet: 'value = value + 1;', langs: ['c', 'cpp', 'javascript', 'rust'] },
       { name: 'return', cat: 'statement', snippet: 'return 0;', langs: ['c', 'cpp', 'javascript', 'rust'] },
       // python
@@ -260,10 +265,10 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
         toplevel: true,
         langs: ['cpp'],
       },
+      { name: 'template', cat: 'functions', snippet: 'template <typename T>\nT myfn(T x) {\n    return x;\n}', toplevel: true, langs: ['cpp'] },
       { name: 'def', cat: 'functions', snippet: 'def myfn(x):\n    return x', toplevel: true, langs: ['python'] },
       { name: 'function', cat: 'functions', snippet: 'function myfn(x) {\n    return x;\n}', toplevel: true, langs: ['javascript'] },
       { name: 'arrow fn', cat: 'functions', snippet: 'const myfn = (x) => {\n    return x;\n};', toplevel: true, langs: ['javascript'] },
-      { name: 'async fn', cat: 'functions', snippet: 'async function myfn() {\n    await something();\n}', toplevel: true, langs: ['javascript'] },
       { name: 'fn', cat: 'functions', snippet: 'fn myfn(x: i32) -> i32 {\n    x\n}', toplevel: true, langs: ['rust'] },
     ],
   },
@@ -289,6 +294,16 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
     items: [
       { name: '// note', cat: 'comment', snippet: '// note', langs: ['c', 'cpp', 'javascript', 'rust'] },
       { name: '# note', cat: 'comment', snippet: '# note', langs: ['python'] },
+    ],
+  },
+  {
+    name: 'Advanced',
+    color: '#8b5cf6',
+    items: [
+      { name: 'async fn', cat: 'functions', snippet: 'async function myfn() {\n    await something();\n}', toplevel: true, langs: ['javascript'] },
+      { name: 'await', cat: 'statement', snippet: 'await promise;', langs: ['javascript'] },
+      { name: 'spawn', cat: 'statement', snippet: 'std::thread::spawn(|| {\n});', langs: ['rust'] },
+      { name: 'yield', cat: 'statement', snippet: 'yield value', langs: ['python'] },
     ],
   },
 ]

@@ -1,6 +1,8 @@
 import { Application, Container, Graphics, Text } from 'pixi.js'
 import { invoke as tauriInvoke } from '@tauri-apps/api/core'
 import { createCodeMirrorEditor, type CadeEditor } from './editor'
+import { blip, blipError, blipSuccess, blipDrop, blipSlot } from './utils/audio'
+import { WHITE_LABEL, DARK_LABEL } from './utils/styles'
 
 // IPC observability (temporary diagnostics, RUN 43): count calls/pending per
 // command so hangs are attributable from the page itself.
@@ -196,51 +198,9 @@ document.body.appendChild(ghost)
 // ------------------------------------------------------------- tiny sounds
 // Synthesized Web Audio blips - no assets, offline-first. The context is
 // created lazily on the first user gesture (autoplay policy).
-let actx: AudioContext | null = null
-function blip(freq: number, dur = 0.06, type: OscillatorType = 'sine', gain = 0.07): void {
-  try {
-    actx ??= new AudioContext()
-    if (actx.state === 'suspended') void actx.resume()
-    const o = actx.createOscillator()
-    const g = actx.createGain()
-    o.type = type
-    o.frequency.value = freq
-    g.gain.setValueAtTime(gain, actx.currentTime)
-    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + dur)
-    o.connect(g)
-    g.connect(actx.destination)
-    o.start()
-    o.stop(actx.currentTime + dur)
-  } catch {
-    /* audio is best-effort */
-  }
-}
-
-const blipError = (): void => blip(200, 0.08, 'square', 0.04)
-const blipSuccess = (): void => blip(740, 0.07, 'sine', 0.08)
-const blipDrop = (): void => { blip(740, 0.07, 'sine', 0.08); setTimeout(() => blip(980, 0.05, 'sine', 0.05), 60) }
-const blipSlot = (): void => blip(660, 0.05, 'sine', 0.06)
-
-const WHITE_LABEL = {
-  fontFamily: "'Baloo 2', 'Segoe UI', sans-serif",
-  fontSize: 13,
-  fontWeight: '600' as const,
-  fill: 0xffffff,
-}
-const DARK_LABEL: typeof WHITE_LABEL = { ...WHITE_LABEL, fill: 0x0c3543 }
 
 // Toast notification system — standard desktop app feedback
-const toastsEl = document.getElementById('toasts') as HTMLDivElement
-function toast(msg: string, kind: 'success' | 'error' | 'info' = 'info', durationMs = 3000): void {
-  const el = document.createElement('div')
-  el.className = `toast toast-${kind}`
-  el.textContent = msg
-  toastsEl.appendChild(el)
-  setTimeout(() => {
-    el.classList.add('toast-exit')
-    el.addEventListener('animationend', () => el.remove())
-  }, durationMs)
-}
+import { toast } from './ui/toasts'
 
 let workspace: string | null = null
 /** Buffer content as last LOADED or explicitly SAVED — the dirty baseline
@@ -2468,8 +2428,11 @@ function renderPalette(): void {
   const addChip = (item: PaletteItem): void => {
     // per-language palette (D3): chips declare which languages they serve
     if (item.langs !== undefined && !item.langs.includes(activeLang)) return
+    
+    // Create the chip...
     if (item.reporter !== undefined) {
-      paletteEl.appendChild(makeReporterChip(item))
+      const chip = makeReporterChip(item)
+      paletteEl.appendChild(chip)
       return
     }
     // Scratch's dependency rule: some blocks need another block to exist
@@ -2512,6 +2475,9 @@ function renderPalette(): void {
   }
 
   for (const g of PALETTE_GROUPS) {
+    const visibleItems = g.items.filter((i) => i.langs === undefined || i.langs.includes(activeLang))
+    if (visibleItems.length === 0) continue
+
     const head = addGroupHeader(g.name, g.color)
     const dot = document.createElement('span')
     dot.className = 'rail-dot'
@@ -2522,7 +2488,7 @@ function renderPalette(): void {
     )
     rail.appendChild(dot)
     dots.push({ dot, name: g.name })
-    for (const item of g.items) addChip(item)
+    for (const item of visibleItems) addChip(item)
   }
 
   // ---- Variables section (Scratch data category) — C/C++ only: typed
