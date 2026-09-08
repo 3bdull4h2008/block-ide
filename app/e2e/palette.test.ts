@@ -115,14 +115,14 @@ const CTX: Record<
       ),
     top: (s) => parseClean(`${s}\n\nfunc main() {\n}\n`, 'go'),
   },
-  java: {
-    stmt: (s) => parseClean(`public class Main {\n    public static void main(String[] args) {\n        ${s}\n    }\n}\n`, 'java'),
+java: {
+    stmt: (s) => parseClean(`public class Main {\n    public static void main(String[] args) {\n        int value = 0;\n        ${s}\n    }\n}\n`, 'java'),
     cond: (s) =>
       parseClean(
         `public class Main {\n    public static void main(String[] args) {\n        int x = 1;\n        if (x > 0) {\n            x += 1;\n        }\n        ${s}\n    }\n}\n`,
         'java',
       ),
-    top: (s) => parseClean(`public class Main {\n    public static void main(String[] args) {\n    }\n}\n\n${s}\n`, 'java'),
+    top: (s) => parseClean(`public class Main {\n    ${s}\n    public static void main(String[] args) {\n    }\n}\n`, 'java'),
   },
     }
     const base = `#include <stdio.h>\n\nint main(void) {\n    return 0;\n}\n`
@@ -296,7 +296,10 @@ it('define fn / namespace are toplevel; call chips are statements', () => {
       ['define fn', 'c'],
       ['fn', 'rust'],
       ['function', 'javascript'],
+      ['main', 'java'],
+      ['method', 'java'],
       ['namespace', 'cpp'],
+      ['static method', 'java'],
       ['template', 'cpp'],
     ])
     for (const i of fns.items) {

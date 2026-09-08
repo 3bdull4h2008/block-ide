@@ -108,7 +108,8 @@ fn grammar(lang: Lang) -> Option<tree_sitter::Language> {
         Lang::JavaScript => Some(tree_sitter_javascript::LANGUAGE.into()),
         Lang::Rust => Some(tree_sitter_rust::LANGUAGE.into()),
         Lang::Go => Some(tree_sitter_go::LANGUAGE.into()),
-        Lang::Java | Lang::TypeScript => None,
+        Lang::Java => Some(tree_sitter_java::LANGUAGE.into()),
+        Lang::TypeScript => None,
     }
 }
 

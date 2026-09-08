@@ -86,6 +86,13 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
       { name: 'try / catch', cat: 'control', snippet: 'try {\n} catch (e) {\n}', langs: ['javascript'] },
       { name: 'for', cat: 'control', snippet: 'for (let i = 0; i < 10; i++) {\n}', langs: ['javascript'] },
       { name: 'switch', cat: 'control', snippet: 'switch (value) {\n    case 1:\n        break;\n    default:\n        break;\n}', langs: ['javascript'] },
+      // java
+      { name: 'if', cat: 'control', snippet: 'if (cond) { int x = 1; }', langs: ['java'] },
+      { name: 'for', cat: 'control', snippet: 'for (int i = 0; i < 10; i++) {\n}', langs: ['java'] },
+      { name: 'while', cat: 'control', snippet: 'while (cond) {\n}', langs: ['java'] },
+      { name: 'do / while', cat: 'control', snippet: 'do {\n} while (cond);', langs: ['java'] },
+      { name: 'switch', cat: 'control', snippet: 'switch (value) {\n    case 1:\n        break;\n    default:\n        break;\n}', langs: ['java'] },
+      { name: 'try / catch', cat: 'control', snippet: 'try {\n} catch (Exception e) {\n}', langs: ['java'] },
       // rust
       { name: 'if', cat: 'control', snippet: 'if cond {\n}', langs: ['rust'] },
       {
@@ -116,6 +123,10 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
       { name: 'while', cat: 'loops', snippet: 'while (cond) {\n}', langs: ['javascript'] },
       { name: 'for-in', cat: 'loops', snippet: 'for x in 0..10 {\n}', langs: ['rust'] },
       { name: 'while', cat: 'loops', snippet: 'while cond {\n}', langs: ['rust'] },
+      // java
+      { name: 'for', cat: 'loops', snippet: 'for (int i = 0; i < 10; i++) {\n}', langs: ['java'] },
+      { name: 'while', cat: 'loops', snippet: 'while (cond) {\n}', langs: ['java'] },
+      { name: 'for-each', cat: 'loops', snippet: 'for (int x : items) {\n}', langs: ['java'] },
     ],
   },
   {
@@ -249,6 +260,13 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
       { name: 'use', cat: 'statement', snippet: 'use std::io;', top: true, langs: ['rust'] },
       { name: 'let', cat: 'statement', snippet: 'let value = 0;', langs: ['rust'] },
       { name: 'eprintln!', cat: 'statement', snippet: 'eprintln!("error: {}", msg);', langs: ['rust'] },
+      // java
+      { name: 'System.out.println', cat: 'statement', snippet: 'System.out.println("hi");', langs: ['java'] },
+      { name: 'System.out.print', cat: 'statement', snippet: 'System.out.print("hi");', langs: ['java'] },
+      { name: 'Scanner', cat: 'statement', snippet: 'Scanner sc = new Scanner(System.in);', top: true, langs: ['java'] },
+      { name: 'sc.nextInt', cat: 'statement', snippet: 'int value = sc.nextInt();', langs: ['java'] },
+      { name: 'int', cat: 'statement', snippet: 'int value = 0;', langs: ['java'] },
+      { name: 'return', cat: 'statement', snippet: 'return 0;', langs: ['java'] },
       // go (statement blocks disabled due to tree-sitter Go parsing limitations in test context)
     ],
   },
@@ -272,6 +290,10 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
       { name: 'function', cat: 'functions', snippet: 'function myfn(x) {\n    return x;\n}', toplevel: true, langs: ['javascript'] },
       { name: 'arrow fn', cat: 'functions', snippet: 'const myfn = (x) => {\n    return x;\n};', toplevel: true, langs: ['javascript'] },
       { name: 'fn', cat: 'functions', snippet: 'fn myfn(x: i32) -> i32 {\n    x\n}', toplevel: true, langs: ['rust'] },
+      // java
+      { name: 'method', cat: 'functions', snippet: 'void myMethod() {\n}', toplevel: true, langs: ['java'] },
+      { name: 'static method', cat: 'functions', snippet: 'static void myMethod() {\n}', toplevel: true, langs: ['java'] },
+      { name: 'main', cat: 'functions', snippet: 'public static void main(String[] args) {\n}', toplevel: true, langs: ['java'] },
     ],
   },
   {
@@ -288,6 +310,9 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
       { name: 'impl', cat: 'structs', snippet: 'impl MyStruct {\n    fn new() -> Self {\n        MyStruct { x: 0 }\n    }\n}', toplevel: true, langs: ['rust'] },
       { name: 'trait', cat: 'structs', snippet: 'trait MyTrait {\n    fn method(&self);\n}', toplevel: true, langs: ['rust'] },
       { name: 'enum', cat: 'structs', snippet: 'enum MyEnum {\n    A,\n    B(i32),\n}', toplevel: true, langs: ['rust'] },
+      // java
+      { name: 'class', cat: 'structs', snippet: 'class MyClass {\n}', toplevel: true, langs: ['java'] },
+      { name: 'interface', cat: 'structs', snippet: 'interface MyInterface {\n}', toplevel: true, langs: ['java'] },
     ],
   },
   {

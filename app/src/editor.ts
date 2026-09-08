@@ -13,6 +13,7 @@ import { cpp } from '@codemirror/lang-cpp'
 import { javascript } from '@codemirror/lang-javascript'
 import { python } from '@codemirror/lang-python'
 import { go } from '@codemirror/lang-go'
+import { java } from '@codemirror/lang-java'
 
 // ---- Light theme (Cade custom) ----
 const cadeLightTheme = EditorView.theme({
@@ -207,6 +208,8 @@ function getLanguageExtension(lang: string) {
       return python()
     case 'go':
       return go()
+    case 'java':
+      return java()
     case 'rust':
       // Rust not in @codemirror — fall back to C-like highlighting
       return cpp()
