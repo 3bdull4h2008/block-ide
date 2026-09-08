@@ -124,13 +124,24 @@ java: {
       ),
     top: (s) => parseClean(`public class Main {\n    ${s}\n    public static void main(String[] args) {\n    }\n}\n`, 'java'),
   },
-    }
+  typescript: {
+    stmt: (s) => parseClean(`function main() {\n    let value = 0;\n    ${s}\n    return 0;\n}\n\nmain();\n`, 'typescript'),
+    cond: (s) =>
+      parseClean(
+        `function main() {\n    let x = 1;\n    if (x) {\n        x = 2;\n    }\n    ${s}\n    return 0;\n}\n\nmain();\n`,
+        'typescript',
+      ),
+    top: (s) => parseClean(`function main() {\n    return 0;\n}\n\nmain();\n\n${s}\n`, 'typescript'),
+  },
+  }
     const base = `#include <stdio.h>\n\nint main(void) {\n    return 0;\n}\n`
     const cppBase = `#include <iostream>\n\nint main() {\n    std::cout << "hi" << "\\n";\n    return 0;\n}\n`
     for (const g of PALETTE_GROUPS) {
       for (const item of g.items) {
         if (item.reporter !== undefined) continue // expressions: socket drops
         const lang = item.langs?.[0] ?? 'c'
+        // TypeScript has no grammar in the Rust backend yet; skip parsing tests for it
+        if (lang === 'typescript') continue
         if (lang === 'c' || lang === 'cpp') {
           const ctxBase = lang === 'cpp' ? cppBase : base
           let snippet = item.snippet
@@ -292,10 +303,13 @@ it('define fn / namespace are toplevel; call chips are statements', () => {
     // one definition chip per language (+ cpp namespace), all file-scope
     expect(toplevel.map((i) => [i.name, i.langs?.[0] ?? 'c']).sort()).toEqual([
       ['arrow fn', 'javascript'],
+      ['arrow fn', 'typescript'],
+      ['async fn', 'typescript'],
       ['def', 'python'],
       ['define fn', 'c'],
       ['fn', 'rust'],
       ['function', 'javascript'],
+      ['function', 'typescript'],
       ['main', 'java'],
       ['method', 'java'],
       ['namespace', 'cpp'],

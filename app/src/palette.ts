@@ -93,6 +93,20 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
       { name: 'do / while', cat: 'control', snippet: 'do {\n} while (cond);', langs: ['java'] },
       { name: 'switch', cat: 'control', snippet: 'switch (value) {\n    case 1:\n        break;\n    default:\n        break;\n}', langs: ['java'] },
       { name: 'try / catch', cat: 'control', snippet: 'try {\n} catch (Exception e) {\n}', langs: ['java'] },
+      // typescript
+      { name: 'if', cat: 'control', snippet: 'if (cond) {\n}', langs: ['typescript'] },
+      {
+        name: 'else',
+        cat: 'control',
+        snippet: 'else {\n}',
+        langs: ['typescript'],
+        requires: { kind: 'if_statement' },
+      },
+      { name: 'for', cat: 'control', snippet: 'for (let i = 0; i < 10; i++) {\n}', langs: ['typescript'] },
+      { name: 'while', cat: 'control', snippet: 'while (cond) {\n}', langs: ['typescript'] },
+      { name: 'for-of', cat: 'control', snippet: 'for (const x of items) {\n}', langs: ['typescript'] },
+      { name: 'switch', cat: 'control', snippet: 'switch (value) {\n    case 1:\n        break;\n    default:\n        break;\n}', langs: ['typescript'] },
+      { name: 'try / catch', cat: 'control', snippet: 'try {\n} catch (e: unknown) {\n}', langs: ['typescript'] },
       // rust
       { name: 'if', cat: 'control', snippet: 'if cond {\n}', langs: ['rust'] },
       {
@@ -127,6 +141,10 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
       { name: 'for', cat: 'loops', snippet: 'for (int i = 0; i < 10; i++) {\n}', langs: ['java'] },
       { name: 'while', cat: 'loops', snippet: 'while (cond) {\n}', langs: ['java'] },
       { name: 'for-each', cat: 'loops', snippet: 'for (int x : items) {\n}', langs: ['java'] },
+      // typescript
+      { name: 'for', cat: 'loops', snippet: 'for (let i = 0; i < 10; i++) {\n}', langs: ['typescript'] },
+      { name: 'while', cat: 'loops', snippet: 'while (cond) {\n}', langs: ['typescript'] },
+      { name: 'for-of', cat: 'loops', snippet: 'for (const x of items) {\n}', langs: ['typescript'] },
     ],
   },
   {
@@ -267,6 +285,14 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
       { name: 'sc.nextInt', cat: 'statement', snippet: 'int value = sc.nextInt();', langs: ['java'] },
       { name: 'int', cat: 'statement', snippet: 'int value = 0;', langs: ['java'] },
       { name: 'return', cat: 'statement', snippet: 'return 0;', langs: ['java'] },
+      // typescript
+      { name: 'console.log', cat: 'statement', snippet: 'console.log("hi");', langs: ['typescript'] },
+      { name: 'console.log value', cat: 'statement', snippet: 'console.log(value);', langs: ['typescript'] },
+      { name: 'let', cat: 'statement', snippet: 'let value = 0;', langs: ['typescript'] },
+      { name: 'const', cat: 'statement', snippet: 'const value = 0;', langs: ['typescript'] },
+      { name: 'array', cat: 'statement', snippet: 'const items = [];', langs: ['typescript'] },
+      { name: 'push', cat: 'statement', snippet: 'items.push(value);', langs: ['typescript'] },
+      { name: 'return', cat: 'statement', snippet: 'return 0;', langs: ['typescript'] },
       // go (statement blocks disabled due to tree-sitter Go parsing limitations in test context)
     ],
   },
@@ -294,6 +320,10 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
       { name: 'method', cat: 'functions', snippet: 'void myMethod() {\n}', toplevel: true, langs: ['java'] },
       { name: 'static method', cat: 'functions', snippet: 'static void myMethod() {\n}', toplevel: true, langs: ['java'] },
       { name: 'main', cat: 'functions', snippet: 'public static void main(String[] args) {\n}', toplevel: true, langs: ['java'] },
+      // typescript
+      { name: 'function', cat: 'functions', snippet: 'function myfn(x: number): number {\n    return x;\n}', toplevel: true, langs: ['typescript'] },
+      { name: 'arrow fn', cat: 'functions', snippet: 'const myfn = (x: number): number => {\n    return x;\n};', toplevel: true, langs: ['typescript'] },
+      { name: 'async fn', cat: 'functions', snippet: 'async function myfn() {\n    await something();\n}', toplevel: true, langs: ['typescript'] },
     ],
   },
   {
@@ -313,6 +343,9 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
       // java
       { name: 'class', cat: 'structs', snippet: 'class MyClass {\n}', toplevel: true, langs: ['java'] },
       { name: 'interface', cat: 'structs', snippet: 'interface MyInterface {\n}', toplevel: true, langs: ['java'] },
+      // typescript
+      { name: 'class', cat: 'structs', snippet: 'class MyClass {\n}', toplevel: true, langs: ['typescript'] },
+      { name: 'interface', cat: 'structs', snippet: 'interface MyInterface {\n}', toplevel: true, langs: ['typescript'] },
     ],
   },
   {

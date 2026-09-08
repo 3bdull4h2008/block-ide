@@ -203,6 +203,7 @@ function getLanguageExtension(lang: string) {
     case 'cpp':
       return cpp()
     case 'javascript':
+    case 'typescript':
       return javascript()
     case 'python':
       return python()
