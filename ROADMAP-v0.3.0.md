@@ -4,6 +4,35 @@
 
 ---
 
+## Completed (as of 2026-09-08)
+
+### Phase 1 — Foundation & QoL ✅
+- Q2: CodeMirror 6 syntax highlighting (C/C++/Python/JS/Rust/Go/Java/TypeScript)
+- Q7: Auto-save + crash recovery
+- Q9: Command palette (Ctrl+Shift+P)
+- Q10: Right-click context menus
+- Q12: Block comments (Ctrl+/)
+- Q14: Resizable panels
+- Native window controls (minimize/maximize/close)
+- Toast notification system
+- Keyboard shortcuts help dialog (Ctrl+/)
+- Window state persistence
+
+### Phase 2 — Multi-Language Parity ✅
+- Go: Palette blocks, CodeMirror, diagnostics (`go build`), sample programs
+- Java: Palette blocks, CodeMirror, diagnostics (`javac`), sample programs
+- TypeScript: Palette blocks, CodeMirror (via JS), diagnostics (`tsc --noEmit`)
+- Dynamic palette filtering per language
+- Native diagnostics for all 8 languages
+
+### Phase 3 — Academic Features ✅ (partial)
+- A1: Visual Code Execution Tracer — C interpreter with step-through, variable inspector, line highlighting
+- A9: Concept-mastery badges (5 badges)
+- A11: Daily streak tracking (UTC-normalized)
+- Leitner spaced-repetition mastery system
+
+---
+
 ## Phase 1 — Foundation & Quality of Life (Weeks 1–3)
 
 ### 1.1 Editor Core
