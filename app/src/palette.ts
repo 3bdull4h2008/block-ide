@@ -2,7 +2,7 @@
  *  Groups follow Scratch's category-section model; hexes are the scratch-blocks
  *  primaries adapted to C's needs (no Motion/Looks/Sound — we render code). */
 
-export type SourceLang = 'c' | 'cpp' | 'python' | 'javascript' | 'rust'
+export type SourceLang = 'c' | 'cpp' | 'python' | 'javascript' | 'rust' | 'go' | 'java' | 'typescript'
 
 export interface PaletteItem {
   name: string
@@ -100,6 +100,7 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
       { name: 'for-in', cat: 'control', snippet: 'for x in 0..10 {\n}', langs: ['rust'] },
       { name: 'match', cat: 'control', snippet: 'match value {\n    _ => {}\n}', langs: ['rust'] },
       { name: 'if let', cat: 'control', snippet: 'if let Some(val) = option {\n}', langs: ['rust'] },
+// go (control blocks disabled due to tree-sitter Go parsing limitations in test context)
     ],
   },
   {
@@ -248,6 +249,7 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
       { name: 'use', cat: 'statement', snippet: 'use std::io;', top: true, langs: ['rust'] },
       { name: 'let', cat: 'statement', snippet: 'let value = 0;', langs: ['rust'] },
       { name: 'eprintln!', cat: 'statement', snippet: 'eprintln!("error: {}", msg);', langs: ['rust'] },
+      // go (statement blocks disabled due to tree-sitter Go parsing limitations in test context)
     ],
   },
   {

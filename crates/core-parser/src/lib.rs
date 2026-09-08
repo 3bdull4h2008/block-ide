@@ -32,6 +32,9 @@ pub enum Lang {
     Python,
     JavaScript,
     Rust,
+    Go,
+    Java,
+    TypeScript,
 }
 
 impl Lang {
@@ -41,6 +44,9 @@ impl Lang {
             Some("python") | Some("py") => Lang::Python,
             Some("javascript") | Some("js") => Lang::JavaScript,
             Some("rust") | Some("rs") => Lang::Rust,
+            Some("go") | Some("golang") => Lang::Go,
+            Some("java") => Lang::Java,
+            Some("typescript") | Some("ts") => Lang::TypeScript,
             _ => Lang::C,
         }
     }
@@ -54,6 +60,9 @@ impl Lang {
             "py" | "pyw" => Lang::Python,
             "js" | "mjs" | "cjs" => Lang::JavaScript,
             "rs" => Lang::Rust,
+            "go" => Lang::Go,
+            "java" => Lang::Java,
+            "ts" | "tsx" => Lang::TypeScript,
             _ => Lang::C,
         }
     }
@@ -65,6 +74,9 @@ impl Lang {
             Lang::Python => "python",
             Lang::JavaScript => "javascript",
             Lang::Rust => "rust",
+            Lang::Go => "go",
+            Lang::Java => "java",
+            Lang::TypeScript => "typescript",
         }
     }
 
@@ -76,6 +88,9 @@ impl Lang {
             Lang::Python => "py",
             Lang::JavaScript => "js",
             Lang::Rust => "rs",
+            Lang::Go => "go",
+            Lang::Java => "java",
+            Lang::TypeScript => "ts",
         }
     }
 
@@ -92,6 +107,8 @@ fn grammar(lang: Lang) -> Option<tree_sitter::Language> {
         Lang::Python => Some(tree_sitter_python::LANGUAGE.into()),
         Lang::JavaScript => Some(tree_sitter_javascript::LANGUAGE.into()),
         Lang::Rust => Some(tree_sitter_rust::LANGUAGE.into()),
+        Lang::Go => Some(tree_sitter_go::LANGUAGE.into()),
+        Lang::Java | Lang::TypeScript => None,
     }
 }
 

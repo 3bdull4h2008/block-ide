@@ -45,6 +45,10 @@ import {
   PAD,
   ROW_H,
   INDENT,
+  NX,
+  TW,
+  TD,
+  BR,
   measure,
   partWidth,
   type BBlock,
@@ -388,6 +392,40 @@ console.log(total);
     println!("{}", total);
 }
 `,
+  go: `package main
+
+import "fmt"
+
+func main() {
+    total := 0
+    for i := 0; i < 5; i++ {
+        total = total + i
+    }
+
+    fmt.Println("hello")
+    fmt.Println(total)
+}
+`,
+  java: `public class Main {
+    public static void main(String[] args) {
+        int total = 0;
+        for (int i = 0; i < 5; i++) {
+            total = total + i;
+        }
+        System.out.println("hello");
+        System.out.println(total);
+    }
+}
+`,
+  typescript: `let total = 0;
+
+for (let i = 0; i < 5; i++) {
+    total = total + i;
+}
+
+console.log("hello");
+console.log(total);
+`,
 }
 
 const NEW_TEMPLATES: Record<Lang, string> = {
@@ -408,6 +446,26 @@ main();
   rust: `fn main() {
     println!("hi");
 }
+`,
+  go: `package main
+
+import "fmt"
+
+func main() {
+    fmt.Println("hi")
+}
+`,
+  java: `public class Main {
+    public static void main(String[] args) {
+        System.out.println("hi");
+    }
+}
+`,
+  typescript: `function main() {
+    console.log("hi");
+}
+
+main();
 `,
 }
 
@@ -637,13 +695,6 @@ function mixWhite(c: number, f: number): number {
   const m = (v: number) => Math.round(v + (255 - v) * f)
   return (m(r) << 16) | (m(g) << 8) | m(b)
 }
-
-// Scratch puzzle geometry: a mouth recess on the top edge receives the tab
-// protruding from the bottom of the block above.
-const NX = 10 // mouth/tab x offset
-const TW = 18 // tab width
-const TD = 4.5 // tab depth
-const BR = 8 // corner radius
 
 function statementPath(g: Graphics, ox: number, oy: number, w: number, h: number): void {
   g.moveTo(ox, oy + BR)

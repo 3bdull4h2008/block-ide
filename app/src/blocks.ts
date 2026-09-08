@@ -370,9 +370,13 @@ export function harvestVars(root: CNodeJSON): string[] {
   return [...out]
 }
 
-const CHAR_W = 8.4
+export const CHAR_W = 8.4
 export const PAD = 14
 export const ROW_H = 34
+export const NX = 10
+export const TW = 18
+export const TD = 4.5
+export const BR = 8
 const GAP_Y = 10
 export const INDENT = 30
 

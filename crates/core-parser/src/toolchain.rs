@@ -172,6 +172,40 @@ pub fn syntax_check_stderr_lang(src: &str, lang: crate::Lang) -> Result<String, 
                 Err(_) => return Ok(String::new()),
             }
         }
+        crate::Lang::Go => {
+            match Command::new("go")
+                .arg("build")
+                .arg("-o")
+                .arg(dir.join("_check"))
+                .arg(&cpath)
+                .creation_flags(0x0800_0000)
+                .output()
+            {
+                Ok(o) => o,
+                Err(_) => return Ok(String::new()),
+            }
+        }
+        crate::Lang::Java => {
+            match Command::new("javac")
+                .arg(&cpath)
+                .creation_flags(0x0800_0000)
+                .output()
+            {
+                Ok(o) => o,
+                Err(_) => return Ok(String::new()),
+            }
+        }
+        crate::Lang::TypeScript => {
+            match Command::new("tsc")
+                .arg("--noEmit")
+                .arg(&cpath)
+                .creation_flags(0x0800_0000)
+                .output()
+            {
+                Ok(o) => o,
+                Err(_) => return Ok(String::new()),
+            }
+        }
     };
     Ok(String::from_utf8_lossy(&out.stderr).into_owned())
 }

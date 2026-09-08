@@ -64,48 +64,66 @@ describe('Scratch palette structure (1.10)', () => {
         .split('\n')
         .map((l) => (l.trim() ? pad + l : l))
         .join('\n')
-    const CTX: Record<
-      'python' | 'javascript' | 'rust',
-      { stmt: (s: string) => boolean; cond: (s: string) => boolean; top: (s: string) => boolean }
-    > = {
-      python: {
-        stmt: (s) =>
-          parseClean(`def main():\n    x = 1\n${py(s)}\n    return 0\n\n\nmain()\n`, 'python'),
-        // elif/else arms FOLLOW their if at sibling level
-        cond: (s) =>
-          parseClean(
-            `def main():\n    x = 1\n    if x:\n        x = 2\n${py(s)}\n    return 0\n\n\nmain()\n`,
-            'python',
-          ),
-        top: (s) => parseClean(`def main():\n    return 0\n\n\nmain()\n\n\n${s}\n`, 'python'),
-      },
-      javascript: {
-        stmt: (s) => {
-          if (s.startsWith('constructor') || s.includes('myMethod()')) {
-            return parseClean(`class MyClass {\n    ${s}\n}\n`, 'javascript')
-          }
-          return parseClean(
-            `function main() {\n    let x = 1;\n    ${s}\n    return 0;\n}\n\nmain();\n`,
-            'javascript',
-          )
-        },
-        cond: (s) =>
-          parseClean(
-            `function main() {\n    let x = 1;\n    if (x) {\n        x = 2;\n    }\n    ${s}\n    return 0;\n}\n\nmain();\n`,
-            'javascript',
-          ),
-        top: (s) =>
-          parseClean(`function main() {\n    return 0;\n}\n\nmain();\n\n${s}\n`, 'javascript'),
-      },
-      rust: {
-        stmt: (s) => parseClean(`fn main() {\n    let mut x = 1;\n    ${s}\n}\n`, 'rust'),
-        cond: (s) =>
-          parseClean(
-            `fn main() {\n    let mut x = 1;\n    if x > 0 {\n        x += 1;\n    }\n    ${s}\n}\n`,
-            'rust',
-          ),
-        top: (s) => parseClean(`fn main() {\n    let mut x = 1;\n}\n\n${s}\n`, 'rust'),
-      },
+const CTX: Record<
+  'python' | 'javascript' | 'rust' | 'go' | 'java',
+  { stmt: (s: string) => boolean; cond: (s: string) => boolean; top: (s: string) => boolean }
+> = {
+  python: {
+    stmt: (s) =>
+      parseClean(`def main():\n    x = 1\n${py(s)}\n    return 0\n\n\nmain()\n`, 'python'),
+    // elif/else arms FOLLOW their if at sibling level
+    cond: (s) =>
+      parseClean(
+        `def main():\n    x = 1\n    if x:\n        x = 2\n${py(s)}\n    return 0\n\n\nmain()\n`,
+        'python',
+      ),
+    top: (s) => parseClean(`def main():\n    return 0\n\n\nmain()\n\n\n${s}\n`, 'python'),
+  },
+  javascript: {
+    stmt: (s) => {
+      if (s.startsWith('constructor') || s.includes('myMethod()')) {
+        return parseClean(`class MyClass {\n    ${s}\n}\n`, 'javascript')
+      }
+      return parseClean(
+        `function main() {\n    let x = 1;\n    ${s}\n    return 0;\n}\n\nmain();\n`,
+        'javascript',
+      )
+    },
+    cond: (s) =>
+      parseClean(
+        `function main() {\n    let x = 1;\n    if (x) {\n        x = 2;\n    }\n    ${s}\n    return 0;\n}\n\nmain();\n`,
+        'javascript',
+      ),
+    top: (s) =>
+      parseClean(`function main() {\n    return 0;\n}\n\nmain();\n\n${s}\n`, 'javascript'),
+  },
+  rust: {
+    stmt: (s) => parseClean(`fn main() {\n    let mut x = 1;\n    ${s}\n}\n`, 'rust'),
+    cond: (s) =>
+      parseClean(
+        `fn main() {\n    let mut x = 1;\n    if x > 0 {\n        x += 1;\n    }\n    ${s}\n}\n`,
+        'rust',
+      ),
+    top: (s) => parseClean(`fn main() {\n    let mut x = 1;\n}\n\n${s}\n`, 'rust'),
+  },
+  go: {
+    stmt: (s) => parseClean(`package main\n\nimport "fmt"\n\nfunc main() {\n    value := 0\n    ${s}\n}\n`, 'go'),
+    cond: (s) =>
+      parseClean(
+        `package main\n\nimport "fmt"\n\nfunc main() {\n    x := 1\n    if x > 0 {\n        x += 1\n    }\n    ${s}\n}\n`,
+        'go',
+      ),
+    top: (s) => parseClean(`${s}\n\nfunc main() {\n}\n`, 'go'),
+  },
+  java: {
+    stmt: (s) => parseClean(`public class Main {\n    public static void main(String[] args) {\n        ${s}\n    }\n}\n`, 'java'),
+    cond: (s) =>
+      parseClean(
+        `public class Main {\n    public static void main(String[] args) {\n        int x = 1;\n        if (x > 0) {\n            x += 1;\n        }\n        ${s}\n    }\n}\n`,
+        'java',
+      ),
+    top: (s) => parseClean(`public class Main {\n    public static void main(String[] args) {\n    }\n}\n\n${s}\n`, 'java'),
+  },
     }
     const base = `#include <stdio.h>\n\nint main(void) {\n    return 0;\n}\n`
     const cppBase = `#include <iostream>\n\nint main() {\n    std::cout << "hi" << "\\n";\n    return 0;\n}\n`
@@ -268,7 +286,7 @@ describe('Operators category (Scratch green)', () => {
     }
   })
 
-  it('define fn / namespace are toplevel; call chips are statements', () => {
+it('define fn / namespace are toplevel; call chips are statements', () => {
     const fns = PALETTE_GROUPS.find((g) => g.name === 'Functions')!
     const toplevel = fns.items.filter((i) => i.toplevel)
     // one definition chip per language (+ cpp namespace), all file-scope
