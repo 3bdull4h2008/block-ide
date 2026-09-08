@@ -98,6 +98,10 @@ import {
   esc,
   keyToCode,
   isTextEntryTarget,
+  readJsonStore,
+  writeJsonStore,
+  readSetting,
+  writeSetting,
 } from './utils/pure'
 import {
   mixWhite,
@@ -350,14 +354,6 @@ window.addEventListener('beforeunload', (e) => {
 
 // Multi-language packs (D11): language rides with the FILE
 type Lang = SourceLang
-
-// ---- Settings helpers (read/write before splashEl exists) ----
-function readSetting<T>(key: string, fallback: T): T {
-  return readJsonStore<T>(`blockide-set-${key}`, fallback)
-}
-function writeSetting(key: string, val: unknown): void {
-  localStorage.setItem(`blockide-set-${key}`, JSON.stringify(val))
-}
 
 /** Apply all saved settings to the editor on startup */
 function applySettings(): void {
@@ -2295,17 +2291,6 @@ hostEl.addEventListener(
 // Category rail + colored sections (docs/SCRATCH-BLOCKS-REFERENCE.md);
 // Variables section owns Make-a-Variable / Make-a-List and per-var chips.
 // One corrupted localStorage key must never take the whole app down.
-function readJsonStore<T>(key: string, fallback: T): T {
-  try {
-    const v = JSON.parse(localStorage.getItem(key) ?? 'null')
-    return (v ?? fallback) as T
-  } catch {
-    return fallback
-  }
-}
-function writeJsonStore<T>(key: string, value: T): void {
-  localStorage.setItem(key, JSON.stringify(value))
-}
 const knownVars: string[] = readJsonStore<string[]>('blockide-vars', [])
 const knownLists: string[] = readJsonStore<string[]>('blockide-lists', [])
 /** declared type per variable (C/C++ need the declaration to exist first) */

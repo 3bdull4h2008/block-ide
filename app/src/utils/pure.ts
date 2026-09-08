@@ -53,3 +53,24 @@ export const isTextEntryTarget = (e: Event): boolean => {
   if (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT') return true
   return !!t.closest('#console-input-row, #pal-filter')
 }
+
+export function readJsonStore<T>(key: string, fallback: T): T {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) ?? 'null')
+    return (v ?? fallback) as T
+  } catch {
+    return fallback
+  }
+}
+
+export function writeJsonStore<T>(key: string, value: T): void {
+  localStorage.setItem(key, JSON.stringify(value))
+}
+
+export function readSetting<T>(key: string, fallback: T): T {
+  return readJsonStore<T>(`blockide-set-${key}`, fallback)
+}
+
+export function writeSetting(key: string, val: unknown): void {
+  localStorage.setItem(`blockide-set-${key}`, JSON.stringify(val))
+}
