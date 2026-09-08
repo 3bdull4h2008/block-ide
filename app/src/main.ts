@@ -47,10 +47,7 @@ import {
   PAD,
   ROW_H,
   INDENT,
-  NX,
-  TW,
   TD,
-  BR,
   measure,
   partWidth,
   type BBlock,
@@ -91,6 +88,25 @@ import { registerContextMenuProvider, initContextMenu } from './context-menu'
 import { initResizers } from './resize'
 import { initConsole } from './ui/console'
 import { initDialogs } from './ui/dialogs'
+import {
+  langOf,
+  isWinPath,
+  baseName,
+  dirName,
+  normSlashes,
+  trimmedEndsWithOpener,
+  esc,
+  keyToCode,
+  isTextEntryTarget,
+} from './utils/pure'
+import {
+  mixWhite,
+  statementPath,
+  cHeaderPath,
+  cBodyPath,
+  catColor,
+  isInsideRange,
+} from './utils/drawing'
 
 interface DragPayload {
   label: string
@@ -334,14 +350,6 @@ window.addEventListener('beforeunload', (e) => {
 
 // Multi-language packs (D11): language rides with the FILE
 type Lang = SourceLang
-function langOf(path: string | null): Lang {
-  const ext = (path ?? '').toLowerCase().split('.').pop() ?? ''
-  if (['cpp', 'cc', 'cxx', 'hpp', 'hh'].includes(ext)) return 'cpp'
-  if (ext === 'py' || ext === 'pyw') return 'python'
-  if (['js', 'mjs', 'cjs'].includes(ext)) return 'javascript'
-  if (ext === 'rs') return 'rust'
-  return 'c'
-}
 
 // ---- Settings helpers (read/write before splashEl exists) ----
 function readSetting<T>(key: string, fallback: T): T {
@@ -696,64 +704,6 @@ async function refreshDiags(): Promise<void> {
   }
 }
 
-function mixWhite(c: number, f: number): number {
-  const r = (c >> 16) & 255
-  const g = (c >> 8) & 255
-  const b = c & 255
-  const m = (v: number) => Math.round(v + (255 - v) * f)
-  return (m(r) << 16) | (m(g) << 8) | m(b)
-}
-
-function statementPath(g: Graphics, ox: number, oy: number, w: number, h: number): void {
-  g.moveTo(ox, oy + BR)
-  g.quadraticCurveTo(ox, oy, ox + BR, oy)
-  g.lineTo(ox + NX, oy)
-  g.lineTo(ox + NX + 3, oy + TD)
-  g.lineTo(ox + NX + TW - 3, oy + TD)
-  g.lineTo(ox + NX + TW, oy)
-  g.lineTo(ox + w - BR, oy)
-  g.quadraticCurveTo(ox + w, oy, ox + w, oy + BR)
-  g.lineTo(ox + w, oy + h - BR)
-  g.quadraticCurveTo(ox + w, oy + h, ox + w - BR, oy + h)
-  g.lineTo(ox + NX + TW, oy + h)
-  g.lineTo(ox + NX + TW - 3, oy + h + TD)
-  g.lineTo(ox + NX + 3, oy + h + TD)
-  g.lineTo(ox + NX, oy + h)
-  g.lineTo(ox + BR, oy + h)
-  g.quadraticCurveTo(ox, oy + h, ox, oy + h - BR)
-  g.closePath()
-}
-
-function cHeaderPath(g: Graphics, ox: number, oy: number, w: number, h: number): void {
-  g.moveTo(ox, oy + BR)
-  g.quadraticCurveTo(ox, oy, ox + BR, oy)
-  g.lineTo(ox + NX, oy)
-  g.lineTo(ox + NX + 3, oy + TD)
-  g.lineTo(ox + NX + TW - 3, oy + TD)
-  g.lineTo(ox + NX + TW, oy)
-  g.lineTo(ox + w - BR, oy)
-  g.quadraticCurveTo(ox + w, oy, ox + w, oy + BR)
-  g.lineTo(ox + w, oy + h)
-  g.lineTo(ox, oy + h)
-  g.closePath()
-}
-
-function cBodyPath(g: Graphics, ox: number, oy: number, w: number, top: number, h: number, close: boolean): void {
-  const y0 = oy + top
-  const y1 = oy + h
-  g.moveTo(ox + w, y0)
-  g.lineTo(ox + w, y1 - BR)
-  g.quadraticCurveTo(ox + w, y1, ox + w - BR, y1)
-  g.lineTo(ox + NX + TW, y1)
-  g.lineTo(ox + NX + TW - 3, y1 + TD)
-  g.lineTo(ox + NX + 3, y1 + TD)
-  g.lineTo(ox + NX, y1)
-  g.lineTo(ox + BR, y1)
-  g.quadraticCurveTo(ox, y1, ox, y1 - BR)
-  g.lineTo(ox, y0)
-  if (close) g.closePath()
-}
-
 function drawBlock(b: BBlock): void {
   const g = new Graphics()
   const fill = COLORS[b.cat] ?? COLORS.statement
@@ -918,26 +868,6 @@ function startHtmlDrag(e: PointerEvent, payload: DragPayload): void {
   window.addEventListener('pointerup', onDragEnd, { once: true })
 }
 
-function catColor(cat: string | undefined, fallback = COLORS.statement): number {
-  switch (cat) {
-    case 'control':
-    case 'loops':
-      return COLORS.control
-    case 'variables':
-      return COLORS.variables
-    case 'functions':
-      return COLORS.function
-    case 'structs':
-      return 0xec4899
-    case 'operators':
-      return 0x59c059
-    case 'comment':
-      return COLORS.comment
-    default:
-      return fallback
-  }
-}
-
 function clearSnapGhost(): void {
   snapLayer.removeChildren()
 }
@@ -1095,10 +1025,6 @@ function onDragMove(e: PointerEvent): void {
   }
   dropbar.style.display = 'none'
   clearSnapGhost()
-}
-
-function isInsideRange(inner: BBlock, outer: { start: number; end: number }): boolean {
-  return inner.start >= outer.start && inner.end <= outer.end
 }
 
 async function onDragEnd(e: PointerEvent): Promise<void> {
@@ -1312,9 +1238,6 @@ document.getElementById('run')?.addEventListener('click', () => {
 })
 
 // ── trace panel wiring ──
-function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
 const tracePanelEl = document.getElementById('trace-panel') as HTMLDivElement
 const traceStepInfo = document.getElementById('trace-step-info') as HTMLSpanElement
 const tracePlayBtn = document.getElementById('trace-play') as HTMLButtonElement
@@ -1439,33 +1362,6 @@ interface StageFrameOut {
   w: number
   h: number
   b64: string
-}
-
-function keyToCode(e: KeyboardEvent): number | null {
-  switch (e.key) {
-    case 'ArrowLeft':
-      return 1
-    case 'ArrowUp':
-      return 2
-    case 'ArrowRight':
-      return 3
-    case 'ArrowDown':
-      return 4
-  }
-  if (e.key.length === 1) {
-    const c = e.key.toUpperCase().charCodeAt(0)
-    if (c >= 32 && c <= 126) return c
-  }
-  return null
-}
-
-// Stage-key forwarding must NEVER swallow typing: while a program runs, the
-// console stdin box / find bar / palette filter keep their own keys.
-const isTextEntryTarget = (e: Event): boolean => {
-  const t = e.target as HTMLElement | null
-  if (!t) return false
-  if (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT') return true
-  return !!t.closest('#console-input-row, #pal-filter')
 }
 
 function stageKeyDown(e: KeyboardEvent): void {
@@ -1796,14 +1692,6 @@ registerContextMenuProvider((target) => {
 // Documents are either workspace-RELATIVE (a folder is open) or ABSOLUTE
 // (standalone file via New/Open/Save As). One path shape per doc; fsRead/
 // fsWrite route on which shape the path is.
-const isWinPath = (p: string): boolean => /^[A-Za-z]:[\\/]/.test(p) || p.startsWith('/')
-const baseName = (p: string): string => p.split(/[\\/]/).pop() ?? p
-const dirName = (p: string): string => {
-  const parts = p.split(/[\\/]/)
-  parts.pop()
-  return parts.length > 0 ? parts.join('\\') : '.'
-}
-const normSlashes = (p: string): string => p.replace(/\\/g, '/')
 const asRelInWorkspace = (abs: string): string | null => {
   if (workspace === null) return null
   const w = normSlashes(workspace).replace(/\/$/, '').toLowerCase() + '/'
@@ -1965,7 +1853,7 @@ function activateTab(rel: string): void {
   hist.reset()
   caretAnchor = null // different buffer — old node ids are meaningless here
   activePath = rel
-  activeLang = langOf(rel)
+  activeLang = langOf(rel) as Lang
   editor?.setLang(activeLang)
   src = fileCache.get(rel) ?? ''
   savedSnapshot = src // fresh load = clean baseline
@@ -2153,7 +2041,7 @@ async function saveActive(saveAs = false): Promise<void> {
     old?.remove()
     tabViews.delete(activePath ?? '')
     activePath = target
-    activeLang = langOf(target)
+    activeLang = langOf(target) as Lang
     editor?.setLang(activeLang)
     createTab(target, src)
   } else {
@@ -2362,11 +2250,6 @@ srcEl.addEventListener('keydown', (e) => {
     toggleComment()
   }
 })
-
-function trimmedEndsWithOpener(line: string): boolean {
-  const t = line.trimEnd()
-  return t.endsWith('{') || t.endsWith(':')
-}
 
 // ------------------------------------------------------------------ pan/zoom
 let panning = false
