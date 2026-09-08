@@ -1,8 +1,10 @@
 import { Application, Container, Graphics, Text } from 'pixi.js'
 import { invoke as tauriInvoke } from '@tauri-apps/api/core'
+import { EditorView } from '@codemirror/view'
 import { createCodeMirrorEditor, type CadeEditor } from './editor'
 import { blip, blipError, blipSuccess, blipDrop, blipSlot } from './utils/audio'
 import { WHITE_LABEL, DARK_LABEL } from './utils/styles'
+import { interpretC, type TraceStep } from './tracer'
 
 // IPC observability (temporary diagnostics, RUN 43): count calls/pending per
 // command so hangs are attributable from the page itself.
@@ -472,6 +474,12 @@ main();
 let src = SAMPLE
 let roots: BBlock[] = []
 const hist = new History()
+
+// ── trace mode state ──
+let traceMode = false
+let traceSteps: TraceStep[] = []
+let traceIdx = -1
+let tracePlayTimer: ReturnType<typeof setInterval> | null = null
 
 /** Editable slot hit-boxes in world coords, rebuilt on every render. */
 interface SlotHit {
@@ -1296,8 +1304,121 @@ hostEl.addEventListener('dblclick', (e) => {
 })
 
 document.getElementById('run')?.addEventListener('click', () => {
-  void startRun()
+  if (traceMode) {
+    void startTraceRun()
+  } else {
+    void startRun()
+  }
 })
+
+// ── trace panel wiring ──
+function esc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+const tracePanelEl = document.getElementById('trace-panel') as HTMLDivElement
+const traceStepInfo = document.getElementById('trace-step-info') as HTMLSpanElement
+const tracePlayBtn = document.getElementById('trace-play') as HTMLButtonElement
+const traceStepBtn = document.getElementById('trace-step') as HTMLButtonElement
+const traceResetBtn = document.getElementById('trace-reset') as HTMLButtonElement
+const traceVarsEl = document.getElementById('trace-vars') as HTMLDivElement
+const traceOutputEl = document.getElementById('trace-output') as HTMLPreElement
+const traceSpeedSlider = document.getElementById('trace-speed-slider') as HTMLInputElement
+const traceSpeedLabel = document.getElementById('trace-speed-label') as HTMLSpanElement
+const traceCheckEl = document.getElementById('trace-check') as HTMLInputElement
+
+function traceShowStep(idx: number): void {
+  if (idx < 0 || idx >= traceSteps.length) return
+  traceIdx = idx
+  const step = traceSteps[idx]
+  const total = traceSteps.length
+  traceStepInfo.textContent = step.error
+    ? `Error: ${step.error} (line ${step.line})`
+    : `Step ${idx + 1}/${total} · line ${step.line} · ${step.kind}`
+  traceStepInfo.style.color = step.error ? '#e06c75' : ''
+
+  // highlight current line in editor
+  if (editor && step.line > 0) {
+    const line = editor.view.state.doc.line(step.line)
+    editor.view.dispatch({
+      selection: { anchor: line.from },
+      effects: EditorView.scrollIntoView(line.from, { y: 'center' }),
+    })
+  }
+
+  // update variable display
+  const prevVars = traceIdx > 0 ? traceSteps[traceIdx - 1].vars : {}
+  const keys = Object.keys(step.vars).sort()
+  let varsHtml = ''
+  for (const k of keys) {
+    const val = step.vars[k]
+    const changed = traceIdx > 0 && k in prevVars && prevVars[k] !== val
+    const valStr = typeof val === 'number'
+      ? (Number.isInteger(val) ? String(val) : val.toFixed(4).replace(/0+$/, '').replace(/\.$/, '.0'))
+      : String(val)
+    varsHtml += `<div class="trace-var-row"><span class="trace-var-name">${esc(k)}</span><span class="trace-var-val${changed ? ' trace-var-changed' : ''}">${esc(valStr)}</span></div>`
+  }
+  traceVarsEl.innerHTML = varsHtml || '<div style="color:var(--fg-dim);padding:4px 0">no variables</div>'
+
+  // update output display
+  if (step.output) {
+    traceOutputEl.textContent = step.output
+    traceOutputEl.scrollTop = traceOutputEl.scrollHeight
+  }
+}
+
+function traceStop(): void {
+  if (tracePlayTimer !== null) { clearInterval(tracePlayTimer); tracePlayTimer = null }
+  tracePlayBtn.textContent = '▶'
+}
+
+function tracePlay(): void {
+  if (tracePlayTimer !== null) { traceStop(); return }
+  tracePlayBtn.textContent = '⏸'
+  const delay = Math.max(20, 520 - Number(traceSpeedSlider.value) * 50)
+  tracePlayTimer = setInterval(() => {
+    if (traceIdx >= traceSteps.length - 1) { traceStop(); return }
+    traceShowStep(traceIdx + 1)
+  }, delay)
+}
+
+function traceReset(): void {
+  traceStop()
+  traceIdx = -1
+  traceSteps = []
+  traceStepInfo.textContent = 'Ready'
+  traceVarsEl.innerHTML = ''
+  traceOutputEl.textContent = ''
+}
+
+tracePlayBtn.addEventListener('click', tracePlay)
+traceStepBtn.addEventListener('click', () => { traceStop(); if (traceIdx < traceSteps.length - 1) traceShowStep(traceIdx + 1) })
+traceResetBtn.addEventListener('click', traceReset)
+traceSpeedSlider.addEventListener('input', () => {
+  traceSpeedLabel.textContent = traceSpeedSlider.value
+  if (tracePlayTimer !== null) { traceStop(); tracePlay() }
+})
+
+traceCheckEl.addEventListener('change', () => {
+  traceMode = traceCheckEl.checked
+  tracePanelEl.style.display = traceMode ? 'flex' : 'none'
+  window.dispatchEvent(new Event('resize'))
+  if (!traceMode) traceReset()
+})
+
+async function startTraceRun(): Promise<void> {
+  consoleEl.textContent = 'tracing...'
+  traceReset()
+  const parsed = await invoke<{ tree: CTreeJSON; has_errors: boolean }>('parse_c', { src, lang: activeLang })
+  const result = interpretC(src, parsed.tree.root)
+  traceSteps = result.steps
+  if (traceSteps.length === 0) {
+    traceStepInfo.textContent = 'No steps captured'
+    consoleEl.textContent = 'trace: no execution steps'
+    return
+  }
+  consoleEl.textContent = `trace: ${traceSteps.length} steps`
+  traceShowStep(0)
+}
 
 // ------------------------------------------------------- stage panel + run
 const stageCanvas = document.getElementById('stage') as HTMLCanvasElement

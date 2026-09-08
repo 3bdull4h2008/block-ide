@@ -338,6 +338,10 @@
         <div class="header-actions">
           <span class="hint">Ctrl+Enter run · Ctrl+S save · Ctrl+F find · / filter blocks</span>
           <button id="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle light/dark theme">☾</button>
+          <label id="trace-toggle" title="Enable trace mode: step through code line-by-line" class="trace-toggle">
+            <input type="checkbox" id="trace-check" aria-label="Enable trace mode" />
+            <span>Trace</span>
+          </label>
           <button id="run" aria-label="Run program (Ctrl+Enter)">▶ Run</button>
           <span id="status" role="status" aria-live="polite"></span>
         </div>
@@ -369,6 +373,23 @@
         <div id="canvas-host"></div>
       </div>
       <div id="console-wrap" role="log" aria-label="Program output">
+        <div id="trace-panel" style="display:none">
+          <div id="trace-toolbar">
+            <span id="trace-step-info" class="trace-step-info">Ready</span>
+            <button id="trace-play" title="Play/Pause trace" aria-label="Play/Pause trace">▶</button>
+            <button id="trace-step" title="Step to next line (→)" aria-label="Step to next line">→</button>
+            <button id="trace-reset" title="Reset trace" aria-label="Reset trace">↺</button>
+            <label id="trace-speed" title="Auto-play speed">
+              <input type="range" id="trace-speed-slider" min="1" max="10" value="5" aria-label="Trace speed" />
+              <span id="trace-speed-label">5</span>
+            </label>
+          </div>
+          <div id="trace-vars-wrap">
+            <div id="trace-vars-header">Variables</div>
+            <div id="trace-vars"></div>
+          </div>
+          <pre id="trace-output" aria-live="polite"></pre>
+        </div>
         <div id="diag-bar">
           <button id="diag-toggle" title="toggle problem list" aria-expanded="false" aria-controls="diag-list">problems ▾</button>
           <span id="diag-count"></span>
