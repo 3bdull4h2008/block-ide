@@ -27,4 +27,10 @@ export function initDialogs(): void {
   shortcutsDialog.addEventListener('click', () => {
     shortcutsDialog.style.display = 'none'
   })
+
+  // Debug log clear button
+  document.getElementById('debug-clear')?.addEventListener('click', () => {
+    const content = document.getElementById('debug-log-content')
+    if (content) content.innerHTML = ''
+  })
 }

@@ -107,10 +107,10 @@ pub async fn list_c_files(root: String) -> Result<Vec<String>, String> {
     Ok(out)
 }
 
-/// C and the C++ subset pack share the workspace (.c/.cpp/.cc/.cxx + headers).
+/// All supported languages: C, C++, Python, JavaScript, Rust, Go, Java, TypeScript
 fn is_source_file(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    [".c", ".cpp", ".cc", ".cxx", ".hpp", ".hh"]
+    [".c", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".h", ".py", ".js", ".mjs", ".ts", ".tsx", ".rs", ".go", ".java"]
         .iter()
         .any(|ext| lower.ends_with(ext))
 }

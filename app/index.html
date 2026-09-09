@@ -445,6 +445,13 @@
       </div>
     </div>
     <div id="toasts" role="alert" aria-live="assertive"></div>
+    <div id="debug-log" style="display:none; position:fixed; bottom:0; right:0; width:400px; max-height:300px; background:rgba(0,0,0,0.9); color:#0f0; font-family:monospace; font-size:11px; padding:8px; overflow:auto; z-index:9999; border:1px solid #0f0; border-radius:4px 0 0 0;">
+      <div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom:1px solid #0f0; padding-bottom:4px;">
+        <strong>Debug Log</strong>
+        <button id="debug-clear" style="background:none; border:none; color:#0f0; cursor:pointer;">Clear</button>
+      </div>
+      <div id="debug-log-content"></div>
+    </div>
     <div id="shortcuts-dialog" role="dialog" aria-modal="true" style="display:none">
       <div id="shortcuts-card" onclick="event.stopPropagation()">
         <h3>Keyboard Shortcuts</h3>

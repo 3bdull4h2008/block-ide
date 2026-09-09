@@ -7,6 +7,32 @@ import { interpretC, type TraceStep } from './tracer'
 import { installPerfHooks } from './perf-audit'
 import { initExtensions } from './extensions'
 
+// Debug log overlay
+function debugLog(msg: string): void {
+  const el = document.getElementById('debug-log-content')
+  const overlay = document.getElementById('debug-log')
+  if (el && overlay) {
+    const line = document.createElement('div')
+    line.textContent = `${new Date().toLocaleTimeString()} ${msg}`
+    el.appendChild(line)
+    el.scrollTop = el.scrollHeight
+    overlay.style.display = 'block'
+  }
+  console.log(msg)
+}
+
+// Override console.log to also show in debug overlay
+const origLog = console.log.bind(console)
+console.log = (...args) => {
+  origLog(...args)
+  debugLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '))
+}
+const origError = console.error.bind(console)
+console.error = (...args) => {
+  origError(...args)
+  debugLog('ERROR: ' + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '))
+}
+
 // IPC observability (temporary diagnostics, RUN 43): count calls/pending per
 // command so hangs are attributable from the page itself.
 const ipcStats: Record<string, { calls: number; pending: number; errs: number }> = {}
@@ -669,9 +695,14 @@ const asRelInWorkspace = (abs: string): string | null => {
   return n.toLowerCase().startsWith(w) ? n.slice(w.length) : null
 }
 async function fsRead(p: string): Promise<string> {
-  return workspace !== null && !isWinPath(p)
-    ? invoke<string>('read_file', { root: workspace, rel: p })
-    : invoke<string>('read_abs', { path: p })
+  try {
+    return workspace !== null && !isWinPath(p)
+      ? await invoke<string>('read_file', { root: workspace, rel: p })
+      : await invoke<string>('read_abs', { path: p })
+  } catch (err) {
+    console.error('[fsRead] ERROR:', err)
+    throw err
+  }
 }
 async function fsWrite(p: string, c: string): Promise<void> {
   if (workspace !== null && !isWinPath(p)) {
@@ -683,8 +714,25 @@ async function fsWrite(p: string, c: string): Promise<void> {
 
 async function refreshFiles(): Promise<void> {
   if (!workspace) return
-  files = await invoke<string[]>('list_c_files', { root: workspace })
+  console.log('[refreshFiles] workspace:', workspace)
+  filesEl.innerHTML = '<div class="file-dir" style="color:var(--accent);">Loading...</div>'
+  try {
+    files = await invoke<string[]>('list_c_files', { root: workspace })
+    console.log('[refreshFiles] files:', files)
+  } catch (err) {
+    console.error('[refreshFiles] ERROR:', err)
+    files = []
+  }
   filesEl.innerHTML = ''
+
+  if (files.length === 0) {
+    const emptyEl = document.createElement('div')
+    emptyEl.className = 'file-dir'
+    emptyEl.style.cssText = 'color:var(--fg-dim);font-style:italic;padding:8px 14px;'
+    emptyEl.textContent = 'No source files found'
+    filesEl.appendChild(emptyEl)
+    return
+  }
 
   // Group files by directory for tree view
   const fileMap = new Map<string, string[]>()
@@ -710,10 +758,12 @@ async function refreshFiles(): Promise<void> {
       dirEl.textContent = dir
       filesEl.appendChild(dirEl)
     }
-for (const f of dirFiles) {
+    for (const f of dirFiles) {
       const el = document.createElement('div')
       el.className = 'file'
       el.textContent = f
+      el.dataset.path = f
+      if (activePath === f) el.classList.add('active')
       el.addEventListener('click', () => void guardedOpenTab(f))
       filesEl.appendChild(el)
     }
@@ -788,6 +838,8 @@ async function closeTab(path: string): Promise<void> {
   void render(src)
   markDirty()
   consoleEl.textContent = 'closed — New File or Open Folder to continue'
+  // Clear file explorer active highlight
+  filesEl.querySelectorAll('.file.active').forEach(el => el.classList.remove('active'))
 }
 
 /** Unsaved-changes gate for every navigation that would REPLACE the single
@@ -803,22 +855,34 @@ async function confirmDiscard(): Promise<boolean> {
 }
 
 async function guardedOpenTab(path: string): Promise<void> {
-  if (!(await confirmDiscard())) return
+  console.log('[guardedOpenTab] path:', path)
+  if (!(await confirmDiscard())) {
+    console.log('[guardedOpenTab] discard cancelled')
+    return
+  }
   await openTab(path)
 }
 
 async function openTab(rel: string): Promise<void> {
+  console.log('[openTab] rel:', rel, 'existing tabs:', Array.from(tabsEl.children).map(t => (t as HTMLElement).dataset.path))
   if (Array.from(tabsEl.children).some((t) => (t as HTMLElement).dataset.path === rel)) {
+    console.log('[openTab] tab exists, activating')
     activateTab(rel)
     return
   }
-  const content = fileCache.get(rel) ?? (await fsRead(rel))
-  createTab(rel, content)
-  if (workspace !== null && !isWinPath(rel)) pushRecent(workspace, rel)
-  else if (isWinPath(rel)) pushRecent(dirName(rel), baseName(rel))
+  try {
+    const content = fileCache.get(rel) ?? (await fsRead(rel))
+    createTab(rel, content)
+    if (workspace !== null && !isWinPath(rel)) pushRecent(workspace, rel)
+    else if (isWinPath(rel)) pushRecent(dirName(rel), baseName(rel))
+  } catch (err) {
+    console.error('[openTab] ERROR:', err)
+    toast(`Failed to open file: ${err}`, 'error')
+  }
 }
 
 function activateTab(rel: string): void {
+  console.log('[activateTab] rel:', rel, 'activePath:', activePath)
   if (activePath === rel) return
   hist.reset()
   caretAnchor = null // different buffer — old node ids are meaningless here
@@ -833,11 +897,17 @@ function activateTab(rel: string): void {
   void render(src)
   markDirty()
   setView(tabViews.get(rel) ?? 'split')
+  // Update file explorer active highlight
+  filesEl.querySelectorAll('.file.active').forEach(el => el.classList.remove('active'))
+  const activeFileEl = filesEl.querySelector(`.file[data-path="${rel}"]`)
+  if (activeFileEl) activeFileEl.classList.add('active')
 }
 
 document.getElementById('open-folder')?.addEventListener('click', async () => {
+  console.log('[open-folder] clicked')
   if (!(await confirmDiscard())) return
   const dir = await openDialog({ directory: true })
+  console.log('[open-folder] selected dir:', dir)
   if (typeof dir !== 'string') return
   workspace = dir
   tabsEl.innerHTML = ''
@@ -1068,6 +1138,10 @@ window.addEventListener('keydown', (e) => {
       void render(next)
       markDirty()
     }
+  } else if (e.key.toLowerCase() === 'd' && e.shiftKey) {
+    e.preventDefault()
+    const overlay = document.getElementById('debug-log') as HTMLDivElement
+    if (overlay) overlay.style.display = overlay.style.display === 'none' ? 'block' : 'none'
   }
 })
 

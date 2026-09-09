@@ -248,7 +248,8 @@ textarea:focus-visible,
 }
 
 #files {
-  max-height: 34%;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   border-bottom: var(--clay-border) solid var(--border);
   padding: 6px 0;
@@ -263,10 +264,19 @@ textarea:focus-visible,
   border-radius: 8px;
   margin: 0 6px;
   transition: background var(--press);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .file:hover {
   background: var(--accent-soft);
+}
+
+.file.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .file-dir {
@@ -278,12 +288,16 @@ textarea:focus-visible,
   letter-spacing: 0.5px;
   border-bottom: 1px solid var(--border);
   margin-top: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 #palette {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 10px;
-  flex: 1;
 }
 
 .pal {
