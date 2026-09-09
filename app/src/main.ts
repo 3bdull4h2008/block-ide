@@ -1,10 +1,11 @@
-import { Application, Container, Graphics, Text } from 'pixi.js'
+import { Application, Container } from 'pixi.js'
 import { invoke as tauriInvoke } from '@tauri-apps/api/core'
 import { EditorView } from '@codemirror/view'
 import { createCodeMirrorEditor, type CadeEditor } from './editor'
-import { blip, blipError, blipSuccess, blipDrop, blipSlot } from './utils/audio'
-import { WHITE_LABEL, DARK_LABEL } from './utils/styles'
+import { blip, blipError, blipSuccess } from './utils/audio'
 import { interpretC, type TraceStep } from './tracer'
+import { installPerfHooks } from './perf-audit'
+import { initExtensions } from './extensions'
 
 // IPC observability (temporary diagnostics, RUN 43): count calls/pending per
 // command so hangs are attributable from the page itself.
@@ -34,54 +35,38 @@ function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
 }
 import { open as openDialog, save as saveDialog, ask } from '@tauri-apps/plugin-dialog'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { LogicalSize, LogicalPosition } from '@tauri-apps/api/dpi'
 import {
   buildBlocks,
   harvestVars,
   layoutStack,
-  findDropTarget,
   hitTestHeader,
   flatten,
-  COLORS,
-  BORDER,
-  PAD,
-  ROW_H,
-  INDENT,
-  TD,
-  measure,
-  partWidth,
   type BBlock,
-  type BlockPart,
-  type Cat,
   type CNodeJSON,
   type CTreeJSON,
 } from './blocks'
 import { History } from './history'
-import { spliceInsert, spliceMove, applyEdit, insertTopLevel } from './ops'
+import { applyEdit } from './ops'
 import { pickAnchor, caretOffset, type CaretAnchor } from './caret'
+import { type ViewMode, type Diag, type SlotHit } from './types'
+import { initPanZoom } from './pan-zoom'
+import { initExitAlert } from './exit-alert'
+import { initKeybindings } from './keybindings'
+import { initFileDrop } from './file-drop'
+import { initStageRun } from './stage-run'
+import { renderPaletteFull } from './palette-render'
+import { renderDiagList as renderDiagListMod, refreshDiags as refreshDiagsMod, getLastDiags } from './diagnostics'
+import { scheduleAutoSave as scheduleAutoSaveImpl, recoverSession as recoverSessionImpl } from './autosave'
+import { startHtmlDrag as startHtmlDragImpl, type DragPayload } from './drag-drop'
+import { initDebugHooks } from './debug-hooks'
+import { drawBlock as drawBlockImpl } from './block-draw'
+import { initSlotEditor, commitSlotValue as commitSlotValueFn, slotAt as slotAtFn, openSlotEditor as openSlotEditorImpl } from './inline-slot-editor'
+import { initKbdPalette, applyPalFilter } from './kbd-palette'
+import { initAcademy, renderPaletteLocks, getAppMode, getProfile, setMode } from './academy'
 import {
-  PALETTE_GROUPS,
-  VARIABLES_COLOR,
-  validateSlotValue,
   validateVarName,
   type SourceLang,
-  reporterFits,
-  varChips,
-  varTypes,
-  listChips,
-  type PaletteItem,
 } from './palette'
-import {
-  nextMastery,
-  masteryDue,
-  masteryNextIn,
-  previousLevel,
-  updateStreak,
-  checkBadges,
-  BADGES,
-  type StreakState,
-  type MasteryState,
-} from './academy-extras'
 import { registerCommands, togglePalette } from './palette-cmd'
 import './style.css'
 import { registerContextMenuProvider, initContextMenu } from './context-menu'
@@ -94,81 +79,16 @@ import {
   baseName,
   dirName,
   normSlashes,
-  trimmedEndsWithOpener,
   esc,
-  keyToCode,
-  isTextEntryTarget,
   readJsonStore,
   writeJsonStore,
   readSetting,
-  writeSetting,
 } from './utils/pure'
-import {
-  mixWhite,
-  statementPath,
-  cHeaderPath,
-  cBodyPath,
-  catColor,
-  isInsideRange,
-} from './utils/drawing'
-
-interface DragPayload {
-  label: string
-  snippet?: string
-  cat?: string
-  move?: { start: number; end: number }
-  /** reporter expression: dropped INTO a socket, not onto the canvas */
-  slotValue?: string
-  /** which socket shape the reporter fits (Scratch round vs hex) */
-  slotKind?: 'round' | 'bool'
-  /** always splices at file scope (function definitions) */
-  toplevel?: boolean
-  /** splice at the very top of the file (#include chips) */
-  insertTop?: boolean
-}
-
-const SAMPLE = `#include <stdio.h>
-
-int main(void) {
-    printf("hello\\n");
-    int total = 0;
-    for (int i = 0; i < 5; i++) {
-        total = total + i;
-    }
-    return 0;
-}
-`
-
-const NEW_TEMPLATE = `#include <stdio.h>
-
-int main(void) {
-    printf("hi\\n");
-    return 0;
-}
-`
-
-/** C++ mirror of SAMPLE — same statement shape (total/for/return) so the
- *  scripted gate assertions hold for either launch language. */
-const CPP_SAMPLE = `#include <iostream>
-
-int main() {
-    std::cout << "hello\\n";
-    int total = 0;
-    for (int i = 0; i < 5; i++) {
-        total = total + i;
-    }
-    std::cout << total << "\\n";
-    return 0;
-}
-`
-
-const CPP_TEMPLATE = `#include <iostream>
-
-int main() {
-    std::cout << "hi\\n";
-    return 0;
-}
-`
+import { SAMPLES, NEW_TEMPLATES } from './lang-data'
+import { startTour, tourHooks } from './tour'
+import { restoreWindowState, debouncedSaveState } from './window-state'
+import { wireSplash, type RecentEntry } from './splash'
+import { initEditorKeys } from './editor-keys'
 
 const srcEl = document.getElementById('src') as HTMLTextAreaElement
 const statusEl = document.getElementById('status') as HTMLSpanElement
@@ -209,16 +129,6 @@ const overlay = new Container()
 app.stage.addChild(overlay)
 const snapLayer = new Container()
 
-interface Diag {
-  line: number
-  col: number
-  severity: string
-  message: string
-  offset: number
-  node_id: number
-  node_kind: string
-}
-
 const dropbar = document.createElement('div')
 dropbar.id = 'dropbar'
 document.body.appendChild(dropbar)
@@ -234,122 +144,35 @@ document.body.appendChild(ghost)
 // Toast notification system — standard desktop app feedback
 import { toast } from './ui/toasts'
 
+const fileCache = new Map<string, string>()
+const savedCache = new Map<string, string>()
+let files: string[] = []
 let workspace: string | null = null
 /** Buffer content as last LOADED or explicitly SAVED — the dirty baseline
  *  for title dots, discard guards, and the close-time checkpoint. */
 let savedSnapshot = ''
 let activePath: string | null = null
-const savedCache = new Map<string, string>()
 
-// ---- Auto-save: debounced persist to localStorage every 2s ----
-let autoSaveTimer = 0
-function scheduleAutoSave(): void {
-  clearTimeout(autoSaveTimer)
-  autoSaveTimer = window.setTimeout(() => {
-    if (activePath !== null && src !== savedSnapshot) {
-      localStorage.setItem(`blockide-autosave:${activePath}`, JSON.stringify({
-        src, lang: activeLang, ts: Date.now()
-      }))
-    } else if (activePath === null && src.trim().length > 0 && src !== SAMPLES[activeLang]) {
-      localStorage.setItem('blockide-autosave:scratch', JSON.stringify({
-        src, lang: activeLang, ts: Date.now()
-      }))
-    }
-  }, 2000)
+// ---- Auto-save: debounced persist to localStorage every 2s (extracted to autosave.ts) ----
+const autosaveDeps = {
+  activePath: () => activePath,
+  src: () => src,
+  setSrc: (s: string) => setSrc(s),
+  activeLang: () => activeLang,
+  setActiveLang: (l: SourceLang) => { activeLang = l },
+  srcEl,
+  get editor() { return editor },
+  render: (s: string) => render(s),
+  markDirty,
 }
+function scheduleAutoSave(): void { scheduleAutoSaveImpl(autosaveDeps) }
+function recoverSession(): void { recoverSessionImpl(autosaveDeps) }
 
-function recoverSession(): void {
-  if (activePath !== null) {
-    const saved = localStorage.getItem(`blockide-autosave:${activePath}`)
-    if (saved) {
-      try {
-        const { src: savedSrc, ts } = JSON.parse(saved)
-        if (savedSrc && savedSrc !== src) {
-          toast(`Recovered unsaved changes from ${new Date(ts).toLocaleTimeString()}`, 'info', 5000)
-          src = savedSrc
-          srcEl.value = src
-          editor?.setSource(src)
-          void render(src)
-          markDirty()
-        }
-      } catch { /* corrupt autosave — ignore */ }
-    }
-  }
-  const scratchSaved = localStorage.getItem('blockide-autosave:scratch')
-  if (scratchSaved && activePath === null) {
-    try {
-      const { src: savedSrc, lang: savedLang, ts } = JSON.parse(scratchSaved) as { src: string; lang: Lang; ts: number }
-      if (savedSrc && savedSrc !== SAMPLES[savedLang]) {
-        toast(`Recovered unsaved scratch buffer from ${new Date(ts).toLocaleTimeString()}`, 'info', 5000)
-        src = savedSrc
-        activeLang = savedLang
-        editor?.setLang(activeLang)
-        srcEl.value = src
-        editor?.setSource(src)
-        void render(src)
-        markDirty()
-      }
-    } catch { /* corrupt autosave — ignore */ }
-  }
-}
-const fileCache = new Map<string, string>()
-let files: string[] = []
-
-// ---- Exit alert: intercept window close and show confirmation ----
-function hasUnsavedChanges(): boolean {
-  return (
-    (activePath !== null && src !== savedSnapshot) ||
-    (activePath === null && src.trim().length > 0 && src !== SAMPLES[activeLang])
-  )
-}
-
-function showExitDialog(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const el = document.getElementById('exit-confirm') as HTMLDivElement
-    el.style.display = 'flex'
-    const cancel = document.getElementById('exit-cancel') as HTMLButtonElement
-    const quit = document.getElementById('exit-quit') as HTMLButtonElement
-    const close = (val: boolean) => {
-      el.style.display = 'none'
-      cancel.removeEventListener('click', onCancel)
-      quit.removeEventListener('click', onQuit)
-      el.removeEventListener('click', onOverlay)
-      resolve(val)
-    }
-    const onCancel = () => close(false)
-    const onQuit = () => close(true)
-    const onOverlay = (e: MouseEvent) => { if (e.target === el) close(false) }
-    cancel.addEventListener('click', onCancel)
-    quit.addEventListener('click', onQuit)
-    el.addEventListener('click', onOverlay)
-  })
-}
-
-// Use Tauri's closeRequested event — fires when user clicks X or Alt+F4
-let exitHandled = false
-getCurrentWindow().onCloseRequested(async (event) => {
-  if (exitHandled) return
-  if (hasUnsavedChanges()) {
-    event.preventDefault()
-    exitHandled = true
-    const shouldClose = await showExitDialog()
-    if (shouldClose) {
-      await saveWindowState()
-      await getCurrentWindow().destroy()
-    } else {
-      exitHandled = false
-    }
-  } else {
-    await saveWindowState()
-  }
-})
-
-// Also handle beforeunload for web/dev mode
-window.addEventListener('beforeunload', (e) => {
-  if (hasUnsavedChanges()) {
-    e.preventDefault()
-    e.returnValue = ''
-  }
+initExitAlert({
+  src: () => src,
+  activePath: () => activePath,
+  savedSnapshot: () => savedSnapshot,
+  activeLang: () => activeLang,
 })
 
 // Multi-language packs (D11): language rides with the FILE
@@ -367,115 +190,7 @@ function applySettings(): void {
 }
 let activeLang: Lang = 'c'
 
-const SAMPLES: Record<Lang, string> = {
-  c: SAMPLE,
-  cpp: CPP_SAMPLE,
-  python: `print("hello")
-
-total = 0
-for i in range(5):
-    total = total + i
-
-print(total)
-`,
-  javascript: `let total = 0;
-
-for (let i = 0; i < 5; i++) {
-    total = total + i;
-}
-
-console.log("hello");
-console.log(total);
-`,
-  rust: `fn main() {
-    let mut total = 0;
-
-    for i in 0..5 {
-        total = total + i;
-    }
-
-    println!("hello");
-    println!("{}", total);
-}
-`,
-  go: `package main
-
-import "fmt"
-
-func main() {
-    total := 0
-    for i := 0; i < 5; i++ {
-        total = total + i
-    }
-
-    fmt.Println("hello")
-    fmt.Println(total)
-}
-`,
-  java: `public class Main {
-    public static void main(String[] args) {
-        int total = 0;
-        for (int i = 0; i < 5; i++) {
-            total = total + i;
-        }
-        System.out.println("hello");
-        System.out.println(total);
-    }
-}
-`,
-  typescript: `let total = 0;
-
-for (let i = 0; i < 5; i++) {
-    total = total + i;
-}
-
-console.log("hello");
-console.log(total);
-`,
-}
-
-const NEW_TEMPLATES: Record<Lang, string> = {
-  c: NEW_TEMPLATE,
-  cpp: CPP_TEMPLATE,
-  python: `def main():
-    print("hi")
-
-
-main()
-`,
-  javascript: `function main() {
-    console.log("hi");
-}
-
-main();
-`,
-  rust: `fn main() {
-    println!("hi");
-}
-`,
-  go: `package main
-
-import "fmt"
-
-func main() {
-    fmt.Println("hi")
-}
-`,
-  java: `public class Main {
-    public static void main(String[] args) {
-        System.out.println("hi");
-    }
-}
-`,
-  typescript: `function main() {
-    console.log("hi");
-}
-
-main();
-`,
-}
-
-let src = SAMPLE
+let src = SAMPLES[activeLang]
 let roots: BBlock[] = []
 const hist = new History()
 
@@ -485,15 +200,6 @@ let traceSteps: TraceStep[] = []
 let traceIdx = -1
 let tracePlayTimer: ReturnType<typeof setInterval> | null = null
 
-/** Editable slot hit-boxes in world coords, rebuilt on every render. */
-interface SlotHit {
-  block: BBlock
-  part: BlockPart
-  x: number
-  y: number
-  w: number
-  h: number
-}
 let slotHits: SlotHit[] = []
 
 function markDirty(): void {
@@ -510,11 +216,6 @@ function updateTabsHeight(): void {
   const mainCol = document.getElementById('main-col')
   if (mainCol) mainCol.style.setProperty('--tabs-h', `${tabsEl.offsetHeight}px`)
 }
-
-// Context-aware instructions (Blockly's proven rule: a popup only closes
-// when the learner actually PERFORMS the action). The tour registers an
-// advance hook; real user actions fire events — never timers.
-const tourHooks: { advance?: (ev: 'edit' | 'run' | 'check') => void } = {}
 
 let srcSetting = false // guard: prevents input listener from double-counting undo
 function setSrc(next: string, kind: 'op' | 'type' = 'op'): Promise<void> {
@@ -624,487 +325,49 @@ async function canonicalize(): Promise<void> {
   void refreshDiags()
 }
 
-function drawDiagOverlay(ds: Diag[]): void {
-  overlay.removeChildren()
-  if (ds.length === 0 || roots.length === 0) return
-  const all = flatten(roots)
-  const g = new Graphics()
-  for (const d of ds) {
-    const candidates = all.filter(
-      (b) =>
-        (b.start <= d.offset && d.offset < b.end) ||
-        (b.start === d.offset && b.end === d.offset),
-    )
-    if (candidates.length === 0) continue
-    const smallest = candidates.reduce((a, b) => (a.w * a.h <= b.w * b.h ? a : b))
-    g.roundRect(
-      smallest.x - 2,
-      smallest.y - 2,
-      smallest.w + 4,
-      Math.min(ROW_H, smallest.h) + 4,
-      8,
-    )
-    g.stroke({ width: 2.5, color: d.severity.includes('error') ? 0xe5484d : 0xffc93c })
-  }
-  overlay.addChild(g)
-}
-
 // ------------------------------------------------ diagnostics panel (#10)
-let lastDiags: Diag[] = []
-
 function renderDiagList(ds: Diag[]): void {
-  lastDiags = ds
-  const list = document.getElementById('diag-list') as HTMLDivElement
-  const count = document.getElementById('diag-count') as HTMLSpanElement
-  const errs = ds.filter((d) => d.severity.includes('error')).length
-  count.textContent = ds.length === 0 ? 'no problems' : `${ds.length} (${errs} errors)`
-  if (list.style.display === 'none') return
-  list.innerHTML = ''
-  for (const d of ds) {
-    const b = document.createElement('button')
-    b.className = `diag-row ${d.severity.includes('error') ? 'err' : 'warn'}`
-    const sev = document.createElement('span')
-    sev.className = 'diag-sev'
-    sev.textContent = d.severity.includes('error') ? '✖' : '▲'
-    const loc = document.createElement('span')
-    loc.className = 'diag-loc'
-    loc.textContent = `L${d.line}:${d.col}`
-    b.append(sev, loc, document.createTextNode(d.message))
-    b.addEventListener('click', () => jumpToOffset(d.offset))
-    list.appendChild(b)
-  }
-}
-
-/** Jump the editor to a byte offset: split view, focused, scrolled. */
-function jumpToOffset(offset: number): void {
-  setView('split')
-  requestAnimationFrame(() => {
-    srcEl.focus({ preventScroll: true })
-    const lineEnd = src.indexOf('\n', offset)
-    srcEl.setSelectionRange(offset, lineEnd === -1 ? Math.min(src.length, offset + 80) : lineEnd)
-    const line = src.slice(0, offset).split('\n').length - 1
-    const lh = parseFloat(getComputedStyle(srcEl).lineHeight || '19') || 19
-    srcEl.scrollTop = Math.max(0, line * lh - srcEl.clientHeight / 2)
-  })
+  renderDiagListMod({ roots: () => roots, overlay, src: () => src, srcEl, activeLang: () => activeLang, setView, invoke }, ds)
 }
 
 async function refreshDiags(): Promise<void> {
-  try {
-    const ds = await invoke<Diag[]>('diag_c', { src, lang: activeLang })
-    drawDiagOverlay(ds)
-    // problems live in their own scannable panel now — the console keeps
-    // PROGRAM OUTPUT only (run results were being clobbered before)
-    renderDiagList(ds)
-  } catch {
-    /* diagnostics are best-effort */
-  }
+  await refreshDiagsMod({ roots: () => roots, overlay, src: () => src, srcEl, activeLang: () => activeLang, setView, invoke })
 }
 
+const blockDrawDeps = {
+  world,
+  slotHits,
+  attachHeaderEvents,
+  onSlotHit: () => {},
+}
 function drawBlock(b: BBlock): void {
-  const g = new Graphics()
-  const fill = COLORS[b.cat] ?? COLORS.statement
-  const edge = BORDER[b.cat] ?? BORDER.statement
-  if (b.sticky) {    g.roundRect(b.x, b.y, b.w, b.h, 8)
-    g.fill({ color: fill })
-    g.roundRect(b.x, b.y, b.w, b.h, 8)
-    g.stroke({ width: 3, color: edge })
-    const t = new Text({
-      text: b.label,
-      style: {
-        fontFamily: "'Baloo 2', 'Segoe UI', sans-serif",
-        fontSize: 13,
-        fontWeight: '600',
-        fill: '#6b4d00',
-      },
-    })
-    t.x = b.x + PAD
-    t.y = b.y + (ROW_H - t.height) / 2
-    t.eventMode = 'static'
-    attachHeaderEvents(t, b)
-    world.addChild(g, t)
-    return
-  }
-  // clay drop shadow (silhouette approximation, offset down-right)
-  g.roundRect(b.x + 2, b.y + 4, b.w, b.h + TD, b.container ? 12 : 9)
-  g.fill({ color: 0x0c3543, alpha: 0.18 })
-
-  if (b.container) {
-    // Scratch C-block: mouth header + light body + tabbed floor
-    cBodyPath(g, b.x, b.y, b.w, ROW_H, b.h, true)
-    g.fill({ color: mixWhite(fill, 0.62) })
-    cHeaderPath(g, b.x, b.y, b.w, ROW_H)
-    g.fill({ color: fill })
-    g.roundRect(b.x + 3, b.y + 3, Math.max(0, b.w - 6), 3, 2)
-    g.fill({ color: 0xffffff, alpha: 0.4 })
-    cHeaderPath(g, b.x, b.y, b.w, ROW_H)
-    g.stroke({ width: 3, color: edge })
-    cBodyPath(g, b.x, b.y, b.w, ROW_H, b.h, false)
-    g.stroke({ width: 3, color: edge })
-  } else {
-    statementPath(g, b.x, b.y, b.w, b.h)
-    g.fill({ color: fill })
-    g.roundRect(b.x + 3, b.y + 3, Math.max(0, b.w - 6), 3, 2)
-    g.fill({ color: 0xffffff, alpha: 0.35 })
-    statementPath(g, b.x, b.y, b.w, b.h)
-    g.stroke({ width: 3, color: edge })
-  }
-  // header content: literal text chunks + typed input slots (Scratch fields)
-  const header: (Text | Graphics)[] = []
-  if (b.parts.length === 0) {
-    const t = new Text({ text: b.label || b.nodeKind, style: WHITE_LABEL })
-    t.x = b.x + PAD
-    t.y = b.y + (ROW_H - t.height) / 2
-    header.push(t)
-  } else {
-    let cx = b.x + PAD + 5 // clear the category notch
-    for (const p of b.parts) {
-      const w = partWidth(p)
-      if (p.type === 'text') {
-        const t = new Text({ text: p.text, style: WHITE_LABEL })
-        t.x = cx
-        t.y = b.y + (ROW_H - t.height) / 2
-        header.push(t)
-      } else if (p.type === 'bool') {
-        // Scratch boolean socket: hexagonal, pointed ends
-        const w = partWidth(p)
-        const y0 = b.y + 6
-        const h = ROW_H - 12
-        const pt = 9
-        const box = new Graphics()
-        box.moveTo(cx + pt, y0)
-        box.lineTo(cx + w - pt, y0)
-        box.lineTo(cx + w, y0 + h / 2)
-        box.lineTo(cx + w - pt, y0 + h)
-        box.lineTo(cx + pt, y0 + h)
-        box.lineTo(cx, y0 + h / 2)
-        box.closePath()
-        box.fill({ color: 0xf6fbff })
-        box.moveTo(cx + pt, y0)
-        box.lineTo(cx + w - pt, y0)
-        box.lineTo(cx + w, y0 + h / 2)
-        box.lineTo(cx + w - pt, y0 + h)
-        box.lineTo(cx + pt, y0 + h)
-        box.lineTo(cx, y0 + h / 2)
-        box.closePath()
-        box.stroke({ width: 2, color: edge, alpha: 0.5 })
-        const t = new Text({ text: p.text, style: DARK_LABEL })
-        t.x = cx + (w - t.width) / 2
-        t.y = b.y + (ROW_H - t.height) / 2
-        header.push(box, t)
-        slotHits.push({ block: b, part: p, x: cx, y: y0, w, h })
-      } else {
-        const box = new Graphics()
-        box.roundRect(cx, b.y + 6, w, ROW_H - 12, 7)
-        box.fill({ color: 0xf6fbff })
-        box.roundRect(cx, b.y + 6, w, ROW_H - 12, 7)
-        box.stroke({ width: 2, color: edge, alpha: 0.5 })
-        const t = new Text({ text: p.text, style: DARK_LABEL })
-        t.x = cx + (w - t.width) / 2
-        t.y = b.y + (ROW_H - t.height) / 2
-        header.push(box, t)
-        slotHits.push({ block: b, part: p, x: cx, y: b.y + 6, w, h: ROW_H - 12 })
-      }
-      cx += w + 7
-    }
-  }
-
-  // category notch sits on the header row
-  g.roundRect(b.x + 5, b.y + 5, 5, Math.min(ROW_H - 10, b.h - 10), 2)
-  g.fill({ color: 0x000000, alpha: 0.22 })
-  world.addChild(g, ...header)
-  g.eventMode = 'static'
-  attachHeaderEvents(g, b)
-  for (const c of b.children) drawBlock(c)
+  drawBlockImpl(blockDrawDeps, b)
 }
 
 function screenToWorld(ox: number, oy: number): { x: number; y: number } {
   return { x: (ox - world.x) / world.scale.x, y: (oy - world.y) / world.scale.y }
 }
 
-let drag: DragPayload | null = null
-
+// ---- Drag-and-drop (extracted to drag-drop.ts) ----
+const dragDropDeps = {
+  hostEl,
+  world,
+  snapLayer,
+  ghost,
+  dropbar,
+  consoleEl,
+  screenToWorld,
+  slotHits: () => slotHits,
+  roots: () => roots,
+  src: () => src,
+  setSrc: (s: string) => setSrc(s),
+  canonicalize: () => canonicalize(),
+  activeLang: () => activeLang,
+  commitSlotValue,
+  tourHooks,
+}
 function startHtmlDrag(e: PointerEvent, payload: DragPayload): void {
-  drag = payload
-  ghost.innerHTML = ''
-  const fill = catColor(payload.cat)
-  const w = Math.max(90, measure(payload.label))
-  const h = Math.max(ROW_H, 34)
-  const g = new Graphics()
-  // Shadow
-  g.roundRect(2, 4, w, h + TD, 9)
-  g.fill({ color: 0x0c3543, alpha: 0.18 })
-  // Block shape
-  statementPath(g, 0, 0, w, h)
-  g.fill({ color: fill })
-  // Highlight strip
-  g.roundRect(3, 3, Math.max(0, w - 6), 3, 2)
-  g.fill({ color: 0xffffff, alpha: 0.35 })
-  // Border
-  statementPath(g, 0, 0, w, h)
-  g.stroke({ width: 3, color: BORDER[(payload.cat as Cat) ?? 'statement'] ?? BORDER.statement })
-  const t = new Text({
-    text: payload.label,
-    style: WHITE_LABEL,
-  })
-  t.x = PAD
-  t.y = (ROW_H - 13) / 2
-  const container = new Container()
-  container.addChild(g)
-  container.addChild(t)
-  container.x = 0
-  container.y = 0
-  snapLayer.addChild(container)
-  ghost.innerHTML = ''
-  ghost.style.display = 'block'
-  ghost.style.left = `${e.clientX + 12}px`
-  ghost.style.top = `${e.clientY - 14}px`
-  ghost.style.opacity = '0.5'
-  blip(520, 0.05, 'triangle', 0.05)
-  window.addEventListener('pointermove', onDragMove)
-  window.addEventListener('pointerup', onDragEnd, { once: true })
-}
-
-function clearSnapGhost(): void {
-  snapLayer.removeChildren()
-}
-
-function drawSnapGhost(
-  gx: number,
-  gy: number,
-  w: number,
-  h: number,
-  cat: string | undefined,
-  label: string,
-): void {
-  const fill = catColor(cat)
-  const hh = Math.max(ROW_H, h)
-  const g = new Graphics()
-  // Shadow
-  g.roundRect(gx + 2, gy + 4, w, hh + TD, 9)
-  g.fill({ color: 0x0c3543, alpha: 0.18 })
-  // Block shape
-  statementPath(g, gx, gy, w, hh)
-  g.fill({ color: fill, alpha: 0.45 })
-  // Highlight strip
-  g.roundRect(gx + 3, gy + 3, Math.max(0, w - 6), 3, 2)
-  g.fill({ color: 0xffffff, alpha: 0.25 })
-  // Border
-  statementPath(g, gx, gy, w, hh)
-  g.stroke({ width: 3, color: fill, alpha: 0.6 })
-  const t = new Text({
-    text: label,
-    style: WHITE_LABEL,
-  })
-  t.alpha = 0.55
-  t.x = gx + PAD
-  t.y = gy + (ROW_H - t.height) / 2
-  snapLayer.addChild(g, t)
-}
-
-function slotUnderWorldPoint(wx: number, wy: number): SlotHit | null {
-  for (const s of slotHits) {
-    if (wx >= s.x && wx <= s.x + s.w && wy >= s.y && wy <= s.y + s.h) return s
-  }
-  return null
-}
-
-/** Nearest compatible socket on the block under the point — forgiving drop
- *  target: kids drop a variable ON the block, not pixel-perfect on a socket. */
-function nearestCompatibleSlot(
-  wx: number,
-  wy: number,
-  kind: 'round' | 'bool' | undefined,
-): SlotHit | null {
-  const blk = hitTestHeader(roots, wx, wy) ?? null
-  if (!blk) return null
-  let best: SlotHit | null = null
-  let bestD = Infinity
-  for (const s of slotHits) {
-    if (s.block.id !== blk.id || !reporterFits(kind, s.part.type)) continue
-    const d = (s.x + s.w / 2 - wx) ** 2 + (s.y + s.h / 2 - wy) ** 2
-    if (d < bestD) {
-      bestD = d
-      best = s
-    }
-  }
-  return best
-}
-
-function onDragMove(e: PointerEvent): void {
-  ghost.style.left = `${e.clientX + 12}px`
-  ghost.style.top = `${e.clientY - 14}px`
-  const r = hostEl.getBoundingClientRect()
-  const inside =
-    e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom
-  if (inside && drag) {
-    const w = screenToWorld(e.clientX - r.left, e.clientY - r.top)
-
-    // reporter chips: highlight the matching-shape socket they would fill
-    // (Scratch: round reporters fit round sockets, hex fits hex)
-    if (drag.slotValue) {
-      const s = slotUnderWorldPoint(w.x, w.y) ?? nearestCompatibleSlot(w.x, w.y, drag.slotKind)
-      clearSnapGhost()
-      dropbar.style.display = 'none'
-      if (s && reporterFits(drag.slotKind, s.part.type)) {
-        const g = new Graphics()
-        const hex = s.part.type === 'bool'
-        const hl = (x: number, y: number, ww: number, hh: number): void => {
-          if (!hex) {
-            g.roundRect(x, y, ww, hh, 9)
-            return
-          }
-          const pt = 9
-          g.moveTo(x + pt, y)
-          g.lineTo(x + ww - pt, y)
-          g.lineTo(x + ww, y + hh / 2)
-          g.lineTo(x + ww - pt, y + hh)
-          g.lineTo(x + pt, y + hh)
-          g.lineTo(x, y + hh / 2)
-          g.closePath()
-        }
-        g.moveTo(0, 0) // no-op keeps Graphics sane before first path
-        hl(s.x - 3, s.y - 3, s.w + 6, s.h + 6)
-        g.fill({ color: 0xff8c1a, alpha: 0.25 })
-        hl(s.x - 3, s.y - 3, s.w + 6, s.h + 6)
-        g.stroke({ width: 3, color: 0xff8c1a })
-        snapLayer.addChild(g)
-        ghost.style.opacity = '1'
-        return
-      }
-      ghost.style.opacity = '0.5'
-      return
-    }
-
-    const target = findDropTarget(roots, w.x, w.y)
-    if (target && !(drag.move && isInsideRange(target.container, drag.move))) {
-      const kids = target.container.children
-      const y =
-        target.index < kids.length
-          ? kids[target.index].y
-          : kids.length > 0
-            ? kids[kids.length - 1].y + kids[kids.length - 1].h + TD
-            : target.container.y + ROW_H
-      const rr = hostEl.getBoundingClientRect()
-      dropbar.style.display = 'block'
-      dropbar.style.left = `${rr.left + (target.container.x + 4) * world.scale.x + world.x}px`
-      dropbar.style.top = `${rr.top + (y - 3) * world.scale.y + world.y}px`
-      dropbar.style.width = `${Math.max(0, (target.container.w - 8) * world.scale.x)}px`
-
-      // translucent snap preview at the exact insertion slot
-      clearSnapGhost()
-      const d = drag
-      let bw: number
-      let bh: number
-      let cat: string | undefined
-      if (d.move) {
-        const src = flatten(roots).find(
-          (b) => b.start === d.move!.start && b.end === d.move!.end,
-        )
-        bw = src?.w ?? 120
-        bh = src?.h ?? ROW_H
-        cat = src?.cat
-      } else {
-        bw = Math.max(90, measure(d.label))
-        bh = ROW_H
-        cat = d.cat
-      }
-      drawSnapGhost(
-        target.container.x + INDENT,
-        y,
-        bw,
-        bh,
-        cat ?? (drag.move ? undefined : 'statement'),
-        drag.label,
-      )
-      return
-    }
-  }
-  dropbar.style.display = 'none'
-  clearSnapGhost()
-}
-
-async function onDragEnd(e: PointerEvent): Promise<void> {
-  window.removeEventListener('pointermove', onDragMove)
-  ghost.style.display = 'none'
-  ghost.style.opacity = '1'
-  dropbar.style.display = 'none'
-  clearSnapGhost()
-  const d = drag
-  drag = null
-  if (!d) return
-  const r = hostEl.getBoundingClientRect()
-  const inside =
-    e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom
-  if (!inside) return
-  const w = screenToWorld(e.clientX - r.left, e.clientY - r.top)
-
-  // reporter chips -> shape-checked socket fill
-  if (d.slotValue) {
-    const s = slotUnderWorldPoint(w.x, w.y) ?? nearestCompatibleSlot(w.x, w.y, d.slotKind)
-    if (!s) return
-    if (!reporterFits(d.slotKind, s.part.type)) {
-      blipError()
-      consoleEl.textContent = `that block fits a ${
-        d.slotKind === 'bool' ? 'hex condition' : 'round'
-      } socket — wrong shape here`
-      return
-    }
-    const err = commitSlotValue(s, d.slotValue)
-    if (err !== null) {
-      blipError()
-      consoleEl.textContent = err
-    }
-    return
-  }
-
-  // function definitions splice at FILE SCOPE (never nested in C)
-  if (d.toplevel) {
-    setSrc(insertTopLevel(src, roots, d.snippet ?? ''))
-    void canonicalize()
-    tourHooks.advance?.('edit')
-    blipSuccess()
-    return
-  }
-
-  // includes splice at the VERY TOP of the file
-  if (d.insertTop) {
-    setSrc(`${d.snippet ?? ''}\n${src}`)
-    void canonicalize()
-    tourHooks.advance?.('edit')
-    blipSuccess()
-    return
-  }
-
-  let target = findDropTarget(roots, w.x, w.y)
-  if (!target) {
-    // Grid is empty or no container found - create a virtual root target at the top
-    const virtualRoot = roots.find(r => r.container && r.children.length === 0) || roots[0]
-    if (virtualRoot) {
-      target = { container: virtualRoot, index: 0, offset: virtualRoot.start + 1 }
-    } else {
-      // No blocks at all - insert at the beginning of the file
-      setSrc(d.snippet ?? '')
-      void canonicalize()
-      tourHooks.advance?.('edit')
-      blipSuccess()
-      return
-    }
-  }
-  if (d.move && isInsideRange(target.container, d.move)) return
-
-  const text = src
-  let next: string | null
-  const needsIndent = activeLang === 'python' && !d.move
-  if (d.move) {
-    next = spliceMove(text, d.move, target.offset)
-  } else {
-    next = spliceInsert(text, target.offset, d.snippet ?? '', needsIndent)
-  }
-  if (next === null) return
-  blipDrop()
-  setSrc(next)
-  void canonicalize()
-  tourHooks.advance?.('edit')
+  startHtmlDragImpl(dragDropDeps, e, payload)
 }
 
 function attachHeaderEvents(
@@ -1128,84 +391,31 @@ function attachHeaderEvents(
 }
 
 // ----------------------------------------------------- inline slot editor
-// Scratch-style: click a typed field inside a block, type a replacement,
-// Enter/blur commits through the same text-splice seam as every other edit.
-// Socket rules live in palette.ts (reporters fit any round socket).
-function commitSlotValue(s: SlotHit, raw: string): string | null {
-  const final = validateSlotValue(s.part.type, raw)
-  if (final === null) {
-    return `${s.part.type} slot rejects ${JSON.stringify(raw)}`
-  }
-  if (final === s.part.text) return null
-  setSrc(src.slice(0, s.part.start) + final + src.slice(s.part.end))
-  void canonicalize()
-  tourHooks.advance?.('edit')
-  blipSlot()
-  return null
+const slotEditorDeps = {
+  slotHits: () => slotHits,
+  src: () => src,
+  setSrc: (s: string) => { src = s; srcEl.value = s; editor?.setSource(s) },
+  canonicalize: () => canonicalize(),
+  hostEl,
+  world,
+  screenToWorld,
+  hitTestHeader,
+  roots: () => roots,
+  viewMode: () => viewMode,
+  anchorToBlock,
 }
+initSlotEditor(slotEditorDeps)
 
-const slotEditor = document.createElement('input')
-slotEditor.id = 'slot-editor'
-slotEditor.style.display = 'none'
-document.body.appendChild(slotEditor)
-let editingSlot: SlotHit | null = null
-
-function closeSlotEditor(commit: boolean): void {
-  const s = editingSlot
-  editingSlot = null
-  slotEditor.style.display = 'none'
-  slotEditor.classList.remove('bad')
-  if (s && commit) {
-    const err = commitSlotValue(s, slotEditor.value)
-    if (err !== null && s.part.type !== 'string') {
-      // reopen on invalid input so the user can fix it (strings self-quote)
-      openSlotEditor(s)
-      slotEditor.classList.add('bad')
-      blipError()
-    }
-  }
+function commitSlotValue(s: SlotHit, raw: string): string | null {
+  return commitSlotValueFn(slotEditorDeps, s, raw)
 }
 
 function openSlotEditor(s: SlotHit): void {
-  editingSlot = s
-  const r = hostEl.getBoundingClientRect()
-  const scale = world.scale.x
-  slotEditor.value =
-    s.part.type === 'string' ? s.part.text.replace(/^"(.*)"$/s, '$1') : s.part.text
-  slotEditor.style.display = 'block'
-  slotEditor.style.left = `${r.left + s.x * scale + world.x - 4}px`
-  slotEditor.style.top = `${r.top + s.y * scale + world.y}px`
-  slotEditor.style.width = `${Math.max(60, s.w * scale + 8)}px`
-  slotEditor.focus()
-  slotEditor.select()
+  openSlotEditorImpl(slotEditorDeps, s)
 }
 
-slotEditor.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault()
-    closeSlotEditor(true)
-  } else if (e.key === 'Escape') {
-    e.preventDefault()
-    closeSlotEditor(false)
-  }
-})
-slotEditor.addEventListener('blur', () => {
-  if (editingSlot) closeSlotEditor(true)
-})
-
 function slotAt(b: BBlock, wx: number, wy: number): SlotHit | null {
-  for (const s of slotHits) {
-    if (
-      s.block.id === b.id &&
-      wx >= s.x &&
-      wx <= s.x + s.w &&
-      wy >= s.y &&
-      wy <= s.y + s.h
-    ) {
-      return s
-    }
-  }
-  return null
+  return slotAtFn(slotEditorDeps, b, wx, wy)
 }
 
 hostEl.addEventListener('dblclick', (e) => {
@@ -1339,264 +549,28 @@ async function startTraceRun(): Promise<void> {
   traceShowStep(0)
 }
 
-// ------------------------------------------------------- stage panel + run
+// ------------------------------------------------------- stage panel + run (extracted to stage-run.ts)
 const stageCanvas = document.getElementById('stage') as HTMLCanvasElement
 const stageCtx = stageCanvas.getContext('2d') as CanvasRenderingContext2D
 const stopBtn = document.getElementById('stage-stop') as HTMLButtonElement
 const fpsEl = document.getElementById('stage-fps') as HTMLSpanElement
-
-let running = false
-let lastFrame = 0
-let pollTimer = 0
-let fpsFrames = 0
-let fpsT0 = 0
-const u32max = 4294967295
-const downKeys = new Set<number>()
-
-interface StageFrameOut {
-  frame: number
-  w: number
-  h: number
-  b64: string
-}
-
-function stageKeyDown(e: KeyboardEvent): void {
-  if (!running || isTextEntryTarget(e)) return
-  const code = keyToCode(e)
-  if (code !== null) {
-    e.preventDefault()
-    void invoke('stage_keys', { down: Array.from(downKeys.add(code)) })
-  }
-}
-function stageKeyUp(e: KeyboardEvent): void {
-  if (!running || isTextEntryTarget(e)) return
-  const code = keyToCode(e)
-  if (code !== null) {
-    e.preventDefault()
-    downKeys.delete(code)
-    void invoke('stage_keys', { down: Array.from(downKeys) })
-  }
-}
-
-async function paintStage(): Promise<void> {
-  try {
-    const f = await invoke<StageFrameOut | null>('stage_frame', { last: lastFrame })
-    if (f) {
-      lastFrame = f.frame
-      const bin = atob(f.b64)
-      const bytes = new Uint8ClampedArray(bin.length)
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-      const img = new ImageData(bytes, f.w, f.h)
-      const off = new OffscreenCanvas(f.w, f.h)
-      off.getContext('2d')?.putImageData(img, 0, 0)
-      stageCtx.imageSmoothingEnabled = false
-      stageCtx.drawImage(off, 0, 0, stageCanvas.width, stageCanvas.height)
-      fpsFrames++
-      const now = performance.now()
-      if (now - fpsT0 > 500) {
-        fpsEl.textContent = `${Math.round((fpsFrames * 1000) / (now - fpsT0))} fps`
-        fpsFrames = 0
-        fpsT0 = now
-      }
-    }
-  } catch {
-    /* child not up yet */
-  }
-}
-
-function finishRun(r: {
-  stdout: string
-  stderr: string
-  exit: number
-  timed_out: boolean
-}): void {
-  let out = ''
-  if (r.stdout) out += r.stdout
-  if (r.stderr) out += (out ? '\n[stderr] ' : '[stderr] ') + r.stderr
-  out += `\n[exit ${r.exit}${r.timed_out ? ', timed out' : ''}]`
-  consoleEl.textContent = out.trim() || '(no output)'
-  // Off-ramp ladder (Blockly playbook — show the REAL code after every run):
-  // blocks-only users get split view revealed the moment their program ends,
-  // so the text they generated is always on screen.
-  if (viewMode === 'blocks') {
-    setView('split')
-    statusEl.textContent = 'run finished — that output came from THIS code →'
-  }
-}
-
-function stopRun(msg?: string): void {
-  running = false
-  window.removeEventListener('keydown', stageKeyDown)
-  window.removeEventListener('keyup', stageKeyUp)
-  clearInterval(pollTimer)
-  clearInterval(memTimer)
-  stopBtn.style.display = 'none'
-  consoleInputRow.style.display = 'none'
-  fpsEl.textContent = ''
-  if (msg !== undefined) consoleEl.textContent = msg
-}
-
-async function startRun(): Promise<void> {
-  consoleEl.textContent = 'running…'
-  tourHooks.advance?.('run')
-  lastFrame = u32max
-  downKeys.clear()
-  running = true
-  window.addEventListener('keydown', stageKeyDown)
-  window.addEventListener('keyup', stageKeyUp)
-  stopBtn.style.display = 'block'
-  consoleInputRow.style.display = 'flex' // cin / scanf / input() need typing
-  fpsT0 = performance.now()
-  fpsFrames = 0
-  const tracing = memTraceEl.checked
-  lastMemState = { boxes: [], edges: [], live: false }
-  memListEl.style.display = tracing ? 'block' : 'none'
-  // Launch failures must be LOUD and RECOVERABLE — never an eternal spinner.
-  try {
-    await invoke('run_start', { src, traceMem: tracing, lang: activeLang })
-    ;(window as unknown as { __runStarted?: boolean }).__runStarted = true
-  } catch (e) {
-    stopRun(`[launch] ${String(e)}`)
-    blip(200, 0.1, 'square', 0.05)
-    return
-  }
-  if (tracing) {
-    void invoke<boolean>('mem_attach').then((ok) => {
-      if (ok) startMemPoll()
-    })
-  }
-  // attach while the child boots, then pump frames until run_poll lands
-  void invoke<[number, number] | null>('stage_attach')
-  requestAnimationFrame(async function loop() {
-    if (!running) return
-    await paintStage()
-    requestAnimationFrame(loop)
-  })
-  clearInterval(pollTimer)
-  ;(window as unknown as { __polls?: number }).__polls = 0
-  pollTimer = window.setInterval(() => {
-    ;(window as unknown as { __polls?: number }).__polls =
-      ((window as unknown as { __polls?: number }).__polls ?? 0) + 1
-    void invoke<unknown>('run_poll')
-      .then((r) => {
-        if (r) {
-          stopRun()
-          finishRun(r as Parameters<typeof finishRun>[0])
-          reportLeaks()
-        }
-      })
-      .catch((e) => {
-        stopRun(`[poll] ${String(e)}`)
-      })
-  }, 120)
-}
+const { startRun, stopRun, getRunning } = initStageRun({
+  consoleEl,
+  consoleInputRow,
+  stopBtn,
+  fpsEl,
+  stageCanvas,
+  stageCtx,
+  src: () => src,
+  activeLang: () => activeLang,
+  viewMode: () => viewMode,
+  setView,
+  statusEl,
+  tourHooks,
+})
 
 // ------------------------------------------------------- console stdin box
 initConsole(consoleEl, consoleInput)
-
-// ------------------------------------------------------------- memory view
-interface MemBox {
-  addr: string
-  size: number
-  line: number
-}
-interface MemEdge {
-  from: string
-  offset: number
-  to: string
-}
-interface MemState {
-  boxes: MemBox[]
-  edges: MemEdge[]
-  live: boolean
-}
-
-const memTraceEl = document.getElementById('mem-trace') as HTMLInputElement
-const memListEl = document.getElementById('mem-list') as HTMLDivElement
-let lastMemState: MemState | null = null
-let memTimer = 0
-
-function renderMemView(): void {
-  const s = lastMemState
-  if (!s) return
-  const svgNs = 'http://www.w3.org/2000/svg'
-  const svgId = 'mem-arrows'
-  let rows = ''
-  for (const b of s.boxes.slice(0, 48)) {
-    const w = Math.min(100, Math.max(8, Math.sqrt(b.size) * 2))
-    rows += `<div class="heap-box" data-addr="${b.addr}" title="${b.addr} · ${b.size} B · line ${b.line}"><i style="width:${w}%"></i><span>line ${b.line} · ${b.size} B</span></div>`
-  }
-  if (s.boxes.length === 0) rows = '<span class="m-free">(heap empty)</span>'
-  memListEl.innerHTML = `<svg id="${svgId}"></svg>` + rows
-
-  const svg = document.getElementById(svgId) as unknown as SVGSVGElement
-  const idx = new Map<string, number>()
-  s.boxes.slice(0, 48).forEach((b, i) => idx.set(b.addr, i))
-  const boxEls = memListEl.querySelectorAll('.heap-box')
-  const W = Math.max(memListEl.clientWidth, 200)
-  const H = memListEl.scrollHeight || 1
-  svg.setAttribute('width', String(W))
-  svg.setAttribute('height', String(H))
-  svg.innerHTML =
-    '<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f5e0dc"/></marker></defs>'
-  for (const e of s.edges) {
-    const fi = idx.get(e.from)
-    const ti = idx.get(e.to)
-    if (fi === undefined || ti === undefined) continue
-    const fe = boxEls[fi] as HTMLElement | undefined
-    const te = boxEls[ti] as HTMLElement | undefined
-    if (!fe || !te) continue
-    const y1 = fe.offsetTop + fe.offsetHeight / 2
-    const y2 = te.offsetTop + te.offsetHeight / 2
-    const x1 = W - 4
-    const x2 = 4
-    const mx = (x1 + x2) / 2
-    const p = document.createElementNS(svgNs, 'path')
-    p.setAttribute(
-      'd',
-      `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`,
-    )
-    p.setAttribute('fill', 'none')
-    p.setAttribute('stroke', '#f5e0dc')
-    p.setAttribute('stroke-width', '1.5')
-    p.setAttribute('marker-end', 'url(#arr)')
-    p.setAttribute('opacity', '0.85')
-    svg.appendChild(p)
-  }
-}
-
-function startMemPoll(): void {
-  clearInterval(memTimer)
-  memTimer = window.setInterval(() => {
-    void invoke<MemState>('mem_state')
-      .then((s) => {
-        lastMemState = s
-        renderMemView()
-      })
-      .catch(() => {})
-  }, 150)
-}
-
-function reportLeaks(): void {
-  clearInterval(memTimer)
-  if (!memTraceEl.checked) return
-  const boxes = lastMemState?.boxes ?? []
-  let bytes = 0
-  for (const b of boxes) bytes += b.size
-  const head =
-    boxes.length === 0
-      ? '[memory] heap fully freed — no leaks ✓'
-      : `[memory] ${boxes.length} live allocation(s), ${bytes} B not freed`
-  consoleEl.textContent += `\n${head}`
-  let i = 0
-  for (const b of boxes) {
-    if (i++ >= 8) {
-      consoleEl.textContent += `\n[memory] … ${boxes.length - 8} more`
-      break
-    }
-    consoleEl.textContent += `\n[memory]   leak: ${b.size} B from line ${b.line}`
-  }
-}
 
 stopBtn.addEventListener('click', () => {
   void invoke('stage_stop')
@@ -2117,175 +1091,10 @@ srcEl.addEventListener('scroll', () => {
 srcEl.addEventListener('blur', () => void canonicalize())
 
 // ------------------------------------------- text editor key handling (#8)
-// Tab must indent code, NEVER steal focus; Shift+Tab outdents (selection or
-// line); Enter keeps the previous line's indentation and expands braces /
-// python colons — the basics a "real editor" is judged by.
-function editTextArea(next: string, caret: number): void {
-  srcEl.value = next
-  editor?.setSource(next)
-  srcEl.setSelectionRange(caret, caret)
-  srcEl.dispatchEvent(new Event('input'))
-}
-
-// Block comment toggling — Ctrl+/ toggles line or block comment
-function toggleComment(): void {
-  const sel = srcEl.selectionStart ?? 0
-  const end = srcEl.selectionEnd ?? 0
-  const text = srcEl.value
-
-  // Determine comment prefix based on language
-  const prefix = activeLang === 'python' ? '# ' : '// '
-  const prefixLen = prefix.length
-
-  if (sel === end) {
-    // No selection — toggle comment on current line
-    const lineStart = text.lastIndexOf('\n', sel - 1) + 1
-    const lineEnd = text.indexOf('\n', sel)
-    const line = text.slice(lineStart, lineEnd === -1 ? undefined : lineEnd)
-
-    if (line.trimStart().startsWith(prefix)) {
-      // Uncomment: remove prefix
-      const indent = line.length - line.trimStart().length
-      const removeStart = lineStart + indent
-      const removeEnd = removeStart + prefixLen
-      const newText = text.slice(0, removeStart) + text.slice(removeEnd)
-      const newCaret = Math.max(lineStart, sel - prefixLen)
-      editTextArea(newText, newCaret)
-    } else {
-      // Comment: add prefix at start of non-empty content
-      const indent = line.length - line.trimStart().length
-      const insertPos = lineStart + indent
-      const newText = text.slice(0, insertPos) + prefix + text.slice(insertPos)
-      editTextArea(newText, sel + prefixLen)
-    }
-  } else {
-    // Selection — toggle comment on all selected lines
-    const lineStart = text.lastIndexOf('\n', sel - 1) + 1
-    const lineEnd = text.indexOf('\n', end)
-    const block = text.slice(lineStart, lineEnd === -1 ? undefined : lineEnd)
-    const lines = block.split('\n')
-
-    const allCommented = lines.every(l => l.trimStart().startsWith(prefix) || l.trim() === '')
-
-    const newLines = allCommented
-      ? lines.map(l => {
-          if (l.trim() === '') return l
-          const indent = l.length - l.trimStart().length
-          const removeStart = indent
-          return l.slice(0, removeStart) + l.slice(removeStart + prefixLen)
-        })
-      : lines.map(l => {
-          if (l.trim() === '') return l
-          const indent = l.length - l.trimStart().length
-          return l.slice(0, indent) + prefix + l.slice(indent)
-        })
-
-    const newText = text.slice(0, lineStart) + newLines.join('\n') + text.slice(lineEnd === -1 ? text.length : lineEnd)
-    const delta = allCommented ? -prefixLen * lines.filter(l => l.trim() !== '').length : prefixLen * lines.filter(l => l.trim() !== '').length
-    editTextArea(newText, Math.min(sel + delta, newText.length))
-  }
-}
-
-srcEl.addEventListener('keydown', (e) => {
-  if (e.key !== 'Tab' && e.key !== 'Enter') return
-  const start = srcEl.selectionStart ?? 0
-  const end = srcEl.selectionEnd ?? 0
-  const value = srcEl.value
-  if (e.key === 'Tab') {
-    e.preventDefault()
-    if (start === end) {
-      if (e.shiftKey) {
-        // outdent the current line by up to two spaces
-        const lineStart = value.lastIndexOf('\n', start - 1) + 1
-        const cut = Math.min(2, /^ {1,2}/.exec(value.slice(lineStart))?.[0].length ?? 0)
-        if (cut > 0) editTextArea(value.slice(0, lineStart) + value.slice(lineStart + cut), Math.max(lineStart, start - cut))
-      } else {
-        editTextArea(value.slice(0, start) + '  ' + value.slice(end), start + 2)
-      }
-      return
-    }
-    // selection spans lines: indent/outdent every touched line
-    const lineStart = value.lastIndexOf('\n', start - 1) + 1
-    const nlAt = value.indexOf('\n', end)
-    const lineEnd = nlAt === -1 ? value.length : nlAt
-    const block = value.slice(lineStart, lineEnd)
-    const shiftedBlock = e.shiftKey
-      ? block.replace(/^ {1,2}/gm, '')
-      : block.replace(/^/gm, '  ')
-    const firstDelta =
-      shiftedBlock.split('\n')[0].length - block.split('\n')[0].length
-    editTextArea(
-      value.slice(0, lineStart) + shiftedBlock + value.slice(lineEnd),
-      Math.max(lineStart, start + firstDelta),
-    )
-    return
-  }
-  if (e.key === 'Enter') {
-    e.preventDefault()
-    const pos = start
-    const lineStart = value.lastIndexOf('\n', pos - 1) + 1
-    const prevLine = value.slice(lineStart, pos).trimEnd()
-    let indent = /^[ \t]*/.exec(prevLine)?.[0] ?? ''
-    const opens = trimmedEndsWithOpener(prevLine)
-    if (opens) indent += '    '
-    if (opens && value[pos] === '}') {
-      // brace-expand: {\n<indent+4>\n<indent>}
-      editTextArea(
-        value.slice(0, pos) + '\n' + indent + '\n' + indent.slice(0, -4) + value.slice(pos),
-        pos + 1 + indent.length,
-      )
-      return
-    }
-    editTextArea(value.slice(0, pos) + '\n' + indent + value.slice(end), pos + 1 + indent.length)
-  }
-})
-
-srcEl.addEventListener('keydown', (e) => {
-  if (e.ctrlKey && e.key === '/') {
-    e.preventDefault()
-    toggleComment()
-  }
-})
+initEditorKeys({ srcEl, editor, activeLang })
 
 // ------------------------------------------------------------------ pan/zoom
-let panning = false
-let lastX = 0
-let lastY = 0
-app.stage.eventMode = 'static'
-app.stage.hitArea = app.screen
-app.stage.on('pointerdown', (e) => {
-  if ((e as { button?: number }).button !== undefined && (e as { button?: number }).button !== 0)
-    return
-  // e.global is already canvas-relative — do NOT subtract the host rect
-  const w = screenToWorld(e.global.x, e.global.y)
-  if (hitTestHeader(roots, w.x, w.y)) return
-  panning = true
-  lastX = e.global.x
-  lastY = e.global.y
-})
-app.stage.on('pointermove', (e) => {
-  if (!panning) return
-  world.x += e.global.x - lastX
-  world.y += e.global.y - lastY
-  lastX = e.global.x
-  lastY = e.global.y
-})
-window.addEventListener('pointerup', () => (panning = false))
-hostEl.addEventListener(
-  'wheel',
-  (e) => {
-    e.preventDefault()
-    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1
-    const mx = e.offsetX
-    const my = e.offsetY
-    const wx = (mx - world.x) / world.scale.x
-    const wy = (my - world.y) / world.scale.y
-    world.scale.set(world.scale.x * factor)
-    world.x = mx - wx * world.scale.x
-    world.y = my - wy * world.scale.y
-  },
-  { passive: false },
-)
+initPanZoom({ app, hostEl, world, roots: () => roots, screenToWorld, hitTestHeader })
 
 // ------------------------------------------------------- Scratch palette
 // Category rail + colored sections (docs/SCRATCH-BLOCKS-REFERENCE.md);
@@ -2304,74 +1113,6 @@ function saveVars(): void {
   localStorage.setItem('blockide-vars', JSON.stringify(knownVars))
   localStorage.setItem('blockide-lists', JSON.stringify(knownLists))
   localStorage.setItem('blockide-vartypes', JSON.stringify(varTypesMap))
-}
-
-function isReporterChip(item: PaletteItem & { varName?: string }): boolean {
-  return item.reporter !== undefined
-}
-
-/** Operator/function reporter chips: oval (round) or hex (bool) pills that
- *  drop their EXPRESSION into a matching socket. */
-function makeReporterChip(item: PaletteItem): HTMLDivElement {
-  const el = document.createElement('div')
-  const hex = item.reporter === 'bool'
-  el.className = `pal pal-${item.cat}${hex ? ' pal-hex' : ' pal-reporter'}`
-  el.dataset.cat = item.cat
-  el.textContent = item.name
-  ;(el as unknown as { __item?: PaletteItem }).__item = item
-  el.title = `Drop into a ${hex ? 'hex condition' : 'round'} socket, then click it to edit the operands`
-  el.addEventListener('pointerdown', (e) => {
-    if (el.classList.contains('locked')) {
-      e.preventDefault()
-      return
-    }
-    e.preventDefault()
-    startHtmlDrag(e, {
-      label: item.name,
-      slotValue: item.name,
-      slotKind: item.reporter,
-      cat: item.cat,
-    })
-  })
-  return el
-}
-
-function makeVarChip(item: PaletteItem & { varName?: string }, list = false): HTMLDivElement {
-  const el = document.createElement('div')
-  el.className = `pal pal-variables${isReporterChip(item) ? ' pal-reporter' : ''}${list ? ' pal-list' : ''}`
-  el.dataset.cat = 'variables'
-  ;(el as unknown as { __item?: PaletteItem }).__item = item
-  el.dataset.var = item.varName ?? item.name
-  el.textContent = item.name
-  el.addEventListener('pointerdown', (e) => {
-    if (el.classList.contains('locked')) {
-      e.preventDefault()
-      return
-    }
-    e.preventDefault()
-    if (isReporterChip(item)) {
-      // oval reporter: fits INTO round slots, never onto the canvas
-      startHtmlDrag(e, {
-        label: item.name,
-        slotValue: item.name,
-        slotKind: 'round',
-        cat: 'variables',
-      })
-    } else {
-      startHtmlDrag(e, { label: item.name, snippet: item.snippet, cat: 'variables' })
-    }
-  })
-  el.addEventListener('contextmenu', (e) => {
-    // Scratch: right-click a variable reporter -> rename/delete
-    e.preventDefault()
-    const varName = item.varName ?? item.name
-    if (!knownVars.includes(varName) && !knownLists.includes(varName)) {
-      consoleEl.textContent = `"${varName}" is declared in the file — rename or delete it in the code`
-      return
-    }
-    openVarMenu(e, varName)
-  })
-  return el
 }
 
 // rename/delete menu (Scratch's variable right-click actions)
@@ -2428,518 +1169,76 @@ window.addEventListener('pointerdown', (e) => {
 })
 
 function renderPalette(): void {
-  const st = paletteEl.scrollTop
-  paletteEl.innerHTML = ''
-
-  // Scratch's category rail: colored dots, click jumps to the section
-  const rail = document.createElement('div')
-  rail.id = 'pal-rail'
-  const dots: { dot: HTMLSpanElement; name: string }[] = []
-  paletteEl.appendChild(rail)
-
-  const addGroupHeader = (name: string, color: string): HTMLDivElement => {
-    const head = document.createElement('div')
-    head.className = 'pal-group'
-    head.dataset.g = name.toLowerCase()
-    head.textContent = name
-    head.style.background = color
-    if (name === 'Notes') head.style.color = '#6b4d00'
-    paletteEl.appendChild(head)
-    return head
-  }
-  const addChip = (item: PaletteItem): void => {
-    // per-language palette (D3): chips declare which languages they serve
-    if (item.langs !== undefined && !item.langs.includes(activeLang)) return
-    
-    // Create the chip...
-    if (item.reporter !== undefined) {
-      const chip = makeReporterChip(item)
-      paletteEl.appendChild(chip)
-      return
-    }
-    // Scratch's dependency rule: some blocks need another block to exist
-    // (else needs if, cout needs <iostream>…)
-    const depOk =
-      item.requires === undefined ||
-      ((item.requires.kind === undefined || programKinds.has(item.requires.kind)) &&
-        (item.requires.include === undefined ||
-          [...programIncludes].some((inc) => inc.includes(item.requires!.include!))))
-    const el = document.createElement('div')
-    el.className = `pal pal-${item.cat}${depOk ? '' : ' pal-dep'}`
-    el.dataset.cat = item.cat
-    el.textContent = item.name
-    ;(el as unknown as { __item?: PaletteItem }).__item = item
-    if (!depOk) {
-      const need = item.requires!.kind ?? item.requires!.include!
-      el.title = `Needs ${need} in the program first`
-    }
-    el.addEventListener('pointerdown', (e) => {
-      if (el.classList.contains('locked')) {
-        e.preventDefault()
-        return
-      }
-      if (!depOk) {
-        e.preventDefault()
-        blipError()
-        consoleEl.textContent = `"${item.name}" needs ${item.requires!.kind ?? item.requires!.include!} in the program first`
-        return
-      }
-      e.preventDefault()
-      startHtmlDrag(e, {
-        label: item.name,
-        snippet: item.snippet,
-        cat: item.cat,
-        toplevel: item.toplevel,
-        insertTop: item.top,
-      })
-    })
-    paletteEl.appendChild(el)
-  }
-
-  for (const g of PALETTE_GROUPS) {
-    const visibleItems = g.items.filter((i) => i.langs === undefined || i.langs.includes(activeLang))
-    if (visibleItems.length === 0) continue
-
-    const head = addGroupHeader(g.name, g.color)
-    const dot = document.createElement('span')
-    dot.className = 'rail-dot'
-    dot.title = g.name
-    dot.style.background = g.color
-    dot.addEventListener('click', () =>
-      paletteEl.scrollTo({ top: head.offsetTop - 26, behavior: 'smooth' }),
-    )
-    rail.appendChild(dot)
-    dots.push({ dot, name: g.name })
-    for (const item of visibleItems) addChip(item)
-  }
-
-  // ---- Variables section (Scratch data category) — C/C++ only: typed
-  // declarations are meaningless in dynamically-typed languages, so Make a
-  // Variable/List and their chips stay hidden there (D11) ----
-  if (activeLang === 'c' || activeLang === 'cpp') {
-    const vhead = addGroupHeader('Variables', VARIABLES_COLOR)
-    const vdot = document.createElement('span')
-    vdot.className = 'rail-dot'
-    vdot.title = 'Variables'
-    vdot.style.background = VARIABLES_COLOR
-    vdot.addEventListener('click', () =>
-      paletteEl.scrollTo({ top: vhead.offsetTop - 26, behavior: 'smooth' }),
-    )
-    rail.appendChild(vdot)
-    dots.push({ dot: vdot, name: 'Variables' })
-
-    const mk = document.createElement('button')
-    mk.id = 'make-var'
-    mk.dataset.cat = 'variables' // lock-gated with the section in academy mode
-    mk.textContent = 'Make a Variable'
-    mk.addEventListener('click', () => {
-      if (mk.classList.contains('locked')) return
-      const raw = window.prompt('Variable name:', 'score')
-      if (raw === null) return
-      const name = validateVarName(raw)
-      if (name === null) {
-        consoleEl.textContent = `"${raw}" is not a valid C variable name`
-        blipError()
-        return
-      }
-      // C/C++ variables need a DECLARED TYPE — second step of the dialog
-      const types = varTypes(activeLang)
-      const traw = window.prompt(`Type for "${name}" (${types.join('/')}):`, varTypesMap[name] ?? 'int')
-      if (traw === null) return
-      const type = traw.trim().toLowerCase()
-      if (!types.includes(type)) {
-        consoleEl.textContent = `"${type}" is not a type I know — use ${types.join('/')}`
-        blipError()
-        return
-      }
-      if (!knownVars.includes(name)) knownVars.push(name)
-      varTypesMap[name] = type
-      saveVars()
-      renderPalette()
-      blip(740, 0.07, 'sine', 0.06)
-    })
-    paletteEl.appendChild(mk)
-
-    const allVars = [...new Set([...knownVars, ...harvestedVars])]
-    for (const v of allVars) {
-      for (const chip of varChips(v, varTypesMap[v] ?? 'int')) {
-        paletteEl.appendChild(makeVarChip(chip))
-      }
-    }
-
-    // ---- Lists subcategory (Scratch Lists -> C arrays) ----
-    const mkList = document.createElement('button')
-    mkList.id = 'make-list'
-    mkList.dataset.cat = 'variables'
-    mkList.textContent = 'Make a List'
-    mkList.addEventListener('click', () => {
-      if (mkList.classList.contains('locked')) return
-      const raw = window.prompt('List name (C array):', 'grid')
-      if (raw === null) return
-      const name = validateVarName(raw)
-      if (name === null) {
-        consoleEl.textContent = `"${raw}" is not a valid C array name`
-        blipError()
-        return
-      }
-      if (!knownLists.includes(name)) knownLists.push(name)
-      saveVars()
-      renderPalette()
-      blip(740, 0.07, 'sine', 0.06)
-    })
-    paletteEl.appendChild(mkList)
-
-    // list chips: user-created lists always; file-indexed vars discovered live
-    const listVars = new Set<string>(knownLists)
-    for (const v of allVars) {
-      if (src.includes(`${v}[`)) listVars.add(v)
-    }
-    for (const v of listVars) {
-      for (const chip of listChips(v)) paletteEl.appendChild(makeVarChip(chip, true))
-    }
-  }
-
-  // active rail dot follows scroll
-  paletteEl.onscroll = () => {
-    let active = dots[0]?.name
-    for (const d of dots) {
-      const head = paletteEl.querySelector(`.pal-group[data-g="${d.name.toLowerCase()}"]`) as HTMLElement | null
-      if (head && head.offsetTop - 30 <= paletteEl.scrollTop) active = d.name
-    }
-    for (const d of dots) d.dot.classList.toggle('active', d.name === active)
-  }
-
-  applyPalFilter()
-  paletteEl.scrollTop = st
-  renderPaletteLocks()
+  renderPaletteFull({
+    paletteEl,
+    consoleEl,
+    activeLang: () => activeLang,
+    knownVars,
+    knownLists,
+    harvestedVars,
+    varTypesMap,
+    src: () => src,
+    startHtmlDrag,
+    openVarMenu,
+    programKinds,
+    programIncludes,
+    renderPaletteLocks,
+    getAppMode,
+    getProfile,
+    applyPalFilter,
+    kbdPaletteDeps,
+  })
 }
 
-// ------------------------------------------ keyboard-first palette (research:
-// frame-based editing papers — blocks must scale past mouse-only dragging)
+// ------------------------------------------ keyboard-first palette (extracted to kbd-palette.ts)
 const palFilter = document.getElementById('pal-filter') as HTMLInputElement
-let kbdIdx = -1
-
-function visibleChips(): HTMLElement[] {
-  return Array.from(
-    paletteEl.querySelectorAll<HTMLElement>('.pal, #make-var, #make-list'),
-  ).filter((el) => !el.classList.contains('pal-hide'))
+const kbdPaletteDeps = {
+  paletteEl,
+  consoleEl,
+  srcEl,
+  src: () => src,
+  setSrc: (s: string) => { src = s; srcEl.value = s; editor?.setSource(s) },
+  roots: () => roots,
+  caretAnchor: () => caretAnchor,
+  canonicalize: () => canonicalize(),
 }
-
-/** Type-to-filter: hide non-matching chips, collapse emptied sections. */
-function applyPalFilter(): void {
-  const q = palFilter.value.trim().toLowerCase()
-  kbdIdx = -1
-  for (const el of Array.from(
-    paletteEl.querySelectorAll<HTMLElement>('.pal, #make-var, #make-list'),
-  )) {
-    el.classList.remove('pal-kbd')
-    el.classList.toggle('pal-hide', q !== '' && !(el.textContent ?? '').toLowerCase().includes(q))
-  }
-  for (const head of Array.from(paletteEl.querySelectorAll<HTMLElement>('.pal-group'))) {
-    let visible = 0
-    let n = head.nextElementSibling as HTMLElement | null
-    while (n && !n.classList.contains('pal-group')) {
-      if (!n.classList.contains('pal-hide')) visible++
-      n = n.nextElementSibling as HTMLElement | null
-    }
-    head.classList.toggle('pal-hide', q !== '' && visible === 0)
-  }
-}
-
-/** Enter on a highlighted chip splices it through the same seams as a drag:
- *  includes → top, toplevel → file scope, statements → at your caret. */
-function keyboardActivateChip(el: HTMLElement): void {
-  // keyboard path obeys the SAME gates as pointer drags: academy locks and
-  // dependency gating live on the element itself
-  if (el.classList.contains('locked')) {
-    consoleEl.textContent = 'locked - complete more Academy levels to unlock this category'
-    blipError()
-    return
-  }
-  if (el.classList.contains('pal-dep')) {
-    consoleEl.textContent = el.title || 'this block needs its prerequisite first'
-    blipError()
-    return
-  }
-  if (el.id === 'make-var' || el.id === 'make-list') {
-    ;(el as HTMLButtonElement).click()
-    return
-  }
-  const item = (el as unknown as { __item?: PaletteItem }).__item
-  if (!item) return
-  if (item.reporter !== undefined) {
-    consoleEl.textContent = 'reporter chips drop INTO sockets — drag one onto a round or hex slot'
-    blip(200, 0.06, 'square', 0.03)
-    return
-  }
-  tourHooks.advance?.('edit')
-  blipSuccess()
-  if (item.top) {
-    setSrc(`${item.snippet}\n${src}`)
-    void canonicalize()
-    return
-  }
-  if (item.toplevel) {
-    setSrc(insertTopLevel(src, roots, item.snippet))
-    void canonicalize()
-    return
-  }
-  try {
-    const anchor = caretAnchor ?? pickAnchor(roots, src.length)
-    const off = Math.max(0, Math.min(src.length, caretOffset(roots, src.length, anchor)))
-    const next = spliceInsert(src, off, item.snippet)
-    if (next !== null) {
-      setSrc(next)
-      void canonicalize()
-      return
-    }
-  } catch {
-    /* fall through to the hint */
-  }
-  consoleEl.textContent = 'no insertion point here — click inside main first'
-}
-
-palFilter.addEventListener('input', applyPalFilter)
-palFilter.addEventListener('keydown', (e) => {
-  const chips = visibleChips()
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-    e.preventDefault()
-    if (chips.length === 0) return
-    kbdIdx =
-      e.key === 'ArrowDown' ? Math.min(kbdIdx + 1, chips.length - 1) : Math.max(kbdIdx - 1, 0)
-    chips.forEach((c, i) => c.classList.toggle('pal-kbd', i === kbdIdx))
-    chips[kbdIdx].scrollIntoView({ block: 'nearest' })
-  } else if (e.key === 'Enter') {
-    e.preventDefault()
-    const el = chips[kbdIdx]
-    if (el) keyboardActivateChip(el)
-  } else if (e.key === 'Escape') {
-    e.preventDefault()
-    palFilter.value = ''
-    applyPalFilter()
-    srcEl.focus({ preventScroll: true })
-  }
-})
+initKbdPalette(kbdPaletteDeps)
 
 // ---------------------------------------------------------------- academy
-interface ProfileOut {
-  xp: number
-  completed: string[]
-  unlocked: string[]
-}
-interface LevelInfo {
-  id: string
-  world: number
-  title: string
-  xp: number
-  done: boolean
-}
-
-const xpBadge = document.getElementById('xp-badge') as HTMLSpanElement
-const levelSelect = document.getElementById('level-select') as HTMLSelectElement
-const hintBtn = document.getElementById('hint-btn') as HTMLButtonElement
-let profile: ProfileOut | null = null
-let hints: string[] = []
-let hintTier = 0
-
-// Research gap-closers (docs/COMPETITOR-RESEARCH.md): OWNERSHIP CHAINING —
-// level N starts from the student's own N-1 solution, not a fresh starter —
-// and SPACED MASTERY — passed levels resurface for review on a Leitner
-// ladder (1/3/7/14-day intervals). Both offline in localStorage.
-const nowSec = (): number => Math.floor(Date.now() / 1000)
-const levelSols = readJsonStore<Record<string, string>>('blockide-levelsol', {})
-const mastery = readJsonStore<Record<string, MasteryState>>('blockide-mastery', {})
-let streakState = readJsonStore<StreakState | undefined>('blockide-streak', undefined)
-let badgesState = readJsonStore<string[]>('blockide-badges', [])
-let appStats = readJsonStore<{runs: number, fixes: number, loopsMastered: number}>('blockide-stats', {runs:0, fixes:0, loopsMastered:0})
-let levelsCache: LevelInfo[] = []
-
-// --------------------------------------------- D7 mode split: sandbox|academy
-type AppMode = 'sandbox' | 'academy'
-const appElMode = document.getElementById('app') as HTMLDivElement
-let appMode: AppMode = (localStorage.getItem('mode') as AppMode) ?? 'sandbox'
-
-function setMode(m: AppMode): void {
-  appMode = m
-  localStorage.setItem('mode', m)
-  appElMode.dataset.mode = m
-  renderPaletteLocks() // sandbox = everything unlocked, always
-}
-
-function renderPaletteLocks(): void {
-  for (const chip of Array.from(paletteEl.children) as HTMLElement[]) {
-    const cat = chip.dataset.cat ?? ''
-    const locked =
-      appMode === 'academy' && profile !== null && !profile.unlocked.includes(cat)
-    chip.classList.toggle('locked', locked)
-    if (locked) chip.title = `Locked — complete ${cat} levels in the Academy`
-    else chip.removeAttribute('title')
-  }
-}
-
-async function refreshProfile(): Promise<void> {
-  try {
-    profile = await invoke<ProfileOut>('profile_get')
-    xpBadge.textContent = `★ ${profile.xp} XP`
-  } catch {
-    /* profile optional */
-  }
-  renderPaletteLocks()
-}
-
-async function refreshLevels(): Promise<void> {
-  try {
-    const levels = await invoke<LevelInfo[]>('academy_levels')
-    levelsCache = levels
-    levelSelect.innerHTML = ''
-    for (const l of levels) {
-      const o = document.createElement('option')
-      const due = masteryDue(mastery[l.id], nowSec()) ? ' ⟳review' : ''
-      o.value = l.id
-      o.textContent = `W${l.world}${l.done ? ' ✓' : ''} · ${l.title} (${l.xp}xp)${due}`
-      levelSelect.appendChild(o)
-    }
-  } catch {
-    /* academy dir may be missing */
-  }
-}
-
-document.getElementById('level-load')?.addEventListener('click', async () => {
-  const id = levelSelect.value
-  if (!id) return
-  try {
-    const l = await invoke<{ starter: string; hints: string[] }>('academy_load', { levelId: id })
-    // ownership chaining: seed from the student's own previous solution
-    const prev = previousLevel(levelsCache, id)
-    const chained = prev ? levelSols[prev.id] : undefined
-    caretAnchor = null
-    setSrc(chained?.trim() ? chained : l.starter)
-    savedSnapshot = src // the seeded buffer is the clean baseline
-    hints = l.hints
-    hintTier = 0
-    updateHintBtn()
-    consoleEl.textContent = chained?.trim()
-      ? `[academy] ${id} loaded — starting from YOUR "${prev!.id}" solution (ownership chaining). ${hints.length} hints available.`
-      : `[academy] ${id} loaded — ${hints.length} hints available. Write code, press Check!`
-    if (masteryDue(mastery[id], nowSec())) {
-      consoleEl.textContent += '\n[academy] ⟳ spaced review: you solved this before — again cements it.'
-    }
-  } catch (e) {
-    consoleEl.textContent = String(e)
-  }
-})
-
-function updateHintBtn(): void {
-  hintBtn.textContent =
-    hints.length === 0 ? 'Hint' : `Hint (${Math.min(hintTier + 1, hints.length)}/${hints.length})`
-  hintBtn.disabled = hints.length === 0 || hintTier >= hints.length
-}
-
-hintBtn?.addEventListener('click', () => {
-  if (hintTier >= hints.length) return
-  consoleEl.textContent += `\n[hint ${hintTier + 1}/${hints.length}] ${hints[hintTier]}`
-  consoleEl.scrollTop = consoleEl.scrollHeight
-  hintTier++
-  updateHintBtn()
-})
-
-document.getElementById('check-btn')?.addEventListener('click', async () => {
-  const id = levelSelect.value
-  if (!id || running) return
-  consoleEl.textContent = '[academy] checking…'
-  try {
-    const r = await invoke<{ passed: boolean; results: { index: number; ok: boolean }[]; xp_awarded: number; total_xp: number }>(
-      'academy_check',
-      { levelId: id, src },
-    )
-    if (r.passed) {
-      tourHooks.advance?.('check')
-      // record THIS solution (ownership chaining seeds the next level) and
-      // promote the spaced-mastery box
-      levelSols[id] = src
-      localStorage.setItem('blockide-levelsol', JSON.stringify(levelSols))
-      mastery[id] = nextMastery(mastery[id], nowSec())
-      localStorage.setItem('blockide-mastery', JSON.stringify(mastery))
-      const review = masteryNextIn(mastery[id])
-      
-      const oldStreak = streakState?.currentStreak ?? 0
-      streakState = updateStreak(streakState, Date.now())
-      writeJsonStore('blockide-streak', streakState)
-      
-      appStats.runs++
-      const newBadges = checkBadges(badgesState, streakState, appStats)
-      if (newBadges.length > 0) {
-        badgesState.push(...newBadges)
-        writeJsonStore('blockide-badges', badgesState)
-        const badgeNames = newBadges.map(id => BADGES.find(b => b.id === id)?.icon).join(' ')
-        toast(`New Badges Unlocked: ${badgeNames}`, 'success', 5000)
-      }
-      writeJsonStore('blockide-stats', appStats)
-      
-      const streakMsg = streakState.currentStreak > oldStreak 
-        ? ` 🔥 ${streakState.currentStreak} Day Streak!` 
-        : ` (Streak: ${streakState.currentStreak} 🔥)`
-
-      consoleEl.textContent =
-        r.xp_awarded > 0
-          ? `[academy] PASSED ✓  +${r.xp_awarded} XP (total ${r.total_xp}) · solution saved — the next level starts from it · next ⟳review in ${review}... ${streakMsg}`
-          : `[academy] PASSED ✓  (already completed before — no extra XP) · next ⟳review in ${review}... ${streakMsg}`
-      await refreshProfile()
-      await refreshLevels()
-    } else {
-      tourHooks.advance?.('check')
-      const bad = r.results.filter((x) => !x.ok).map((x) => `test[${x.index}]`)
-      consoleEl.textContent = `[academy] failed hidden tests: ${bad.join(', ')} — take a hint?`
-    }
-  } catch (e) {
-    consoleEl.textContent = String(e)
-  }
-})
+// Module extracted to src/academy.ts — initAcademy wires all handlers
 
 // debug/verification hooks (harmless in production)
-;(window as unknown as { __hitAt?: unknown }).__hitAt = (cx: number, cy: number): string | null => {
-  const r = hostEl.getBoundingClientRect()
-  const w = screenToWorld(cx - r.left, cy - r.top)
-  const hit = hitTestHeader(roots, w.x, w.y)
-  return hit ? hit.label || hit.nodeKind : null
-}
-;(window as unknown as { __blocksShape?: unknown }).__blocksShape = () =>
-  flatten(roots).map((b) => ({
-    kind: b.nodeKind,
-    container: b.container,
-    kids: b.children.length,
-  }))
-;(window as unknown as { __slots?: unknown }).__slots = () =>
-  slotHits.map((s) => ({ type: s.part.type, text: s.part.text }))
-;(window as unknown as { __commitSlot?: unknown }).__commitSlot = (i: number, v: string) => {
-  const s = slotHits[i]
-  if (!s) return 'no such slot'
-  return commitSlotValue(s, v)
-}
-;(window as unknown as { __makeVar?: unknown }).__makeVar = (raw: string) => {
-  const name = validateVarName(raw)
-  if (name === null) return 'invalid'
-  if (!knownVars.includes(name)) knownVars.push(name)
-  saveVars()
-  renderPalette()
-  return null
-}
-;(window as unknown as { __makeList?: unknown }).__makeList = (raw: string) => {
-  const name = validateVarName(raw)
-  if (name === null) return 'invalid'
-  if (!knownLists.includes(name)) knownLists.push(name)
-  saveVars()
-  renderPalette()
-  return null
-}
-;(window as unknown as { __langOf?: unknown }).__langOf = (path: string) => langOf(path)
-;(window as unknown as { __activeLang?: unknown }).__activeLang = () => activeLang
-;(window as unknown as { __labels?: unknown }).__labels = () => flatten(roots).map((b) => b.label)
-;(window as unknown as { __runState?: unknown }).__runState = () => ({ running, polls: (window as unknown as { __polls?: number }).__polls })
+initDebugHooks({
+  hostEl,
+  roots: () => roots,
+  slotHits: () => slotHits,
+  running: () => getRunning(),
+  activeLang: () => activeLang,
+  screenToWorld,
+  hitTestHeader,
+  commitSlotValue,
+  validateVarName,
+  knownVars,
+  knownLists,
+  saveVars,
+  renderPalette,
+})
 
-void refreshProfile()
-void refreshLevels()
-setMode(appMode) // apply persisted sandbox/academy split (D7)
+initAcademy({
+  invoke,
+  consoleEl,
+  paletteEl,
+  setSrc: (s: string) => setSrc(s),
+  src: () => src,
+  savedSnapshot: (s?: string) => { if (s !== undefined) savedSnapshot = s; return savedSnapshot },
+  caretAnchor: null, // will be set dynamically via deps getter
+  tourHooks,
+  running: () => getRunning(),
+  blipError,
+  toast,
+  writeJsonStore,
+  readJsonStore,
+})
 renderPalette() // Scratch-style grouped palette (1.10)
 
 // ------------------------------------------------------- semantic caret map
@@ -2978,7 +1277,6 @@ function anchorToBlock(b: BBlock): void {
 }
 
 // ------------------------------------------------------------- view modes
-type ViewMode = 'split' | 'blocks' | 'text'
 const viewBtns = Array.from(document.querySelectorAll<HTMLButtonElement>('.vm'))
 const appEl = document.getElementById('app') as HTMLDivElement
 let viewMode: ViewMode = 'split'
@@ -3025,14 +1323,7 @@ themeBtn.addEventListener('click', () =>
   setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'),
 )
 
-// --------------------------------------------------- launch splash (macOS window)
-interface RecentEntry {
-  root: string
-  rel: string
-  ts: number
-  mode?: 'sandbox' | 'academy'
-}
-
+// ---- splash helpers (kept here — coupled to main.ts state) ----
 function recentList(): RecentEntry[] {
   try {
     return JSON.parse(localStorage.getItem('blockide-recent') ?? '[]') as RecentEntry[]
@@ -3043,20 +1334,18 @@ function recentList(): RecentEntry[] {
 
 function pushRecent(root: string, rel: string): void {
   const list = recentList().filter((r) => !(r.root === root && r.rel === rel))
-  list.unshift({ root, rel, ts: Date.now(), mode: appMode })
+  list.unshift({ root, rel, ts: Date.now(), mode: getAppMode() })
   localStorage.setItem('blockide-recent', JSON.stringify(list.slice(0, 8)))
 }
 
-const splashEl = document.getElementById('splash') as HTMLDivElement
-
-async function beginSession(lang: Lang, mode?: AppMode): Promise<void> {
+async function beginSession(lang: Lang, mode?: 'sandbox' | 'academy'): Promise<void> {
   activeLang = lang
   if (mode) setMode(mode)
   src = SAMPLES[lang]
   savedSnapshot = src
   activePath = null
   caretAnchor = null
-  splashEl.style.display = 'none'
+  document.getElementById('splash')!.style.display = 'none'
   srcEl.value = src
   if (!editor) initEditor()
   editor?.setSource(src)
@@ -3078,7 +1367,7 @@ async function beginSession(lang: Lang, mode?: AppMode): Promise<void> {
     { id: 'file.new', label: 'New File', category: 'File', action: () => void (document.getElementById('new-file') as HTMLButtonElement)?.click() },
     { id: 'edit.undo', label: 'Undo', category: 'Edit', shortcut: 'Ctrl+Z', action: () => document.execCommand('undo') },
     { id: 'edit.redo', label: 'Redo', category: 'Edit', shortcut: 'Ctrl+Y', action: () => document.execCommand('redo') },
-    { id: 'edit.find', label: 'Find & Replace', category: 'Edit', shortcut: 'Ctrl+F', action: () => editor?.view.focus() /* CodeMirror handles Ctrl+F */ },
+    { id: 'edit.find', label: 'Find & Replace', category: 'Edit', shortcut: 'Ctrl+F', action: () => editor?.view.focus() },
     { id: 'run.start', label: 'Run Program', category: 'Run', shortcut: 'F5', action: () => void startRun() },
     { id: 'run.stop', label: 'Stop Program', category: 'Run', shortcut: 'Shift+F5', action: () => stopRun() },
     { id: 'run.check', label: 'Check Code', category: 'Run', shortcut: 'Ctrl+Shift+C', action: () => void (document.getElementById('check-btn') as HTMLButtonElement)?.click() },
@@ -3102,244 +1391,18 @@ async function beginFromRecent(entry: RecentEntry): Promise<void> {
     return
   }
   if (entry.mode) setMode(entry.mode)
-  splashEl.style.display = 'none'
+  document.getElementById('splash')!.style.display = 'none'
   if (!localStorage.getItem('tour-done')) setTimeout(startTour, 600)
 }
 
-// ---- splash panel switching ----
-function showSplashPanel(id: string): void {
-  splashEl.querySelectorAll('.splash-panel').forEach((p) => {
-    p.classList.remove('active')
-    ;(p as HTMLElement).style.display = 'none'
-  })
-  const panel = document.getElementById(id)
-  if (panel) {
-    panel.style.display = 'flex'
-    panel.classList.add('active')
-  }
-  // Update sidebar active state
-  splashEl.querySelectorAll('.sidebar-row[data-panel]').forEach((r) => {
-    const row = r as HTMLElement
-    row.classList.toggle('active', row.dataset.panel === id.replace('splash-', ''))
-  })
-}
-
-// ---- recent projects ----
-function renderRecentProjects(): void {
-  const list = document.getElementById('recent-list') as HTMLDivElement
-  const recents = recentList().slice(0, 6)
-  list.innerHTML = ''
-  if (recents.length === 0) {
-    list.innerHTML = '<div class="splash-recent-empty">no recent projects</div>'
-    return
-  }
-  for (const r of recents) {
-    const el = document.createElement('div')
-    el.className = 'recent-item'
-    const info = document.createElement('div')
-    info.className = 'recent-item-info'
-    const name = document.createElement('b')
-    name.textContent = r.rel.split('/').pop() ?? r.rel
-    const path = document.createElement('span')
-    path.textContent = r.root
-    info.append(name, path)
-    el.appendChild(info)
-    if (r.mode) {
-      const tag = document.createElement('span')
-      tag.className = `recent-tag ${r.mode}`
-      tag.textContent = r.mode
-      el.appendChild(tag)
-    }
-    el.addEventListener('click', () => void beginFromRecent(r))
-    list.appendChild(el)
-  }
-}
-
-// ---- settings ----
-function initSplashSettings(): void {
-  // Theme
-  const themeSel = document.getElementById('set-theme') as HTMLSelectElement
-  const currentTheme = (localStorage.getItem('theme') as string) ?? 'light'
-  themeSel.value = currentTheme === 'auto' ? 'auto' : currentTheme
-  themeSel.addEventListener('change', () => {
-    const v = themeSel.value as 'light' | 'dark' | 'auto'
-    if (v === 'auto') {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      setTheme(prefersDark ? 'dark' : 'light')
-    } else {
-      setTheme(v)
-    }
-    writeSetting('theme', v)
-  })
-
-  // Font size
-  const fontSizeSel = document.getElementById('set-font-size') as HTMLSelectElement
-  fontSizeSel.value = readSetting('fontSize', '13')
-  fontSizeSel.addEventListener('change', () => {
-    writeSetting('fontSize', fontSizeSel.value)
-    srcEl.style.fontSize = `${fontSizeSel.value}px`
-  })
-
-  // Font family
-  const fontFamilySel = document.getElementById('set-font-family') as HTMLSelectElement
-  fontFamilySel.value = readSetting('fontFamily', 'Consolas')
-  fontFamilySel.addEventListener('change', () => {
-    writeSetting('fontFamily', fontFamilySel.value)
-    srcEl.style.fontFamily = `'${fontFamilySel.value}', monospace`
-  })
-
-  // Tab size
-  const tabSizeSel = document.getElementById('set-tab-size') as HTMLSelectElement
-  tabSizeSel.value = readSetting('tabSize', '4')
-  tabSizeSel.addEventListener('change', () => writeSetting('tabSize', tabSizeSel.value))
-
-  // Line height
-  const lineHeightSel = document.getElementById('set-line-height') as HTMLSelectElement
-  lineHeightSel.value = readSetting('lineHeight', '1.5')
-  lineHeightSel.addEventListener('change', () => {
-    writeSetting('lineHeight', lineHeightSel.value)
-    srcEl.style.lineHeight = lineHeightSel.value
-  })
-
-  // Toggles
-  const setupToggle = (id: string, key: string, defaultVal = false): void => {
-    const btn = document.getElementById(id) as HTMLButtonElement
-    let on = readSetting(key, defaultVal)
-    btn.classList.toggle('on', on)
-    btn.textContent = on ? 'On' : 'Off'
-    btn.addEventListener('click', () => {
-      on = !on
-      btn.classList.toggle('on', on)
-      btn.textContent = on ? 'On' : 'Off'
-      writeSetting(key, on)
-    })
-  }
-
-  setupToggle('set-word-wrap', 'wordWrap', false)
-  setupToggle('set-minimap', 'minimap', false)
-  setupToggle('set-line-numbers', 'lineNumbers', true)
-  setupToggle('set-bracket-match', 'bracketMatch', true)
-  setupToggle('set-auto-brackets', 'autoBrackets', true)
-  setupToggle('set-highlight-line', 'highlightLine', true)
-  setupToggle('set-format-save', 'formatSave', true)
-  setupToggle('set-confirm-exit', 'confirmExit', true)
-  setupToggle('set-restore-session', 'restoreSession', true)
-  setupToggle('set-sounds', 'sounds', true)
-  setupToggle('set-animations', 'animations', true)
-  setupToggle('set-clear-run', 'clearRun', true)
-  setupToggle('set-mem-trace', 'memTrace', false)
-  setupToggle('set-show-xp', 'showXp', true)
-  setupToggle('set-spaced-rep', 'spacedRep', true)
-  setupToggle('set-ctrl-view', 'ctrlView', true)
-  setupToggle('set-slash-filter', 'slashFilter', true)
-  setupToggle('set-tab-indent', 'tabIndent', true)
-
-  // Selects
-  const setupSelect = (id: string, key: string, fallback: string): void => {
-    const sel = document.getElementById(id) as HTMLSelectElement
-    sel.value = readSetting(key, fallback)
-    sel.addEventListener('change', () => writeSetting(key, sel.value))
-  }
-  setupSelect('set-autosave', 'autosave', 'after-delay')
-  setupSelect('set-run-shortcut', 'runShortcut', 'ctrl+enter')
-  setupSelect('set-hint-limit', 'hintLimit', '3')
-  setupSelect('set-ghost-opacity', 'ghostOpacity', '0.5')
-  setupSelect('set-sidebar-style', 'sidebarStyle', 'source')
-
-  // Accent colors
-  const colorDots = splashEl.querySelectorAll('.color-dot')
-  let currentAccent = readSetting('accent', '#0891b2')
-  colorDots.forEach((dot) => {
-    const d = dot as HTMLElement
-    d.classList.toggle('active', d.dataset.accent === currentAccent)
-    d.addEventListener('click', () => {
-      currentAccent = d.dataset.accent ?? '#0891b2'
-      colorDots.forEach((c) => c.classList.remove('active'))
-      d.classList.add('active')
-      writeSetting('accent', currentAccent)
-      document.documentElement.style.setProperty('--accent', currentAccent)
-    })
-  })
-}
-
-// ---- academy carousel ----
-function initAcademyCarousel(): void {
-  const panel = document.getElementById('splash-academy') as HTMLDivElement
-  const slides = panel.querySelectorAll('.carousel-slide')
-  const dots = panel.querySelectorAll('.c-dot')
-  let cur = 0
-
-  const show = (i: number): void => {
-    slides.forEach((s) => s.classList.remove('active'))
-    dots.forEach((d) => d.classList.remove('active'))
-    slides[i]?.classList.add('active')
-    dots[i]?.classList.add('active')
-    cur = i
-  }
-
-  dots.forEach((d) => {
-    d.addEventListener('click', () => show(parseInt(d.getAttribute('data-slide') ?? '0')))
-  })
-
-  let timer = setInterval(() => {
-    if (cur < slides.length - 1) show(cur + 1)
-    else clearInterval(timer)
-  }, 4000)
-
-  show(0)
-}
-
-// ---- sidebar wiring ----
-function initSplashSidebar(): void {
-  let selectedLang: Lang = 'c'
-
-  // Sidebar nav rows: switch content panel
-  splashEl.querySelectorAll<HTMLElement>('.sidebar-row[data-panel]').forEach((row) => {
-    row.addEventListener('click', () => {
-      const panel = 'splash-' + row.dataset.panel
-      showSplashPanel(panel)
-    })
-  })
-
-  // Language cards inside sandbox panel
-  const langCards = splashEl.querySelectorAll<HTMLElement>('.lang-card')
-  langCards.forEach((card) => {
-    card.addEventListener('click', () => {
-      langCards.forEach((c) => c.classList.remove('selected'))
-      card.classList.add('selected')
-      selectedLang = (card.dataset.lang as Lang) ?? 'c'
-    })
-  })
-
-  // Start Coding button
-  document.getElementById('hero-start')?.addEventListener('click', () => {
-    blip(740, 0.07, 'sine', 0.06)
-    void beginSession(selectedLang, 'sandbox')
-  })
-
-  // Open Folder button
-  document.getElementById('hero-open')?.addEventListener('click', () => {
-    void beginSession('c').then(() => {
-      window.setTimeout(() => document.getElementById('open-folder')?.click(), 150)
-    })
-  })
-
-  // Academy Start button
-  document.getElementById('academy-start')?.addEventListener('click', () => {
-    blip(740, 0.07, 'sine', 0.06)
-    void beginSession(selectedLang, 'academy')
-  })
-}
-
-function wireSplash(): void {
-  renderRecentProjects()
-  initSplashSettings()
-  initSplashSidebar()
-  initAcademyCarousel()
-  showSplashPanel('splash-sandbox')
-}
-
-wireSplash()
+// ---- wire splash (DI pattern: pass callbacks into the extracted module) ----
+void wireSplash({
+  beginSession,
+  beginFromRecent,
+  setTheme,
+  srcEl,
+  recentList,
+})
 
 // Splash screen quit button — closes the entire application
 document.getElementById('splash-quit')?.addEventListener('click', () => {
@@ -3357,61 +1420,7 @@ document.getElementById('tb-close')?.addEventListener('click', () => {
   getCurrentWindow().close()
 })
 
-// Window state persistence — save/restore position and size between sessions
-async function saveWindowState(): Promise<void> {
-  try {
-    const win = getCurrentWindow()
-    const size = await win.outerSize()
-    const pos = await win.outerPosition()
-    const isMaximized = await win.isMaximized()
-    localStorage.setItem('blockide-window-state', JSON.stringify({
-      x: pos.x, y: pos.y,
-      w: size.width, h: size.height,
-      maximized: isMaximized,
-    }))
-  } catch {
-    /* window state is best-effort */
-  }
-}
-
-async function restoreWindowState(): Promise<void> {
-  try {
-    const raw = localStorage.getItem('blockide-window-state')
-    if (!raw) return
-    const state = JSON.parse(raw) as { x?: number; y?: number; w?: number; h?: number; maximized?: boolean }
-    const win = getCurrentWindow()
-    if (state.w && state.h) {
-      await win.setSize(new LogicalSize(state.w, state.h))
-    }
-    if (state.x !== undefined && state.y !== undefined) {
-      // Bounds check: ensure at least 100×100 px of the window is visible
-      const minVisible = 100
-      const scr = screen as Screen & { availLeft?: number; availTop?: number }
-      const scrLeft = scr.availLeft ?? 0
-      const scrTop = scr.availTop ?? 0
-      const scrW = scr.availWidth
-      const scrH = scr.availHeight
-      const x = Math.max(scrLeft, Math.min(state.x, scrLeft + scrW - minVisible))
-      const y = Math.max(scrTop, Math.min(state.y, scrTop + scrH - minVisible))
-      await win.setPosition(new LogicalPosition(x, y))
-    }
-    if (state.maximized) {
-      await win.maximize()
-    }
-  } catch {
-    /* window state restore is best-effort */
-  }
-}
-
-// Also save on resize/move (debounced)
-let stateSaveTimer = 0
-const debouncedSaveState = (): void => {
-  clearTimeout(stateSaveTimer)
-  stateSaveTimer = window.setTimeout(() => void saveWindowState(), 500)
-}
 window.addEventListener('resize', debouncedSaveState)
-
-// Restore on startup (after a short delay to let the window settle)
 setTimeout(() => void restoreWindowState(), 100)
 initContextMenu()
 initResizers()
@@ -3420,27 +1429,17 @@ initResizers()
 // does not mean the click handlers are wired yet
 ;(window as unknown as { __bootDone?: boolean }).__bootDone = true
 
+installPerfHooks()
+initExtensions()
 initDialogs()
 
 // ------------------------------------------------ drag & drop files (#12)
-// Dropping source files onto the window opens them as tabs — same guard
-// rules as every other navigation.
-getCurrentWindow()
-  .onDragDropEvent(async (ev) => {
-    if (ev.payload.type !== 'drop') return
-    if (!(await confirmDiscard())) return
-    const exts = ['c', 'cpp', 'cc', 'cxx', 'hpp', 'hh', 'py', 'js', 'mjs', 'rs']
-    let opened = 0
-    for (const raw of ev.payload.paths) {
-      const p = normSlashes(raw)
-      const ext = p.split('.').pop()?.toLowerCase() ?? ''
-      if (!exts.includes(ext)) continue
-      await openTab(asRelInWorkspace(p) ?? p)
-      opened++
-    }
-    if (opened > 0) consoleEl.textContent = `opened ${opened} dropped file(s)`
-  })
-  .catch(() => {})
+initFileDrop({
+  confirmDiscard,
+  openTab,
+  asRelInWorkspace,
+  consoleEl,
+})
 
 // diagnostics strip toggle
 const diagListEl = document.getElementById('diag-list') as HTMLDivElement
@@ -3450,109 +1449,15 @@ document.getElementById('diag-toggle')?.addEventListener('click', () => {
   ;(document.getElementById('diag-toggle') as HTMLButtonElement).textContent = showing
     ? 'problems ▸'
     : 'problems ▾'
-  if (!showing) renderDiagList(lastDiags)
+  if (!showing) renderDiagList(getLastDiags())
 })
 
 // keybindings: Ctrl+Shift+P command palette, Ctrl+Enter / F5 run, Ctrl+B sidebar toggle
-window.addEventListener('keydown', (e) => {
-  if (e.ctrlKey && e.shiftKey && e.key === 'P') {
-    e.preventDefault()
-    togglePalette()
-    return
-  }
-  if (e.key === 'F5' || (e.ctrlKey && e.key === 'Enter')) {
-    e.preventDefault()
-    if (!running) void startRun()
-    return
-  }
-  if (e.ctrlKey && e.key.toLowerCase() === 'b') {
-    e.preventDefault()
-    const sb = document.getElementById('sidebar') as HTMLElement
-    sb.style.display = sb.style.display === 'none' ? 'flex' : 'none'
-    window.dispatchEvent(new Event('resize'))
-    return
-  }
-  if (e.ctrlKey && e.key === '1') {
-    e.preventDefault()
-    setView('blocks')
-  } else if (e.ctrlKey && e.key === '2') {
-    e.preventDefault()
-    setView('split')
-  } else if (e.ctrlKey && e.key === '3') {
-    e.preventDefault()
-    setView('text')
-  } else if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
-    // keyboard-first palette: / focuses the block filter from anywhere
-    const t = e.target as HTMLElement | null
-    if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT')) return
-    e.preventDefault()
-    palFilter.focus()
-    palFilter.select()
-  }
+initKeybindings({
+  togglePalette,
+  startRun,
+  setView,
+  palFilter,
+  running: () => getRunning(),
 })
-
-// --------------------------------------------------------- onboarding tour
-// Context-aware instructions (Blockly's proven pattern: nobody reads
-// instructions — popups must VERIFY the action before closing). Steps with
-// an `until` event close themselves when the learner actually does the
-// thing; Next always remains as an escape hatch.
-const TOUR_STEPS: { title: string; body: string; until?: 'edit' | 'run' | 'check' }[] = [
-  {
-    title: 'Welcome to Cade',
-    body: 'Real code on disk is the truth. Blocks are a live view of it — break either one and they stay in sync.',
-  },
-  {
-    title: 'Drag & edit blocks',
-    body: 'Drag a chip from the palette into main, or double-click any block text and change it. This step closes when you do.',
-    until: 'edit',
-  },
-  {
-    title: 'Run & see',
-    body: 'Press Ctrl+Enter to run YOUR program. Output lands in the console. This step closes when you run it.',
-    until: 'run',
-  },
-  {
-    title: 'Learn in the Academy',
-    body: 'Pick a level, press Load, solve it, then press Check for XP. This step closes on your first Check.',
-    until: 'check',
-  },
-]
-
-function startTour(): void {
-  const overlay = document.getElementById('tour') as HTMLDivElement
-  let step = 0
-  const title = document.getElementById('tour-title') as HTMLHeadingElement
-  const body = document.getElementById('tour-body') as HTMLParagraphElement
-  const dots = document.getElementById('tour-dots') as HTMLSpanElement
-  const next = document.getElementById('tour-next') as HTMLButtonElement
-  const finish = (): void => {
-    overlay.style.display = 'none'
-    localStorage.setItem('tour-done', '1')
-    tourHooks.advance = undefined
-  }
-  const show = (): void => {
-    const s = TOUR_STEPS[step]
-    ;[title.textContent, body.textContent] = [s.title, s.body]
-    dots.textContent = `${step + 1} / ${TOUR_STEPS.length}`
-    next.textContent = s.until ? `Skip — do it myself` : step === TOUR_STEPS.length - 1 ? 'Start coding' : 'Next'
-  }
-  const advanceTo = (n: number): void => {
-    step = n
-    if (step >= TOUR_STEPS.length) {
-      finish()
-      return
-    }
-    show()
-  }
-  overlay.style.display = 'flex'
-  show()
-  next.onclick = () => advanceTo(step + 1)
-  tourHooks.advance = (ev) => {
-    if (overlay.style.display === 'flex' && TOUR_STEPS[step]?.until === ev) {
-      blip(880, 0.08, 'sine', 0.06)
-      advanceTo(step + 1)
-    }
-  }
-}
-// tour is triggered by beginSession (after the splash) — not on a timer
 

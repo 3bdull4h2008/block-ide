@@ -7,6 +7,7 @@
     <title>Cade</title>
   </head>
   <body>
+    <a href="#main-col" class="skip-link">Skip to content</a>
     <div id="splash">
       <div id="splash-window">
         <div id="splash-titlebar">
@@ -92,9 +93,9 @@
                   </div>
                 </div>
                 <div class="carousel-dots" id="academy-dots">
-                  <span class="c-dot active" data-slide="0"></span>
-                  <span class="c-dot" data-slide="1"></span>
-                  <span class="c-dot" data-slide="2"></span>
+                  <span class="c-dot active" data-slide="0" role="button" aria-label="Slide 1" tabindex="0"></span>
+                  <span class="c-dot" data-slide="1" role="button" aria-label="Slide 2" tabindex="0"></span>
+                  <span class="c-dot" data-slide="2" role="button" aria-label="Slide 3" tabindex="0"></span>
                 </div>
                 <div class="panel-actions">
                   <button id="academy-start" class="hero-btn primary">Start Academy</button>
@@ -106,7 +107,7 @@
               <div class="panel-inner">
                 <h3 class="panel-title">Recent Projects</h3>
                 <p class="panel-sub">Pick up where you left off</p>
-                <div id="recent-list"></div>
+                <div id="recent-list" aria-live="polite"></div>
               </div>
             </div>
 
@@ -127,12 +128,12 @@
                   <div class="settings-row">
                     <label>Accent Color</label>
                     <div class="settings-colors">
-                      <button class="color-dot active" data-accent="#0891b2" style="background:#0891b2"></button>
-                      <button class="color-dot" data-accent="#7c5ce0" style="background:#7c5ce0"></button>
-                      <button class="color-dot" data-accent="#ec4899" style="background:#ec4899"></button>
-                      <button class="color-dot" data-accent="#2fbf71" style="background:#2fbf71"></button>
-                      <button class="color-dot" data-accent="#ff8c1a" style="background:#ff8c1a"></button>
-                      <button class="color-dot" data-accent="#e5484d" style="background:#e5484d"></button>
+                      <button class="color-dot active" data-accent="#0891b2" style="background:#0891b2" aria-label="Teal accent"></button>
+                      <button class="color-dot" data-accent="#7c5ce0" style="background:#7c5ce0" aria-label="Purple accent"></button>
+                      <button class="color-dot" data-accent="#ec4899" style="background:#ec4899" aria-label="Pink accent"></button>
+                      <button class="color-dot" data-accent="#2fbf71" style="background:#2fbf71" aria-label="Green accent"></button>
+                      <button class="color-dot" data-accent="#ff8c1a" style="background:#ff8c1a" aria-label="Orange accent"></button>
+                      <button class="color-dot" data-accent="#e5484d" style="background:#e5484d" aria-label="Red accent"></button>
                     </div>
                   </div>
                   <div class="settings-row">
@@ -392,9 +393,9 @@
         </div>
         <div id="diag-bar">
           <button id="diag-toggle" title="toggle problem list" aria-expanded="false" aria-controls="diag-list">problems ▾</button>
-          <span id="diag-count"></span>
+          <span id="diag-count" aria-live="polite"></span>
         </div>
-        <div id="diag-list" style="display:none"></div>
+        <div id="diag-list" style="display:none" aria-live="polite"></div>
         <pre id="console" aria-live="polite">console</pre>
       </div>
       <div id="console-input-row">
@@ -439,6 +440,7 @@
         <div class="about-tag">v0.2.0 · offline-first · no accounts, no telemetry</div>
         <div class="about-links">
           <button id="show-shortcuts" class="hero-btn">Keyboard Shortcuts</button>
+          <button id="close-about" class="hero-btn">Close</button>
         </div>
       </div>
     </div>

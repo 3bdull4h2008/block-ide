@@ -6,8 +6,33 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: npm ci
+        working-directory: app
+        run: npm ci
+
+      - name: TypeScript check
+        working-directory: app
+        run: npx tsc --noEmit
+
+      - name: Vitest unit tests
+        working-directory: app
+        run: npx vitest run
+
   test:
     runs-on: windows-latest
+    needs: lint
     steps:
       - uses: actions/checkout@v4
 
@@ -23,8 +48,6 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
-      # frontend FIRST: tauri codegen embeds ../dist at compile time — without
-      # this, `cargo test` cannot even build the app crate on a clean runner
       - name: npm ci
         working-directory: app
         run: npm ci
@@ -33,29 +56,127 @@ jobs:
         working-directory: app
         run: npm run build
 
-      # parser binaries needed by integration tests and vitest
       - name: build parser binaries
         run: cargo build -p core-parser --bins
 
-      # tcc resources dir required by tauri codegen during cargo test
       - name: copy tcc resources
         working-directory: app
         run: npm run copytcc
 
-      # rust side: unit + integration tests (round-trip, recovery)
-      # (perf wall-clock asserts excluded — shared runners flake on Defender scans)
       - name: cargo test
         run: cargo test --workspace -- --skip opens_5k_file_project_under_3s
         env:
           BLOCKIDE_DATA_DIR: ${{ runner.temp }}/blockide-ci-data
 
-      # headless editor-model suites shell out to debug bins built by cargo test
-      # (parser bins already built above)
+  e2e:
+    runs-on: windows-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: typecheck
-        working-directory: app
-        run: npx tsc --noEmit
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
 
-      - name: vitest
+      - name: npm ci
         working-directory: app
-        run: npx vitest run
+        run: npm ci
+
+      - name: E2E tests
+        working-directory: app
+        run: npx vitest run --reporter=verbose e2e
+
+  accessibility:
+    runs-on: windows-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: npm ci
+        working-directory: app
+        run: npm ci
+
+      - name: Check ARIA attributes
+        shell: pwsh
+        run: |
+          $html = Get-Content "app/index.html" -Raw
+          $checks = @(
+            @{ Name = "role=dialog on modals"; Pattern = 'role="dialog"' },
+            @{ Name = "aria-modal on dialogs"; Pattern = 'aria-modal="true"' },
+            @{ Name = "aria-label on icon buttons"; Pattern = 'aria-label=' },
+            @{ Name = "aria-live on toasts"; Pattern = 'aria-live=' },
+            @{ Name = "role=status on status"; Pattern = 'role="status"' },
+            @{ Name = "role=log on console"; Pattern = 'role="log"' },
+            @{ Name = "role=application on app"; Pattern = 'role="application"' },
+            @{ Name = "aria-expanded on diag toggle"; Pattern = 'aria-expanded=' }
+          )
+          $fail = $false
+          foreach ($c in $checks) {
+            if ($html -match $c.Pattern) {
+              Write-Host "PASS: $($c.Name)"
+            } else {
+              Write-Host "FAIL: $($c.Name)"
+              $fail = $true
+            }
+          }
+          if ($fail) { exit 1 }
+          Write-Host "`nAll accessibility checks passed."
+
+      - name: Check focus-visible in CSS
+        shell: pwsh
+        run: |
+          $css = Get-Content "app/src/style.css" -Raw
+          if ($css -match 'focus-visible') {
+            Write-Host "PASS: focus-visible found in CSS"
+          } else {
+            Write-Host "FAIL: no focus-visible rules"
+            exit 1
+          }
+
+      - name: Check prefers-reduced-motion
+        shell: pwsh
+        run: |
+          $css = Get-Content "app/src/style.css" -Raw
+          if ($css -match 'prefers-reduced-motion') {
+            Write-Host "PASS: prefers-reduced-motion found"
+          } else {
+            Write-Host "FAIL: no prefers-reduced-motion"
+            exit 1
+          }
+
+  build:
+    runs-on: windows-latest
+    needs: [test, e2e, accessibility]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: npm ci
+        working-directory: app
+        run: npm ci
+
+      - name: Tauri build
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

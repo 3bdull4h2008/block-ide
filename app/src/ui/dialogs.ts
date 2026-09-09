@@ -7,6 +7,9 @@ export function initDialogs(): void {
     blip(660, 0.06, 'sine', 0.05)
     aboutEl.style.display = 'flex'
   })
+  document.getElementById('close-about')?.addEventListener('click', () => {
+    aboutEl.style.display = 'none'
+  })
   aboutEl.addEventListener('click', () => {
     aboutEl.style.display = 'none'
   })

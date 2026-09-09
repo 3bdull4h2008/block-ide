@@ -36,7 +36,7 @@
   --sea-600: #066a85;
   --sea-700: #155e75;
   --sea-900: #123b4c;
-  --ink-dim-light: #4a7a8c;
+  --ink-dim-light: #3d6a7c;
 
   /* light theme tokens */
   --bg: #e7f6fb;
@@ -46,7 +46,7 @@
   --border: #bde3f0;
   --border-strong: #1b7a9e;
   --fg: #123b4c;
-  --fg-dim: #4a7a8c;
+  --fg-dim: #3d6a7c;
   --accent: #0891b2;
   --accent-deep: #066a85;
   --accent-soft: #d3eef8;
@@ -95,6 +95,24 @@ body {
   color: var(--fg);
   height: 100vh;
   overflow: hidden;
+}
+
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  z-index: 99999;
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+.skip-link:focus {
+  top: 8px;
 }
 
 h1, h2, h3, strong, button, .tab, .pal {
@@ -201,7 +219,10 @@ button:active {
 
 button:focus-visible,
 select:focus-visible,
-.tab:focus-visible {
+.tab:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible {
   outline: 3px solid var(--yellow);
   outline-offset: 2px;
 }
