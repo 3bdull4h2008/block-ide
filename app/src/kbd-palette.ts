@@ -29,21 +29,27 @@ export function applyPalFilter(deps: KbdPaletteDeps): void {
   const { paletteEl } = deps
   const palFilter = document.getElementById('pal-filter') as HTMLInputElement
   const q = palFilter.value.trim().toLowerCase()
+  const cat = (paletteEl.dataset.catFilter ?? '').toLowerCase()
   kbdIdx = -1
   for (const el of Array.from(
     paletteEl.querySelectorAll<HTMLElement>('.pal, #make-var, #make-list'),
   )) {
     el.classList.remove('pal-kbd')
-    el.classList.toggle('pal-hide', q !== '' && !(el.textContent ?? '').toLowerCase().includes(q))
+    const textOk = q === '' || (el.textContent ?? '').toLowerCase().includes(q)
+    const group = (el.dataset.group ?? el.dataset.cat ?? '').toLowerCase()
+    const catOk = cat === '' || group === cat
+    el.classList.toggle('pal-hide', !(textOk && catOk))
   }
   for (const head of Array.from(paletteEl.querySelectorAll<HTMLElement>('.pal-group'))) {
     let visible = 0
     let n = head.nextElementSibling as HTMLElement | null
-    while (n && !n.classList.contains('pal-group')) {
+    while (n && !n.classList.contains('pal-group') && n.id !== 'pal-cats') {
       if (!n.classList.contains('pal-hide')) visible++
       n = n.nextElementSibling as HTMLElement | null
     }
-    head.classList.toggle('pal-hide', q !== '' && visible === 0)
+    const headGroup = (head.dataset.group ?? head.dataset.g ?? '').toLowerCase()
+    const catHide = cat !== '' && headGroup !== cat
+    head.classList.toggle('pal-hide', catHide || (q !== '' && visible === 0))
   }
 }
 

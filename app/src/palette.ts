@@ -304,10 +304,20 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
       { name: 'call proc', cat: 'functions', snippet: 'myfn();', langs: ['c', 'cpp', 'javascript', 'rust'] },
       // toplevel: always splices at file scope (nested definitions are not C)
       { name: 'define fn', cat: 'functions', snippet: 'int myfn(int x) {\n    return x;\n}', toplevel: true, langs: ['c', 'cpp'] },
+      { name: 'define void fn', cat: 'functions', snippet: 'void myfn(int x) {\n}', toplevel: true, langs: ['c', 'cpp'] },
+      { name: 'define main', cat: 'functions', snippet: 'int main() {\n    return 0;\n}', toplevel: true, langs: ['c', 'cpp'] },
+      { name: 'forward declare', cat: 'functions', snippet: 'int myfn(int x);', toplevel: true, langs: ['c', 'cpp'] },
       {
         name: 'namespace',
         cat: 'functions',
         snippet: 'namespace myns {\n}',
+        toplevel: true,
+        langs: ['cpp'],
+      },
+      {
+        name: 'using namespace',
+        cat: 'functions',
+        snippet: 'using namespace std;',
         toplevel: true,
         langs: ['cpp'],
       },
@@ -330,8 +340,12 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
     name: 'Structs',
     color: '#EC4899',
     items: [
+      { name: 'define struct', cat: 'structs', snippet: 'struct Point {\n    int x;\n    int y;\n};', toplevel: true, langs: ['c', 'cpp'] },
+      { name: 'define enum', cat: 'structs', snippet: 'enum Color { RED, GREEN, BLUE };', toplevel: true, langs: ['c', 'cpp'] },
+      { name: 'define union', cat: 'structs', snippet: 'union Value {\n    int i;\n    float f;\n};', toplevel: true, langs: ['c', 'cpp'] },
+      { name: 'typedef', cat: 'structs', snippet: 'typedef struct Point Point;', toplevel: true, langs: ['c'] },
       { name: 'struct field', cat: 'structs', snippet: 'p.x = 0;', langs: ['c', 'cpp'] },
-      { name: 'define class', cat: 'structs', snippet: 'class MyClass {\n};', toplevel: true, langs: ['cpp'] },
+      { name: 'define class', cat: 'structs', snippet: 'class MyClass {\npublic:\n    int x;\n};', toplevel: true, langs: ['cpp'] },
       { name: 'def class', cat: 'structs', snippet: 'class MyClass:\n    pass', toplevel: true, langs: ['python'] },
       { name: 'define class', cat: 'structs', snippet: 'class MyClass {\n}', toplevel: true, langs: ['javascript'] },
       { name: 'constructor', cat: 'structs', snippet: 'constructor() {\n    this.x = 0;\n}', langs: ['javascript'] },
@@ -352,8 +366,11 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
     name: 'Notes',
     color: '#FFE9A8',
     items: [
-      { name: '// note', cat: 'comment', snippet: '// note', langs: ['c', 'cpp', 'javascript', 'rust'] },
+      { name: '// note', cat: 'comment', snippet: '// note', langs: ['c', 'cpp', 'javascript', 'rust', 'go', 'java', 'typescript'] },
+      { name: '/* block */', cat: 'comment', snippet: '/* note */', langs: ['c', 'cpp', 'javascript'] },
+      { name: '/// doc', cat: 'comment', snippet: '/// doc comment', langs: ['cpp', 'rust'] },
       { name: '# note', cat: 'comment', snippet: '# note', langs: ['python'] },
+      { name: '# disabled', cat: 'comment', snippet: '#if 0\n#endif', langs: ['c', 'cpp'] },
     ],
   },
   {

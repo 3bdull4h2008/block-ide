@@ -442,3 +442,29 @@ state=<terminal> | next=<one concrete action>
 | Silent divergence | editing AST without file rewrite | Rule 1 + G-SYNC-FUZZ |
 | Scope creep | starting C++/multiplayer early | D3 + backlog freeze |
 | Uneditable states | fancy UX over Rule 2 | severity-0 triage |
+
+---
+
+## UI Rebuild Track (2026-09-10)
+
+Full chrome rebuild from zero, design language preserved (Sea + Scratch + Comic/Baloo).
+
+**Authoritative handoff:** [`docs/UI-REBUILD-NEXT.md`](docs/UI-REBUILD-NEXT.md)
+**Design tokens / brand:** [`DESIGN.md`](DESIGN.md)
+
+### Done this cycle
+- CSS architecture: `tokens` / `components` / `layout` / `style`
+- Meaningful-dirty (no fake unsaved on tab switch / cursor / whitespace)
+- Perf: gated debug overlay, rAF-coalesced renders, IPC ring cap
+- New File = untitled buffer; Save As on first write; Open Folder hardened
+- Category filter pills; function/struct/comment colors; dark block twins
+- Editor fully sea-retinted (no `oneDark` slate leak); AA muted text
+- Theme score path: **5.5 → 7.2/10** (subagent reviews)
+
+### Next (see handoff table)
+1. Repaint canvas on theme toggle
+2. Collapse Open+File toolbar density
+3. Branded splash shell
+4. Incremental block invalidation (IMPROVEMENT-PLAN #4)
+
+**Gate:** `cd app && npm run typecheck && npm run test && npm run build`

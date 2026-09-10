@@ -147,11 +147,17 @@ function collapse(s: string): string {
   return s.replace(/\s+/g, ' ').trim()
 }
 
+/** Direct body of a definition. Prefer a fielded `body`; also accept the
+ *  class/struct field-list kinds tree-sitter-cpp uses. MUST NOT recurse —
+ *  a deep search made `namespace` claim the first nested function's braces
+ *  and mash every sibling signature into one header. */
+const BODY_KINDS = new Set<string>(['compound_statement', 'field_declaration_list', 'declaration_list', 'field_declaration_list'])
 function findCompound(n: CNodeJSON): CNodeJSON | null {
   for (const c of n.children) {
-    if (c.kind === SHAPE.body) return c
-    const deep = findCompound(c)
-    if (deep) return deep
+    if (c.field === 'body' && (c.kind === SHAPE.body || BODY_KINDS.has(c.kind))) return c
+  }
+  for (const c of n.children) {
+    if (c.kind === SHAPE.body || (c.kind === 'field_declaration_list' && c.named)) return c
   }
   return null
 }
@@ -279,8 +285,11 @@ function toBlock(n: CNodeJSON): BBlock {
             ? (b.children.find((c) => c.kind !== 'else') ?? b)
             : b
         if (isBrace(inner)) continue
-        if (inner.kind === SHAPE.body) kids.push(...stackFrom(inner))
-        else kids.push(toBlock(inner))
+        if (inner.kind === SHAPE.body || inner.kind === 'field_declaration_list') {
+          kids.push(...stackFrom(inner))
+        } else {
+          kids.push(toBlock(inner))
+        }
       }
     } else if (compound !== null) {
       kids = stackFrom(compound)
@@ -514,25 +523,53 @@ export function hitTestHeader(roots: BBlock[], wx: number, wy: number): BBlock |
 }
 
 /** Scratch-style hue coding, harmonized to the sea-blue family.
- *  statement = sea blue (the main color), control = play orange,
- *  function = violet, comment = sand. BORDER holds a darker shade of
- *  each fill for the chunky 3px clay outline. */
+ *  statement = mid-sea (distinct from brand accent), control = play orange,
+ *  function = violet, comment = sand, structs = pink. DARK is the
+ *  dark-theme twin applied when data-theme=dark. */
 export const COLORS: Record<Cat, number> = {
   function: 0x7c5ce0,
   control: 0xffab19,
-  statement: 0x0891b2,
+  statement: 0x1a9bb8,
   variables: 0xff8c1a,
   comment: 0xffe9a8,
-  error: 0x94a3b8,
+  error: 0x8b6a72,
   structs: 0xec4899,
+}
+
+export const COLORS_DARK: Record<Cat, number> = {
+  function: 0x9b6dff,
+  control: 0xff9f1a,
+  statement: 0x2bb0c9,
+  variables: 0xff9f40,
+  comment: 0xf0e0a0,
+  error: 0xc47882,
+  structs: 0xff6bb3,
 }
 
 export const BORDER: Record<Cat, number> = {
   function: 0x5a3fc0,
   control: 0xd97e06,
-  statement: 0x066a85,
+  statement: 0x0e6f88,
   variables: 0xcc6d10,
   comment: 0xd9b25a,
-  error: 0x64748b,
+  error: 0x5c4048,
   structs: 0xbe2e6f,
+}
+
+export const BORDER_DARK: Record<Cat, number> = {
+  function: 0x6b3fd4,
+  control: 0xc47a0a,
+  statement: 0x147a90,
+  variables: 0xc47010,
+  comment: 0xb89840,
+  error: 0x6a3840,
+  structs: 0xc43d7a,
+}
+
+export function palColors(): { fill: Record<Cat, number>; edge: Record<Cat, number> } {
+  const dark = typeof document !== 'undefined'
+    && document.documentElement.getAttribute('data-theme') === 'dark'
+  return dark
+    ? { fill: COLORS_DARK, edge: BORDER_DARK }
+    : { fill: COLORS, edge: BORDER }
 }

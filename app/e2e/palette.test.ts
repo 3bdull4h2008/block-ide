@@ -307,7 +307,10 @@ it('define fn / namespace are toplevel; call chips are statements', () => {
       ['async fn', 'typescript'],
       ['def', 'python'],
       ['define fn', 'c'],
+      ['define main', 'c'],
+      ['define void fn', 'c'],
       ['fn', 'rust'],
+      ['forward declare', 'c'],
       ['function', 'javascript'],
       ['function', 'typescript'],
       ['main', 'java'],
@@ -315,6 +318,7 @@ it('define fn / namespace are toplevel; call chips are statements', () => {
       ['namespace', 'cpp'],
       ['static method', 'java'],
       ['template', 'cpp'],
+      ['using namespace', 'cpp'],
     ])
     for (const i of fns.items) {
       if (!i.toplevel) expect(i.name.startsWith('call'), i.name).toBe(true)

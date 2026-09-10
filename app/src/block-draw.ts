@@ -1,5 +1,5 @@
 import { Graphics, Container, Text } from 'pixi.js'
-import { COLORS, BORDER, PAD, ROW_H, TD, type BBlock } from './blocks'
+import { PAD, ROW_H, TD, type BBlock, palColors } from './blocks'
 import { mixWhite, statementPath, cHeaderPath, cBodyPath } from './utils/drawing'
 import { WHITE_LABEL, DARK_LABEL } from './utils/styles'
 import { partWidth } from './blocks'
@@ -15,8 +15,9 @@ export interface BlockDrawDeps {
 export function drawBlock(deps: BlockDrawDeps, b: BBlock): void {
   const { world, slotHits, attachHeaderEvents, onSlotHit } = deps
   const g = new Graphics()
-  const fill = COLORS[b.cat] ?? COLORS.statement
-  const edge = BORDER[b.cat] ?? BORDER.statement
+  const { fill: fills, edge: edges } = palColors()
+  const fill = fills[b.cat] ?? fills.statement
+  const edge = edges[b.cat] ?? edges.statement
   if (b.sticky) {
     g.roundRect(b.x, b.y, b.w, b.h, 8)
     g.fill({ color: fill })

@@ -43,6 +43,7 @@ function makeReporterChip(
   const el = document.createElement('div')
   el.className = `pal pal-${item.cat} pal-reporter`
   el.dataset.cat = item.cat
+  el.dataset.group = item.cat
   el.textContent = item.name
   ;(el as unknown as { __item?: PaletteItem }).__item = item
   el.addEventListener('pointerdown', (e) => {
@@ -69,6 +70,7 @@ function makeVarChip(
   const el = document.createElement('div')
   el.className = `pal pal-${item.cat}${isList ? ' pal-list' : ''}`
   el.dataset.cat = item.cat
+  el.dataset.group = item.cat
   el.textContent = item.name
   ;(el as unknown as { __item?: PaletteItem }).__item = item
   el.addEventListener('pointerdown', (e) => {
@@ -105,15 +107,61 @@ export function renderPaletteFull(deps: PaletteRenderDeps): void {
   const st = paletteEl.scrollTop
   paletteEl.innerHTML = ''
 
+  // Labeled category filter — replaces the unlabeled color-dot rail.
   const rail = document.createElement('div')
-  rail.id = 'pal-rail'
-  const dots: { dot: HTMLSpanElement; name: string }[] = []
+  rail.id = 'pal-cats'
+  rail.setAttribute('role', 'toolbar')
+  rail.setAttribute('aria-label', 'Block categories')
   paletteEl.appendChild(rail)
+
+  const catFilter = paletteEl.dataset.catFilter ?? ''
+  const pills: { el: HTMLButtonElement; key: string; head: HTMLElement }[] = []
+
+  const setActivePill = (key: string): void => {
+    for (const p of pills) p.el.classList.toggle('active', p.key === key)
+  }
+
+  const addPill = (key: string, label: string, color: string, head: HTMLElement): void => {
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'pal-cat-pill'
+    btn.dataset.key = key
+    btn.style.setProperty('--pill-c', color)
+    btn.title = `Show only ${label} blocks`
+    btn.innerHTML = `<span class="pal-cat-swatch" style="background:${color}"></span><span>${label}</span>`
+    btn.addEventListener('click', () => {
+      const next = paletteEl.dataset.catFilter === key ? '' : key
+      paletteEl.dataset.catFilter = next
+      setActivePill(next)
+      deps.applyPalFilter(deps.kbdPaletteDeps)
+      if (next) {
+        paletteEl.scrollTo({ top: Math.max(0, head.offsetTop - 48), behavior: 'smooth' })
+      }
+    })
+    rail.appendChild(btn)
+    pills.push({ el: btn, key, head })
+  }
+
+  // "All" pill first
+  const allBtn = document.createElement('button')
+  allBtn.type = 'button'
+  allBtn.className = 'pal-cat-pill active'
+  allBtn.dataset.key = ''
+  allBtn.textContent = 'All'
+  allBtn.title = 'Show every category'
+  allBtn.addEventListener('click', () => {
+    paletteEl.dataset.catFilter = ''
+    setActivePill('')
+    deps.applyPalFilter(deps.kbdPaletteDeps)
+  })
+  rail.appendChild(allBtn)
+  pills.push({ el: allBtn, key: '', head: paletteEl })
 
   const addGroupHeader = (name: string, color: string): HTMLDivElement => {
     const head = document.createElement('div')
     head.className = 'pal-group'
     head.dataset.g = name.toLowerCase()
+    head.dataset.group = name.toLowerCase()
     head.textContent = name
     head.style.background = color
     if (name === 'Notes') head.style.color = '#6b4d00'
@@ -134,6 +182,7 @@ export function renderPaletteFull(deps: PaletteRenderDeps): void {
     const el = document.createElement('div')
     el.className = `pal pal-${item.cat}${depOk ? '' : ' pal-dep'}`
     el.dataset.cat = item.cat
+    el.dataset.group = item.cat
     el.textContent = item.name
     ;(el as unknown as { __item?: PaletteItem }).__item = item
     if (!depOk) {
@@ -167,33 +216,18 @@ export function renderPaletteFull(deps: PaletteRenderDeps): void {
     const visibleItems = g.items.filter((i) => i.langs === undefined || i.langs.includes(deps.activeLang()))
     if (visibleItems.length === 0) continue
     const head = addGroupHeader(g.name, g.color)
-    const dot = document.createElement('span')
-    dot.className = 'rail-dot'
-    dot.title = g.name
-    dot.style.background = g.color
-    dot.addEventListener('click', () =>
-      paletteEl.scrollTo({ top: head.offsetTop - 26, behavior: 'smooth' }),
-    )
-    rail.appendChild(dot)
-    dots.push({ dot, name: g.name })
+    addPill(g.name.toLowerCase(), g.name, g.color, head)
     for (const item of visibleItems) addChip(item)
   }
 
   if (deps.activeLang() === 'c' || deps.activeLang() === 'cpp') {
     const vhead = addGroupHeader('Variables', VARIABLES_COLOR)
-    const vdot = document.createElement('span')
-    vdot.className = 'rail-dot'
-    vdot.title = 'Variables'
-    vdot.style.background = VARIABLES_COLOR
-    vdot.addEventListener('click', () =>
-      paletteEl.scrollTo({ top: vhead.offsetTop - 26, behavior: 'smooth' }),
-    )
-    rail.appendChild(vdot)
-    dots.push({ dot: vdot, name: 'Variables' })
+    addPill('variables', 'Variables', VARIABLES_COLOR, vhead)
 
     const mk = document.createElement('button')
     mk.id = 'make-var'
     mk.dataset.cat = 'variables'
+    mk.dataset.group = 'variables'
     mk.textContent = 'Make a Variable'
     mk.addEventListener('click', () => {
       if (mk.classList.contains('locked')) return
@@ -223,13 +257,16 @@ export function renderPaletteFull(deps: PaletteRenderDeps): void {
     const allVars = [...new Set([...deps.knownVars, ...deps.harvestedVars])]
     for (const v of allVars) {
       for (const chip of varChips(v, deps.varTypesMap[v] ?? 'int')) {
-        paletteEl.appendChild(makeVarChip(chip, deps))
+        const el = makeVarChip(chip, deps)
+        el.dataset.group = 'variables'
+        paletteEl.appendChild(el)
       }
     }
 
     const mkList = document.createElement('button')
     mkList.id = 'make-list'
     mkList.dataset.cat = 'variables'
+    mkList.dataset.group = 'variables'
     mkList.textContent = 'Make a List'
     mkList.addEventListener('click', () => {
       if (mkList.classList.contains('locked')) return
@@ -251,18 +288,17 @@ export function renderPaletteFull(deps: PaletteRenderDeps): void {
       if (deps.src().includes(`${v}[`)) listVars.add(v)
     }
     for (const v of listVars) {
-      for (const chip of listChips(v)) paletteEl.appendChild(makeVarChip(chip, deps, true))
+      for (const chip of listChips(v)) {
+        const el = makeVarChip(chip, deps, true)
+        el.dataset.group = 'variables'
+        paletteEl.appendChild(el)
+      }
     }
   }
 
-  paletteEl.onscroll = () => {
-    let active = dots[0]?.name
-    for (const d of dots) {
-      const head = paletteEl.querySelector(`.pal-group[data-g="${d.name.toLowerCase()}"]`) as HTMLElement | null
-      if (head && head.offsetTop - 30 <= paletteEl.scrollTop) active = d.name
-    }
-    for (const d of dots) d.dot.classList.toggle('active', d.name === active)
-  }
+  // restore filter state
+  setActivePill(catFilter)
+  paletteEl.dataset.catFilter = catFilter
 
   deps.applyPalFilter(deps.kbdPaletteDeps)
   paletteEl.scrollTop = st

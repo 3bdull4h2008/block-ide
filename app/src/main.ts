@@ -7,54 +7,68 @@ import { interpretC, type TraceStep } from './tracer'
 import { installPerfHooks } from './perf-audit'
 import { initExtensions } from './extensions'
 
-// Debug log overlay
-function debugLog(msg: string): void {
+// Debug log overlay — gated, capped, non-recursive.
+const DEBUG_LOG_MAX = 200
+let debugLogLines = 0
+
+function appendDebugLine(msg: string): void {
   const el = document.getElementById('debug-log-content')
   const overlay = document.getElementById('debug-log')
-  if (el && overlay) {
-    const line = document.createElement('div')
-    line.textContent = `${new Date().toLocaleTimeString()} ${msg}`
-    el.appendChild(line)
-    el.scrollTop = el.scrollHeight
-    overlay.style.display = 'block'
+  if (!el || !overlay) return
+  if (overlay.style.display !== 'block' && !overlay.classList.contains('open')) return
+  const line = document.createElement('div')
+  line.textContent = msg
+  el.appendChild(line)
+  debugLogLines++
+  while (debugLogLines > DEBUG_LOG_MAX && el.firstChild) {
+    el.removeChild(el.firstChild)
+    debugLogLines--
   }
-  console.log(msg)
+  el.scrollTop = el.scrollHeight
 }
 
-// Override console.log to also show in debug overlay
 const origLog = console.log.bind(console)
+const origError = console.error.bind(console)
 console.log = (...args) => {
   origLog(...args)
-  debugLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '))
+  appendDebugLine(args.map(a => (typeof a === 'object' ? safeJson(a) : String(a))).join(' '))
 }
-const origError = console.error.bind(console)
 console.error = (...args) => {
   origError(...args)
-  debugLog('ERROR: ' + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '))
+  appendDebugLine('ERROR: ' + args.map(a => (typeof a === 'object' ? safeJson(a) : String(a))).join(' '))
+}
+
+function safeJson(a: unknown): string {
+  try { return JSON.stringify(a) } catch { return String(a) }
 }
 
 // IPC observability (temporary diagnostics, RUN 43): count calls/pending per
-// command so hangs are attributable from the page itself.
+// command so hangs are attributable from the page itself. Ring-capped.
+const IPC_LOG_MAX = 400
 const ipcStats: Record<string, { calls: number; pending: number; errs: number }> = {}
 ;(window as unknown as { __ipc?: unknown }).__ipc = ipcStats
 const ipcLog: string[] = []
 ;(window as unknown as { __ipcLog?: unknown }).__ipcLog = ipcLog
+function ipcPush(line: string): void {
+  ipcLog.push(line)
+  if (ipcLog.length > IPC_LOG_MAX) ipcLog.splice(0, ipcLog.length - IPC_LOG_MAX)
+}
 function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const rec = (ipcStats[cmd] ??= { calls: 0, pending: 0, errs: 0 })
   rec.calls++
   rec.pending++
   const t0 = Math.round(performance.now())
-  ipcLog.push(`+${t0}ms call ${cmd}`)
+  ipcPush(`+${t0}ms call ${cmd}`)
   const p = tauriInvoke<T>(cmd, args)
   p.then(
     () => {
       rec.pending--
-      ipcLog.push(`+${Math.round(performance.now())}ms ok   ${cmd} (${Math.round(performance.now()) - t0}ms)`)
+      ipcPush(`+${Math.round(performance.now())}ms ok   ${cmd} (${Math.round(performance.now()) - t0}ms)`)
     },
     () => {
       rec.pending--
       rec.errs++
-      ipcLog.push(`+${Math.round(performance.now())}ms ERR  ${cmd}`)
+      ipcPush(`+${Math.round(performance.now())}ms ERR  ${cmd}`)
     },
   )
   return p
@@ -99,6 +113,7 @@ import { registerContextMenuProvider, initContextMenu } from './context-menu'
 import { initResizers } from './resize'
 import { initConsole } from './ui/console'
 import { initDialogs } from './ui/dialogs'
+import { applyChromeIcons, icons } from './ui/icons'
 import {
   langOf,
   isWinPath,
@@ -139,7 +154,8 @@ function initEditor(): void {
     srcEl.value = newSrc
     hist.push(prevSrcForUndo, 'type')
     prevSrcForUndo = newSrc
-    void render(newSrc)
+    lastPaintedSrc = null
+    void scheduleRender(newSrc)
     markDirty()
     scheduleAutoSave()
   }
@@ -239,13 +255,26 @@ let tracePlayTimer: ReturnType<typeof setInterval> | null = null
 let slotHits: SlotHit[] = []
 
 function markDirty(): void {
-  const dirty = activePath !== null && savedCache.get(activePath) !== src
+  const dirty = activePath !== null && isMeaningfullyDirty()
   for (const t of Array.from(tabsEl.children) as HTMLElement[]) {
     if (t.dataset.path === activePath) t.classList.toggle('dirty', dirty)
     t.classList.toggle('active', t.dataset.path === activePath)
   }
   updateTitle()
   updateTabsHeight()
+}
+
+/** True when the buffer differs from its load/save baseline in a way that
+ *  matters. Trailing-newline / indent-only drift does not count. */
+function isMeaningfullyDirty(): boolean {
+  if (src.trim().length === 0 || src === SAMPLES[activeLang]) return false
+  const baseline =
+    activePath !== null
+      ? (savedCache.get(activePath) ?? savedSnapshot)
+      : savedSnapshot
+  if (src === baseline) return false
+  if (src.trimEnd() === baseline.trimEnd()) return false
+  return true
 }
 
 function updateTabsHeight(): void {
@@ -261,7 +290,8 @@ function setSrc(next: string, kind: 'op' | 'type' = 'op'): Promise<void> {
   srcEl.value = next
   editor?.setSource(next)
   srcSetting = false
-  const p = render(next)
+  lastPaintedSrc = null
+  const p = scheduleRender(next)
   markDirty()
   return p
 }
@@ -270,9 +300,28 @@ function setSrc(next: string, kind: 'op' | 'type' = 'op'): Promise<void> {
 // is in flight bump the generation; the stale render aborts instead of
 // painting an older program than the textarea shows, and the finally-clause
 // re-renders the newest buffer so nothing is ever silently skipped.
+// Bursty keystrokes are coalesced onto one rAF; identical buffers skip paint.
 let renderGen = 0
+let lastPaintedSrc: string | null = null
+let renderRaf = 0
+let pendingRenderSrc: string | null = null
+
+function scheduleRender(source: string): Promise<void> {
+  pendingRenderSrc = source
+  if (renderRaf) return Promise.resolve()
+  return new Promise((resolve) => {
+    renderRaf = requestAnimationFrame(() => {
+      renderRaf = 0
+      const next = pendingRenderSrc
+      pendingRenderSrc = null
+      if (next === null) { resolve(); return }
+      void render(next).then(resolve)
+    })
+  })
+}
 
 async function render(source: string): Promise<void> {
+  if (source === lastPaintedSrc) return
   const gen = ++renderGen
   try {
     const out = await invoke<{ tree: CTreeJSON; has_errors: boolean }>('parse_c', {
@@ -318,6 +367,8 @@ async function render(source: string): Promise<void> {
     for (const b of roots) drawBlock(b)
     world.addChild(overlay)
     world.addChild(snapLayer)
+    lastPaintedSrc = source
+    document.getElementById('canvas-empty')?.toggleAttribute('hidden', roots.length > 0)
     statusEl.textContent = out.has_errors
       ? `parsed with errors (${activeLang.toUpperCase()})`
       : `parsed clean (${activeLang.toUpperCase()})`
@@ -724,9 +775,14 @@ async function fsWrite(p: string, c: string): Promise<void> {
 }
 
 async function refreshFiles(): Promise<void> {
-  if (!workspace) return
+  const filesSection = document.getElementById('files-section')
+  if (!workspace) {
+    filesSection?.classList.add('is-empty')
+    return
+  }
+  filesSection?.classList.remove('is-empty')
   console.log('[refreshFiles] workspace:', workspace)
-  filesEl.innerHTML = '<div class="file-dir" style="color:var(--accent);">Loading...</div>'
+  filesEl.innerHTML = '<div class="file-dir" style="color:var(--c-accent);">Loading...</div>'
   try {
     files = await invoke<string[]>('list_c_files', { root: workspace })
     console.log('[refreshFiles] files:', files)
@@ -853,12 +909,11 @@ async function closeTab(path: string): Promise<void> {
   filesEl.querySelectorAll('.file.active').forEach(el => el.classList.remove('active'))
 }
 
-/** Unsaved-changes gate for every navigation that would REPLACE the single
- *  buffer (tab/file/recent/folder/new/open). Commercial rule: never lose
- *  work silently, never nag when clean. */
+/** Unsaved-changes gate for every navigation that would REPLACE the buffer.
+ *  Uses the same meaningful-dirty rule as the title dots — cursor moves and
+ *  whitespace-only drift never nag. */
 async function confirmDiscard(): Promise<boolean> {
-  if (src.trim().length === 0 || src === SAMPLES[activeLang]) return true
-  if (activePath !== null && src === savedSnapshot) return true
+  if (!isMeaningfullyDirty()) return true
   return await ask(`"${activePath ? baseName(activePath) : 'Untitled'}" has unsaved changes.\n\nDiscard them?`, {
     title: 'Unsaved changes',
     kind: 'warning',
@@ -902,13 +957,15 @@ function activateTab(rel: string): void {
   editor?.setLang(activeLang)
   src = fileCache.get(rel) ?? ''
   savedSnapshot = src // fresh load = clean baseline
+  srcSetting = true // suppress onUpdate from setSource (false dirty / undo push)
   srcEl.value = src
   editor?.setSource(src)
+  srcSetting = false
   renderPalette()
-  void render(src)
+  lastPaintedSrc = null
+  void scheduleRender(src)
   markDirty()
   setView(tabViews.get(rel) ?? 'split')
-  // Update file explorer active highlight
   filesEl.querySelectorAll('.file.active').forEach(el => el.classList.remove('active'))
   const activeFileEl = filesEl.querySelector(`.file[data-path="${rel}"]`)
   if (activeFileEl) activeFileEl.classList.add('active')
@@ -916,17 +973,28 @@ function activateTab(rel: string): void {
 
 document.getElementById('open-folder')?.addEventListener('click', async () => {
   console.log('[open-folder] clicked')
-  if (!(await confirmDiscard())) return
-  const dir = await openDialog({ directory: true })
-  console.log('[open-folder] selected dir:', dir)
-  if (typeof dir !== 'string') return
-  workspace = dir
-  tabsEl.innerHTML = ''
-  fileCache.clear()
-  savedCache.clear()
-  activePath = null
-  await refreshFiles()
-  consoleEl.textContent = `workspace: ${dir}`
+  try {
+    if (!(await confirmDiscard())) return
+    const dir = await openDialog({
+      directory: true,
+      multiple: false,
+      title: 'Open Folder',
+      recursive: true,
+    })
+    console.log('[open-folder] selected dir:', dir)
+    if (typeof dir !== 'string' || !dir) return
+    workspace = normSlashes(dir)
+    tabsEl.innerHTML = ''
+    fileCache.clear()
+    savedCache.clear()
+    activePath = null
+    await refreshFiles()
+    consoleEl.textContent = `workspace: ${workspace}`
+    toast(`Opened ${baseName(workspace)}`, 'success')
+  } catch (err) {
+    console.error('[open-folder] ERROR:', err)
+    toast(`Open Folder failed: ${err}`, 'error')
+  }
 })
 
 // Standalone documents: New File and Open File work with NO folder open —
@@ -946,88 +1014,59 @@ document.getElementById('open-file')?.addEventListener('click', async () => {
   await openTab(rel ?? normSlashes(picked))
 })
 
+let untitledSeq = 0
+
 document.getElementById('new-file')?.addEventListener('click', async () => {
-  if (!(await confirmDiscard())) return
-
-  // Language selector modal for new file
-  const lang = await new Promise<string | null>((resolve) => {
-    const modal = document.createElement('div')
-    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:100'
-    modal.innerHTML = `
-      <div style="background:var(--panel);padding:24px;border-radius:12px;min-width:300px;box-shadow:0 20px 40px rgba(0,0,0,0.3)">
-        <h3 style="margin:0 0 16px;font-size:16px">New file language</h3>
-        <select id="new-lang" style="width:100%;padding:8px 12px;font-family:inherit;font-size:14px;border:2px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg)">
-          <option value="c">C</option>
-          <option value="cpp">C++</option>
-          <option value="python">Python</option>
-          <option value="javascript">JavaScript</option>
-          <option value="rust">Rust</option>
-          <option value="go">Go</option>
-          <option value="java">Java</option>
-          <option value="typescript">TypeScript</option>
-        </select>
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
-          <button id="lang-cancel" style="padding:8px 16px;background:transparent;border:1px solid var(--border);border-radius:6px;cursor:pointer">Cancel</button>
-          <button id="lang-ok" style="padding:8px 16px;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer">Create</button>
+  try {
+    if (!(await confirmDiscard())) return
+    const lang = await new Promise<string | null>((resolve) => {
+      const modal = document.createElement('div')
+      modal.className = 'dialog-overlay open'
+      modal.setAttribute('role', 'dialog')
+      modal.setAttribute('aria-modal', 'true')
+      modal.setAttribute('aria-label', 'New file language')
+      modal.innerHTML = `
+        <div class="dialog" style="width: 340px;">
+          <div class="dialog-header"><span class="dialog-title">New File</span></div>
+          <div class="dialog-body">
+            <label class="settings-label" for="new-lang" style="display:block;margin-bottom:var(--sp-2);">Language</label>
+            <select id="new-lang" class="select">
+              <option value="c">C</option><option value="cpp">C++</option>
+              <option value="python">Python</option><option value="javascript">JavaScript</option>
+              <option value="rust">Rust</option><option value="go">Go</option>
+              <option value="java">Java</option><option value="typescript">TypeScript</option>
+            </select>
+          </div>
+          <div class="dialog-footer">
+            <button id="lang-cancel" type="button" class="btn">Cancel</button>
+            <button id="lang-ok" type="button" class="btn btn-primary">Create</button>
+          </div>
         </div>
-      </div>
-    `
-    document.body.appendChild(modal)
-    const select = modal.querySelector('#new-lang') as HTMLSelectElement
-    const okBtn = modal.querySelector('#lang-ok') as HTMLButtonElement
-    const cancelBtn = modal.querySelector('#lang-cancel') as HTMLButtonElement
-
-    const cleanup = () => modal.remove()
-    cancelBtn.onclick = () => { cleanup(); resolve(null) }
-    okBtn.onclick = () => { cleanup(); resolve(select.value) }
-    modal.onclick = (e) => { if (e.target === modal) { cleanup(); resolve(null) } }
-    select.focus()
-  })
-  if (!lang) return
-
-  const name = window.prompt('New file name:', 'main.c')
-  if (!name) return
-
-  const extMap: Record<string, string> = { c: '.c', cpp: '.cpp', python: '.py', javascript: '.js', rust: '.rs', go: '.go', java: '.java', typescript: '.ts' }
-  const ext = extMap[lang]
-  const withExt = /\.[a-z]+$/i.test(name) ? name : `${name}${ext}`
-
-  if (workspace !== null) {
-    const exists = files.includes(withExt)
-    const overwrite =
-      !exists ||
-      (await ask(`"${withExt}" already exists in this folder.\n\nOverwrite it?`, {
-        title: 'Overwrite file?',
-        kind: 'warning',
-      }))
-    if (!overwrite) return
-    const content = NEW_TEMPLATES[lang as SourceLang]
-    await invoke('write_file', { root: workspace, rel: withExt, content })
-    await refreshFiles()
-    await openTab(withExt)
-  } else {
-    const picked = await saveDialog({
-      title: 'Save new file',
-      defaultPath: withExt,
-      filters: [{ name: 'Source files', extensions: ['c', 'cpp', 'cc', 'cxx', 'hh', 'py', 'js', 'mjs', 'ts', 'tsx', 'rs', 'go', 'java'] }],
+      `
+      document.body.appendChild(modal)
+      const select = modal.querySelector('#new-lang') as HTMLSelectElement
+      const okBtn = modal.querySelector('#lang-ok') as HTMLButtonElement
+      const cancelBtn = modal.querySelector('#lang-cancel') as HTMLButtonElement
+      const cleanup = () => modal.remove()
+      cancelBtn.onclick = () => { cleanup(); resolve(null) }
+      okBtn.onclick = () => { cleanup(); resolve(select.value) }
+      modal.onclick = (e) => { if (e.target === modal) { cleanup(); resolve(null) } }
+      select.focus()
     })
-    if (typeof picked !== 'string' || !picked) return
-    const exists = await invoke<unknown>('read_abs', { path: picked }).then(
-      () => true,
-      () => false,
-    )
-    if (
-      exists &&
-      !(await ask(`"${baseName(picked)}" already exists.\n\nOverwrite it?`, {
-        title: 'Overwrite file?',
-        kind: 'warning',
-      }))
-    ) {
-      return
-    }
+    if (!lang) return
+    const extMap: Record<string, string> = { c: '.c', cpp: '.cpp', python: '.py', javascript: '.js', rust: '.rs', go: '.go', java: '.java', typescript: '.ts' }
     const content = NEW_TEMPLATES[lang as SourceLang]
-    await invoke('write_abs', { path: picked, content })
-    await openTab(normSlashes(picked))
+    const path = `untitled-${++untitledSeq}${extMap[lang] ?? '.c'}`
+    activeLang = lang as Lang
+    editor?.setLang(activeLang)
+    renderPalette()
+    createTab(path, content)
+    savedSnapshot = content
+    markDirty()
+    statusFlash('New untitled buffer — Save to write it to disk')
+  } catch (err) {
+    console.error('[new-file] ERROR:', err)
+    toast(`New File failed: ${err}`, 'error')
   }
 })
 
@@ -1045,38 +1084,46 @@ function statusFlash(msg: string): void {
 
 let lastWindowTitle = ''
 function updateTitle(): void {
-  const dirty = activePath !== null && src !== savedSnapshot ? ' •' : ''
+  const dirty = activePath !== null && isMeaningfullyDirty() ? ' •' : ''
   const name = activePath ? baseName(activePath) : 'Cade'
   const title = `${name}${dirty} - Cade`
-  if (title === lastWindowTitle) return // per-keystroke IPC throttle (#6)
+  if (title === lastWindowTitle) return
   lastWindowTitle = title
   document.title = title
-  getCurrentWindow()
-    .setTitle(title)
-    .catch(() => {})
+  getCurrentWindow().setTitle(title).catch(() => {})
+}
+
+function extForLang(lang: Lang): string {
+  const map: Record<string, string> = {
+    c: '.c', cpp: '.cpp', python: '.py', javascript: '.js',
+    rust: '.rs', go: '.go', java: '.java', typescript: '.ts',
+  }
+  return map[lang] ?? '.c'
 }
 
 async function saveActive(saveAs = false): Promise<void> {
-  if (activePath === null && !saveAs) {
-    // nothing open yet — Save behaves like "save this new document"
-    consoleEl.textContent = 'nothing to save — no file open (New File creates one)'
-    return
-  }
+  const isUntitled = activePath === null || activePath.startsWith('untitled-')
+  if (isUntitled) saveAs = true
 
   let target = activePath
   if (saveAs) {
-    const initName = activePath ? baseName(activePath) : 'main.c'
-    const initDir =
-      workspace ?? (activePath && isWinPath(activePath) ? dirName(activePath) : '')
-    const picked = await saveDialog({
-      title: 'Save As',
-      defaultPath: initDir ? `${initDir}\\${initName}` : initName,
-      filters: [{ name: 'Source files', extensions: ['c', 'cpp', 'cc', 'cxx', 'hh', 'py', 'js', 'mjs', 'ts', 'tsx', 'rs', 'go', 'java'] }],
-    })
-    if (typeof picked !== 'string' || !picked) return
-    target = asRelInWorkspace(picked) ?? normSlashes(picked)
+    const initName = activePath && !isUntitled ? baseName(activePath) : `main${extForLang(activeLang)}`
+    const initDir = workspace ?? (activePath && isWinPath(activePath) ? dirName(activePath) : '')
+    try {
+      const picked = await saveDialog({
+        title: 'Save As',
+        defaultPath: initDir ? `${initDir}\\${initName}` : initName,
+        filters: [{ name: 'Source files', extensions: ['c', 'cpp', 'cc', 'cxx', 'hh', 'py', 'js', 'mjs', 'ts', 'tsx', 'rs', 'go', 'java'] }],
+      })
+      if (typeof picked !== 'string' || !picked) return
+      target = asRelInWorkspace(picked) ?? normSlashes(picked)
+    } catch (err) {
+      console.error('[saveActive] dialog ERROR:', err)
+      toast(`Save failed: ${err}`, 'error')
+      return
+    }
   }
-  if (target === null) return
+  if (target === null || target.startsWith('untitled-')) return
 
   try {
     await fsWrite(target, src)
@@ -1094,6 +1141,10 @@ async function saveActive(saveAs = false): Promise<void> {
     )
     old?.remove()
     tabViews.delete(activePath ?? '')
+    if (activePath?.startsWith('untitled-')) {
+      fileCache.delete(activePath)
+      savedCache.delete(activePath)
+    }
     activePath = target
     activeLang = langOf(target) as Lang
     editor?.setLang(activeLang)
@@ -1101,13 +1152,14 @@ async function saveActive(saveAs = false): Promise<void> {
   } else {
     savedCache.set(target, src)
   }
-  savedSnapshot = src // explicit save = clean baseline
+  savedSnapshot = src
   if (activePath !== null) localStorage.removeItem(`blockide-autosave:${activePath}`)
   else localStorage.removeItem('blockide-autosave:scratch')
   markDirty()
   void invoke('journal_clear')
   if (workspace !== null && !isWinPath(target)) pushRecent(workspace, target)
   else if (isWinPath(target)) pushRecent(dirName(target), baseName(target))
+  if (workspace !== null && !isWinPath(target)) void refreshFiles()
   statusFlash('Saved ✓')
   toast('Saved', 'success')
   blip(880, 0.07, 'sine', 0.05)
@@ -1401,7 +1453,10 @@ const themeBtn = document.getElementById('theme-toggle') as HTMLButtonElement
 
 function setTheme(t: 'dark' | 'light'): void {
   document.documentElement.dataset.theme = t
-  themeBtn.textContent = t === 'dark' ? '☾' : '☀'
+  if (themeBtn) {
+    themeBtn.innerHTML = t === 'dark' ? icons.sun : icons.moon
+    themeBtn.setAttribute('aria-label', t === 'dark' ? 'Switch to light theme' : 'Switch to dark theme')
+  }
   localStorage.setItem('theme', t)
   app.renderer.background.color = t === 'dark' ? 0x0c3543 : 0xdff3fa
   editor?.setTheme(t === 'dark')
@@ -1528,6 +1583,8 @@ initResizers()
 installPerfHooks()
 initExtensions()
 initDialogs()
+applyChromeIcons()
+setTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light')
 
 // ------------------------------------------------ drag & drop files (#12)
 initFileDrop({

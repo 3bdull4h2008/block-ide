@@ -1,4 +1,4 @@
-// Resizable panel dividers — drag to resize sidebar, canvas panels
+// Resizable panel dividers — drag to resize sidebar
 
 export function initResizers(): void {
   document.addEventListener('mousedown', (e) => {
@@ -9,28 +9,17 @@ export function initResizers(): void {
     divider.classList.add('active')
 
     const key = (divider as HTMLElement).dataset.resize
-    const start = e.clientX
+    if (key !== 'sidebar') return
 
-    let startWidth: number
-    if (key === 'sidebar') {
-      startWidth = document.getElementById('sidebar')?.offsetWidth ?? 216
-    } else if (key === 'canvas') {
-      startWidth = document.getElementById('canvas-host')?.offsetWidth ?? 400
-    } else return
+    const start = e.clientX
+    const startWidth = document.getElementById('sidebar')?.offsetWidth ?? 216
 
     const onMove = (ev: MouseEvent): void => {
       const delta = ev.clientX - start
-      if (key === 'sidebar') {
-        const app = document.getElementById('app')
-        if (app) {
-          const newW = Math.max(120, Math.min(400, startWidth + delta))
-          app.style.gridTemplateColumns = `${newW}px 1fr 240px`
-        }
-      } else if (key === 'canvas') {
-        const el = document.getElementById('canvas-host')
-        if (el) {
-          el.style.flex = `0 0 ${Math.max(200, Math.min(800, startWidth - delta))}px`
-        }
+      const app = document.getElementById('app')
+      if (app) {
+        const newW = Math.max(120, Math.min(400, startWidth + delta))
+        app.style.gridTemplateColumns = `${newW}px 1fr`
       }
     }
 

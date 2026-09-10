@@ -5,8 +5,14 @@ export function toast(msg: string, kind: 'success' | 'error' | 'info' = 'info', 
   el.className = `toast toast-${kind}`
   el.textContent = msg
   toastsEl.appendChild(el)
-  setTimeout(() => {
-    el.classList.add('toast-exit')
-    el.addEventListener('animationend', () => el.remove())
-  }, durationMs)
+
+  const dismiss = (): void => {
+    if (!el.isConnected) return
+    el.classList.add('removing')
+    // CSS animationend is the happy path; the timeout is a hard fallback
+    // so a toast can never stick forever if the animation is skipped.
+    window.setTimeout(() => el.remove(), 250)
+  }
+
+  window.setTimeout(dismiss, Math.max(800, durationMs))
 }

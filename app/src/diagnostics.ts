@@ -25,21 +25,21 @@ export function drawDiagOverlay(deps: DiagnosticsDeps, ds: Diag[]): void {
   const all = flatten(deps.roots())
   const g = new Graphics()
   for (const d of ds) {
-    const candidates = all.filter(
-      (b) =>
-        (b.start <= d.offset && d.offset < b.end) ||
-        (b.start === d.offset && b.end === d.offset),
-    )
+    // Prefer non-sticky (comments) so a missing-header error does not
+    // paint a red wash over every nearby note.
+    const candidates = all.filter((b) => d.offset >= b.start && d.offset < b.end)
     if (candidates.length === 0) continue
-    const smallest = candidates.reduce((a, b) => (a.w * a.h <= b.w * b.h ? a : b))
-    g.roundRect(
-      smallest.x - 2,
-      smallest.y - 2,
-      smallest.w + 4,
-      Math.min(ROW_H, smallest.h) + 4,
-      8,
-    )
-    g.stroke({ width: 2.5, color: d.severity.includes('error') ? 0xe5484d : 0xffc93c })
+    const solids = candidates.filter((b) => !b.sticky)
+    const pool = solids.length > 0 ? solids : candidates
+    const target = pool.reduce((a, b) => (a.w * a.h <= b.w * b.h ? a : b))
+    const isErr = d.severity.includes('error')
+    const color = isErr ? 0xe5484d : 0xffc93c
+    const h = Math.min(ROW_H, target.h)
+    // Soft wash + left rail — readable without boxing the whole row.
+    g.roundRect(target.x, target.y, Math.max(24, target.w), h, 6)
+    g.fill({ color, alpha: 0.14 })
+    g.roundRect(target.x, target.y + 2, 3, Math.max(4, h - 4), 2)
+    g.fill({ color })
   }
   deps.overlay.addChild(g)
 }
@@ -48,8 +48,11 @@ export function renderDiagList(deps: DiagnosticsDeps, ds: Diag[]): void {
   lastDiags = ds
   const list = document.getElementById('diag-list') as HTMLDivElement
   const count = document.getElementById('diag-count') as HTMLSpanElement
+  const bar = document.getElementById('diag-toggle')
   const errs = ds.filter((d) => d.severity.includes('error')).length
   count.textContent = ds.length === 0 ? 'no problems' : `${ds.length} (${errs} errors)`
+  // Hide the Problems strip entirely when clean — less dead chrome.
+  bar?.classList.toggle('is-clean', ds.length === 0)
   if (list.style.display === 'none') return
   list.innerHTML = ''
   for (const d of ds) {

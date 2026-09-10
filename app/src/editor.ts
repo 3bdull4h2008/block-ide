@@ -5,7 +5,7 @@ import { syntaxHighlighting, indentOnInput, bracketMatching, foldGutter, foldKey
 import { closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap } from '@codemirror/autocomplete'
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
 import { lintKeymap } from '@codemirror/lint'
-import { oneDark } from '@codemirror/theme-one-dark'
+// oneDark intentionally unused — Cade ships standalone sea themes only.
 import { tags } from '@lezer/highlight'
 
 // Language imports
@@ -15,37 +15,37 @@ import { python } from '@codemirror/lang-python'
 import { go } from '@codemirror/lang-go'
 import { java } from '@codemirror/lang-java'
 
-// ---- Light theme (Cade custom) ----
+// ---- Light theme (Cade custom — sea paper) ----
 const cadeLightTheme = EditorView.theme({
   '&': {
     backgroundColor: '#ffffff',
-    color: '#1e293b',
+    color: '#123b4c',
     fontSize: '13px',
-    fontFamily: "'Consolas', 'Fira Code', monospace",
+    fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', monospace",
     height: '100%',
   },
   '.cm-content': {
-    caretColor: '#3b82f6',
+    caretColor: '#0891b2',
     padding: '8px 0',
   },
   '.cm-cursor, .cm-dropCursor': {
-    borderLeftColor: '#3b82f6',
+    borderLeftColor: '#0891b2',
     borderLeftWidth: '2px',
   },
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-    backgroundColor: '#dbeafe',
+    backgroundColor: '#dff3fa',
   },
   '.cm-activeLine': {
-    backgroundColor: '#f1f5f9',
+    backgroundColor: '#f0f7fa',
   },
   '.cm-activeLineGutter': {
-    backgroundColor: '#e2e8f0',
+    backgroundColor: '#e7f2f7',
   },
   '.cm-gutters': {
-    backgroundColor: '#f8fafc',
-    color: '#94a3b8',
+    backgroundColor: '#f0f7fa',
+    color: '#6b8fa0',
     border: 'none',
-    borderRight: '1px solid #e2e8f0',
+    borderRight: '1px solid #d6eaf3',
   },
   '.cm-lineNumbers .cm-gutterElement': {
     padding: '0 8px 0 12px',
@@ -54,143 +54,159 @@ const cadeLightTheme = EditorView.theme({
   '.cm-foldGutter .cm-gutterElement': {
     padding: '0 4px',
     cursor: 'pointer',
-    color: '#94a3b8',
+    color: '#6b8fa0',
   },
   '.cm-matchingBracket': {
-    backgroundColor: '#fef3c7',
-    outline: '1px solid #f59e0b',
+    backgroundColor: '#dff3fa',
+    outline: '1px solid #0891b2',
   },
   '.cm-selectionMatch': {
-    backgroundColor: '#dbeafe40',
+    backgroundColor: '#dff3fa80',
   },
   '.cm-searchMatch': {
-    backgroundColor: '#fef08a',
-    outline: '1px solid #eab308',
+    backgroundColor: '#fff4e6',
+    outline: '1px solid #ff8c1a',
   },
   '.cm-searchMatch.cm-searchMatch-selected': {
-    backgroundColor: '#fde68a',
+    backgroundColor: '#ffe9c8',
   },
   '.cm-tooltip': {
     backgroundColor: '#ffffff',
-    border: '1px solid #e2e8f0',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+    border: '1px solid #bde3f0',
+    boxShadow: '0 10px 15px rgba(12,37,48,0.08)',
   },
   '.cm-tooltip-autocomplete': {
     '& > ul > li': {
       padding: '4px 8px',
     },
     '& > ul > li[aria-selected]': {
-      backgroundColor: '#3b82f6',
+      backgroundColor: '#0891b2',
       color: '#ffffff',
     },
   },
 }, { dark: false })
 
-// ---- Syntax highlighting for light theme ----
+// ---- Syntax highlighting for light theme (sea-tinted) ----
 const cadeHighlightStyle = HighlightStyle.define([
-  { tag: tags.keyword, color: '#8b5cf6' },
-  { tag: tags.controlKeyword, color: '#8b5cf6' },
-  { tag: tags.moduleKeyword, color: '#8b5cf6' },
-  { tag: tags.operatorKeyword, color: '#8b5cf6' },
-  { tag: tags.definitionKeyword, color: '#8b5cf6' },
-  { tag: tags.typeName, color: '#0ea5e9' },
-  { tag: tags.className, color: '#0ea5e9' },
-  { tag: tags.number, color: '#059669' },
-  { tag: tags.string, color: '#059669' },
-  { tag: tags.regexp, color: '#059669' },
-  { tag: tags.atom, color: '#059669' },
-  { tag: tags.bool, color: '#059669' },
-  { tag: tags.null, color: '#059669' },
-  { tag: tags.comment, color: '#94a3b8', fontStyle: 'italic' },
-  { tag: tags.lineComment, color: '#94a3b8', fontStyle: 'italic' },
-  { tag: tags.blockComment, color: '#94a3b8', fontStyle: 'italic' },
-  { tag: tags.variableName, color: '#1e293b' },
-  { tag: tags.definition(tags.variableName), color: '#2563eb' },
-  { tag: tags.function(tags.variableName), color: '#2563eb' },
-  { tag: tags.propertyName, color: '#2563eb' },
-  { tag: tags.definition(tags.propertyName), color: '#2563eb' },
-  { tag: tags.function(tags.propertyName), color: '#2563eb' },
-  { tag: tags.operator, color: '#d946ef' },
-  { tag: tags.punctuation, color: '#64748b' },
-  { tag: tags.bracket, color: '#64748b' },
-  { tag: tags.angleBracket, color: '#64748b' },
-  { tag: tags.paren, color: '#64748b' },
-  { tag: tags.squareBracket, color: '#64748b' },
-  { tag: tags.brace, color: '#64748b' },
-  { tag: tags.meta, color: '#94a3b8' },
-  { tag: tags.processingInstruction, color: '#8b5cf6' },
-  { tag: tags.labelName, color: '#d946ef' },
-  { tag: tags.namespace, color: '#0ea5e9' },
-  { tag: tags.special(tags.string), color: '#059669' },
+  { tag: tags.keyword, color: '#7c5ce0' },
+  { tag: tags.controlKeyword, color: '#7c5ce0' },
+  { tag: tags.moduleKeyword, color: '#7c5ce0' },
+  { tag: tags.operatorKeyword, color: '#7c5ce0' },
+  { tag: tags.definitionKeyword, color: '#7c5ce0' },
+  { tag: tags.typeName, color: '#0891b2' },
+  { tag: tags.className, color: '#ec4899' },
+  { tag: tags.number, color: '#2fbf71' },
+  { tag: tags.string, color: '#e07000' },
+  { tag: tags.regexp, color: '#e07000' },
+  { tag: tags.atom, color: '#2fbf71' },
+  { tag: tags.bool, color: '#2fbf71' },
+  { tag: tags.null, color: '#2fbf71' },
+  { tag: tags.comment, color: '#6b8fa0', fontStyle: 'italic' },
+  { tag: tags.lineComment, color: '#6b8fa0', fontStyle: 'italic' },
+  { tag: tags.blockComment, color: '#6b8fa0', fontStyle: 'italic' },
+  { tag: tags.variableName, color: '#123b4c' },
+  { tag: tags.definition(tags.variableName), color: '#066a85' },
+  { tag: tags.function(tags.variableName), color: '#7c5ce0' },
+  { tag: tags.propertyName, color: '#066a85' },
+  { tag: tags.definition(tags.propertyName), color: '#066a85' },
+  { tag: tags.function(tags.propertyName), color: '#7c5ce0' },
+  { tag: tags.operator, color: '#ec4899' },
+  { tag: tags.punctuation, color: '#6b8fa0' },
+  { tag: tags.bracket, color: '#6b8fa0' },
+  { tag: tags.angleBracket, color: '#6b8fa0' },
+  { tag: tags.paren, color: '#6b8fa0' },
+  { tag: tags.squareBracket, color: '#6b8fa0' },
+  { tag: tags.brace, color: '#6b8fa0' },
+  { tag: tags.meta, color: '#94b3c2' },
+  { tag: tags.processingInstruction, color: '#7c5ce0' },
+  { tag: tags.labelName, color: '#ff8c1a' },
+  { tag: tags.namespace, color: '#0891b2' },
+  { tag: tags.special(tags.string), color: '#e07000' },
 ])
 
-// ---- Cade dark theme override ----
+// ---- Cade dark theme — sea palette (matches tokens.css [data-theme=dark]) ----
 const cadeDarkTheme = EditorView.theme({
   '&': {
-    backgroundColor: '#0f172a',
-    color: '#e2e8f0',
+    backgroundColor: '#0c2530',
+    color: '#d9f1fa',
   },
   '.cm-content': {
-    caretColor: '#60a5fa',
+    caretColor: '#38cfe8',
   },
   '.cm-cursor, .cm-dropCursor': {
-    borderLeftColor: '#60a5fa',
+    borderLeftColor: '#38cfe8',
   },
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-    backgroundColor: '#1e3a5f',
+    backgroundColor: '#0f3d4f',
   },
   '.cm-activeLine': {
-    backgroundColor: '#1e293b',
+    backgroundColor: '#0f2d3a',
   },
   '.cm-activeLineGutter': {
-    backgroundColor: '#1e293b',
+    backgroundColor: '#0f2d3a',
   },
   '.cm-gutters': {
-    backgroundColor: '#0f172a',
-    color: '#475569',
-    borderRight: '1px solid #1e293b',
+    backgroundColor: '#091c25',
+    color: '#3d6a7c',
+    borderRight: '1px solid #153545',
+  },
+  '.cm-lineNumbers .cm-gutterElement': {
+    color: '#3d6a7c',
   },
   '.cm-matchingBracket': {
-    backgroundColor: '#422006',
-    outline: '1px solid #ca8a04',
+    backgroundColor: '#1a3d4e',
+    outline: '1px solid #38cfe8',
+  },
+  '.cm-selectionMatch': {
+    backgroundColor: '#153545',
+  },
+  '.cm-tooltip': {
+    backgroundColor: '#122f3d',
+    border: '1px solid #1a3d4e',
+    boxShadow: '0 10px 15px rgba(0,0,0,0.35)',
+    color: '#d9f1fa',
+  },
+  '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+    backgroundColor: '#38cfe8',
+    color: '#0c2530',
   },
 }, { dark: true })
 
 const cadeDarkHighlightStyle = HighlightStyle.define([
-  { tag: tags.keyword, color: '#a78bfa' },
-  { tag: tags.controlKeyword, color: '#a78bfa' },
-  { tag: tags.moduleKeyword, color: '#a78bfa' },
-  { tag: tags.operatorKeyword, color: '#a78bfa' },
-  { tag: tags.definitionKeyword, color: '#a78bfa' },
-  { tag: tags.typeName, color: '#38bdf8' },
-  { tag: tags.className, color: '#38bdf8' },
-  { tag: tags.number, color: '#34d399' },
-  { tag: tags.string, color: '#34d399' },
-  { tag: tags.regexp, color: '#34d399' },
-  { tag: tags.atom, color: '#34d399' },
-  { tag: tags.bool, color: '#34d399' },
-  { tag: tags.null, color: '#34d399' },
-  { tag: tags.comment, color: '#475569', fontStyle: 'italic' },
-  { tag: tags.lineComment, color: '#475569', fontStyle: 'italic' },
-  { tag: tags.blockComment, color: '#475569', fontStyle: 'italic' },
-  { tag: tags.variableName, color: '#e2e8f0' },
-  { tag: tags.definition(tags.variableName), color: '#60a5fa' },
-  { tag: tags.function(tags.variableName), color: '#60a5fa' },
-  { tag: tags.propertyName, color: '#60a5fa' },
-  { tag: tags.definition(tags.propertyName), color: '#60a5fa' },
-  { tag: tags.function(tags.propertyName), color: '#60a5fa' },
-  { tag: tags.operator, color: '#f472b6' },
-  { tag: tags.punctuation, color: '#94a3b8' },
-  { tag: tags.bracket, color: '#94a3b8' },
-  { tag: tags.angleBracket, color: '#94a3b8' },
-  { tag: tags.paren, color: '#94a3b8' },
-  { tag: tags.squareBracket, color: '#94a3b8' },
-  { tag: tags.brace, color: '#94a3b8' },
-  { tag: tags.meta, color: '#475569' },
-  { tag: tags.processingInstruction, color: '#a78bfa' },
-  { tag: tags.labelName, color: '#f472b6' },
-  { tag: tags.namespace, color: '#38bdf8' },
-  { tag: tags.special(tags.string), color: '#34d399' },
+  { tag: tags.keyword, color: '#38cfe8' },
+  { tag: tags.controlKeyword, color: '#38cfe8' },
+  { tag: tags.moduleKeyword, color: '#38cfe8' },
+  { tag: tags.operatorKeyword, color: '#38cfe8' },
+  { tag: tags.definitionKeyword, color: '#38cfe8' },
+  { tag: tags.typeName, color: '#7ccde3' },
+  { tag: tags.className, color: '#f472b6' },
+  { tag: tags.number, color: '#3ddb85' },
+  { tag: tags.string, color: '#ffab40' },
+  { tag: tags.regexp, color: '#ffab40' },
+  { tag: tags.atom, color: '#3ddb85' },
+  { tag: tags.bool, color: '#3ddb85' },
+  { tag: tags.null, color: '#3ddb85' },
+  { tag: tags.comment, color: '#8fb4c4', fontStyle: 'italic' },
+  { tag: tags.lineComment, color: '#8fb4c4', fontStyle: 'italic' },
+  { tag: tags.blockComment, color: '#8fb4c4', fontStyle: 'italic' },
+  { tag: tags.variableName, color: '#d9f1fa' },
+  { tag: tags.definition(tags.variableName), color: '#38cfe8' },
+  { tag: tags.function(tags.variableName), color: '#a78bfa' },
+  { tag: tags.propertyName, color: '#7ccde3' },
+  { tag: tags.definition(tags.propertyName), color: '#7ccde3' },
+  { tag: tags.function(tags.propertyName), color: '#a78bfa' },
+  { tag: tags.operator, color: '#a3d4e6' },
+  { tag: tags.punctuation, color: '#6b8fa0' },
+  { tag: tags.bracket, color: '#6b8fa0' },
+  { tag: tags.angleBracket, color: '#6b8fa0' },
+  { tag: tags.paren, color: '#6b8fa0' },
+  { tag: tags.squareBracket, color: '#6b8fa0' },
+  { tag: tags.brace, color: '#6b8fa0' },
+  { tag: tags.meta, color: '#6b8fa0' },
+  { tag: tags.processingInstruction, color: '#38cfe8' },
+  { tag: tags.labelName, color: '#ffab40' },
+  { tag: tags.namespace, color: '#38cfe8' },
+  { tag: tags.special(tags.string), color: '#ffab40' },
 ])
 
 // ---- Language compartment (swappable at runtime) ----
@@ -220,8 +236,9 @@ function getLanguageExtension(lang: string) {
 }
 
 function getThemeExtensions(dark: boolean) {
+  // Standalone Cade themes only — never compose oneDark (slate leaks into sea).
   return dark
-    ? [oneDark, cadeDarkTheme, syntaxHighlighting(cadeDarkHighlightStyle)]
+    ? [cadeDarkTheme, syntaxHighlighting(cadeDarkHighlightStyle)]
     : [cadeLightTheme, syntaxHighlighting(cadeHighlightStyle)]
 }
 

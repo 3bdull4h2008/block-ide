@@ -3,7 +3,6 @@
 //! double-emission MUST be byte-stable (gate G-CANON-IDEMPOTENT).
 
 use crate::canonical::{CNode, CTree};
-use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::os::windows::process::CommandExt;

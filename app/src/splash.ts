@@ -152,16 +152,20 @@ export function initSplashSettings(deps: SplashDeps): void {
   setupSelect('set-sidebar-style', 'sidebarStyle', 'source')
 
   const colorDots = splashEl.querySelectorAll('.color-dot')
-  let currentAccent = readSetting('accent', '#0891b2')
+  let currentAccent = readSetting('accent', 'teal')
+  if (!['teal', 'purple', 'pink', 'green', 'orange', 'red'].includes(currentAccent)) {
+    currentAccent = 'teal'
+  }
+  document.documentElement.setAttribute('data-accent', currentAccent)
   colorDots.forEach((dot) => {
     const d = dot as HTMLElement
     d.classList.toggle('active', d.dataset.accent === currentAccent)
     d.addEventListener('click', () => {
-      currentAccent = d.dataset.accent ?? '#0891b2'
+      currentAccent = d.dataset.accent ?? 'teal'
       colorDots.forEach((c) => c.classList.remove('active'))
       d.classList.add('active')
       writeSetting('accent', currentAccent)
-      document.documentElement.style.setProperty('--accent', currentAccent)
+      document.documentElement.setAttribute('data-accent', currentAccent)
     })
   })
 }

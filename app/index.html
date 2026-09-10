@@ -1,514 +1,579 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/logos/logo.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Cade</title>
-  </head>
-  <body>
-    <a href="#main-col" class="skip-link">Skip to content</a>
-    <div id="splash">
-      <div id="splash-window">
-        <div id="splash-titlebar">
-          <span class="titlebar-text">Cade</span>
-          <div class="win-controls">
-            <button class="win-btn win-close" id="splash-quit" title="Quit Cade" aria-label="Quit Cade">&#10005;</button>
-          </div>
-        </div>
-        <div id="splash-body">
-          <aside id="splash-sidebar">
-            <button class="sidebar-row active" data-panel="sandbox">
-              <span class="sidebar-icon">&#9998;</span>
-              <span class="sidebar-label">New Project</span>
-            </button>
-            <button class="sidebar-row" data-panel="academy">
-              <span class="sidebar-icon">&#9733;</span>
-              <span class="sidebar-label">Academy</span>
-            </button>
-            <button class="sidebar-row" data-panel="recent">
-              <span class="sidebar-icon">&#9830;</span>
-              <span class="sidebar-label">Recent</span>
-            </button>
-            <div class="sidebar-spacer"></div>
-            <button class="sidebar-row" data-panel="settings">
-              <span class="sidebar-icon">&#9881;</span>
-              <span class="sidebar-label">Settings</span>
-            </button>
-          </aside>
+<html lang="en" data-theme="light" data-accent="teal">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Cade — visual code editor for real programming languages" />
+  <title>Cade</title>
 
-          <main id="splash-content">
-            <div id="splash-sandbox" class="splash-panel active">
-              <div class="panel-inner">
-                <h3 class="panel-title">New Project</h3>
-                <p class="panel-sub">Choose a language to get started</p>
-                <div class="lang-grid">
-                  <button class="lang-card selected" data-lang="c">
-                    <span class="lang-big">C</span>
-                    <span class="lang-name">C</span>
-                  </button>
-                  <button class="lang-card" data-lang="cpp">
-                    <span class="lang-big">C++</span>
-                    <span class="lang-name">C++</span>
-                  </button>
-                  <button class="lang-card" data-lang="python">
-                    <span class="lang-big">Py</span>
-                    <span class="lang-name">Python</span>
-                  </button>
-                  <button class="lang-card" data-lang="javascript">
-                    <span class="lang-big">JS</span>
-                    <span class="lang-name">JavaScript</span>
-                  </button>
-                  <button class="lang-card" data-lang="rust">
-                    <span class="lang-big">Rs</span>
-                    <span class="lang-name">Rust</span>
-                  </button>
-                  <button class="lang-card" data-lang="go">
-                    <span class="lang-big">Go</span>
-                    <span class="lang-name">Go</span>
-                  </button>
-                  <button class="lang-card" data-lang="java">
-                    <span class="lang-big">Jv</span>
-                    <span class="lang-name">Java</span>
-                  </button>
-                  <button class="lang-card" data-lang="typescript">
-                    <span class="lang-big">Ts</span>
-                    <span class="lang-name">TypeScript</span>
-                  </button>
-                </div>
-                <div class="panel-actions">
-                  <button id="hero-start" class="hero-btn primary">Start Coding</button>
-                  <button id="hero-open" class="hero-btn">Open Folder...</button>
-                </div>
-              </div>
-            </div>
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700;800&family=Comic+Neue:wght@400;700&display=swap" rel="stylesheet" />
 
-            <div id="splash-academy" class="splash-panel" style="display:none">
-              <div class="panel-inner">
-                <h3 class="panel-title">Academy</h3>
-                <p class="panel-sub">30 levels of real programming challenges</p>
-                <div class="carousel-slides">
-                  <div class="carousel-slide active">
-                    <div class="carousel-icon">&#9733;</div>
-                    <h4>Learn by Doing</h4>
-                    <p>Each level teaches a real concept with blocks and code.</p>
-                  </div>
-                  <div class="carousel-slide">
-                    <div class="carousel-icon">&#9889;</div>
-                    <h4>Earn XP</h4>
-                    <p>Complete levels, earn points, unlock achievements.</p>
-                  </div>
-                  <div class="carousel-slide">
-                    <div class="carousel-icon">&#127891;</div>
-                    <h4>Graduate</h4>
-                    <p>When you're ready, switch to real code anytime.</p>
-                  </div>
-                </div>
-                <div class="carousel-dots" id="academy-dots">
-                  <span class="c-dot active" data-slide="0" role="button" aria-label="Slide 1" tabindex="0"></span>
-                  <span class="c-dot" data-slide="1" role="button" aria-label="Slide 2" tabindex="0"></span>
-                  <span class="c-dot" data-slide="2" role="button" aria-label="Slide 3" tabindex="0"></span>
-                </div>
-                <div class="panel-actions">
-                  <button id="academy-start" class="hero-btn primary">Start Academy</button>
-                </div>
-              </div>
-            </div>
+  <!-- Styles -->
+  <link rel="stylesheet" href="./src/tokens.css" />
+  <link rel="stylesheet" href="./src/components.css" />
+  <link rel="stylesheet" href="./src/layout.css" />
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
 
-            <div id="splash-recent" class="splash-panel" style="display:none">
-              <div class="panel-inner">
-                <h3 class="panel-title">Recent Projects</h3>
-                <p class="panel-sub">Pick up where you left off</p>
-                <div id="recent-list" aria-live="polite"></div>
-              </div>
-            </div>
+  <a href="#main-col" class="skip-link">Skip to editor</a>
 
-            <div id="splash-settings" class="splash-panel" style="display:none">
-              <div class="settings-scroll">
-                <h3 class="settings-title">Settings</h3>
+  <!-- ═══════════════════════════════════════════════════════
+       SPLASH
+       ═══════════════════════════════════════════════════════ -->
+  <div id="splash" class="dialog-overlay open" role="dialog" aria-modal="true" aria-label="Welcome to Cade">
+    <div class="dialog">
 
-                <div class="settings-group">
-                  <div class="settings-group-header">Appearance</div>
-                  <div class="settings-row">
-                    <label>Theme</label>
-                    <select id="set-theme" class="settings-select">
-                      <option value="light">Light</option>
-                      <option value="dark">Dark</option>
-                      <option value="auto">System</option>
-                    </select>
-                  </div>
-                  <div class="settings-row">
-                    <label>Accent Color</label>
-                    <div class="settings-colors">
-                      <button class="color-dot active" data-accent="#0891b2" style="background:#0891b2" aria-label="Teal accent"></button>
-                      <button class="color-dot" data-accent="#7c5ce0" style="background:#7c5ce0" aria-label="Purple accent"></button>
-                      <button class="color-dot" data-accent="#ec4899" style="background:#ec4899" aria-label="Pink accent"></button>
-                      <button class="color-dot" data-accent="#2fbf71" style="background:#2fbf71" aria-label="Green accent"></button>
-                      <button class="color-dot" data-accent="#ff8c1a" style="background:#ff8c1a" aria-label="Orange accent"></button>
-                      <button class="color-dot" data-accent="#e5484d" style="background:#e5484d" aria-label="Red accent"></button>
-                    </div>
-                  </div>
-                  <div class="settings-row">
-                    <label>Sidebar Style</label>
-                    <select id="set-sidebar-style" class="settings-select">
-                      <option value="source">Source List</option>
-                      <option value="flat">Flat</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div class="settings-group">
-                  <div class="settings-group-header">Editor</div>
-                  <div class="settings-row">
-                    <label>Font Family</label>
-                    <select id="set-font-family" class="settings-select">
-                      <option value="Consolas">Consolas</option>
-                      <option value="Fira Code">Fira Code</option>
-                      <option value="JetBrains Mono">JetBrains Mono</option>
-                      <option value="Source Code Pro">Source Code Pro</option>
-                      <option value="monospace">System Mono</option>
-                    </select>
-                  </div>
-                  <div class="settings-row">
-                    <label>Font Size</label>
-                    <select id="set-font-size" class="settings-select">
-                      <option value="11">11px</option>
-                      <option value="12">12px</option>
-                      <option value="13" selected>13px</option>
-                      <option value="14">14px</option>
-                      <option value="15">15px</option>
-                      <option value="16">16px</option>
-                      <option value="18">18px</option>
-                    </select>
-                  </div>
-                  <div class="settings-row">
-                    <label>Tab Size</label>
-                    <select id="set-tab-size" class="settings-select">
-                      <option value="2">2 spaces</option>
-                      <option value="4" selected>4 spaces</option>
-                      <option value="8">8 spaces</option>
-                    </select>
-                  </div>
-                  <div class="settings-row">
-                    <label>Line Height</label>
-                    <select id="set-line-height" class="settings-select">
-                      <option value="1.2">Compact</option>
-                      <option value="1.5" selected>Normal</option>
-                      <option value="1.8">Relaxed</option>
-                      <option value="2.0">Loose</option>
-                    </select>
-                  </div>
-                  <div class="settings-row">
-                    <label>Word Wrap</label>
-                    <button id="set-word-wrap" class="settings-toggle">Off</button>
-                  </div>
-                  <div class="settings-row">
-                    <label>Minimap</label>
-                    <button id="set-minimap" class="settings-toggle">Off</button>
-                  </div>
-                  <div class="settings-row">
-                    <label>Show Line Numbers</label>
-                    <button id="set-line-numbers" class="settings-toggle on">On</button>
-                  </div>
-                  <div class="settings-row">
-                    <label>Bracket Matching</label>
-                    <button id="set-bracket-match" class="settings-toggle on">On</button>
-                  </div>
-                  <div class="settings-row">
-                    <label>Auto Close Brackets</label>
-                    <button id="set-auto-brackets" class="settings-toggle on">On</button>
-                  </div>
-                  <div class="settings-row">
-                    <label>Highlight Active Line</label>
-                    <button id="set-highlight-line" class="settings-toggle on">On</button>
-                  </div>
-                </div>
-
-                <div class="settings-group">
-                  <div class="settings-group-header">Behavior</div>
-                  <div class="settings-row">
-                    <label>Autosave</label>
-                    <select id="set-autosave" class="settings-select">
-                      <option value="off">Off</option>
-                      <option value="after-delay" selected>After 1s delay</option>
-                      <option value="on-focus-loss">On focus loss</option>
-                    </select>
-                  </div>
-                  <div class="settings-row">
-                    <label>Format on Save</label>
-                    <button id="set-format-save" class="settings-toggle on">On</button>
-                  </div>
-                  <div class="settings-row">
-                    <label>Confirm on Exit</label>
-                    <button id="set-confirm-exit" class="settings-toggle on">On</button>
-                  </div>
-                  <div class="settings-row">
-                    <label>Restore Last Session</label>
-                    <button id="set-restore-session" class="settings-toggle on">On</button>
-                  </div>
-                </div>
-
-                <div class="settings-group">
-                  <div class="settings-group-header">Audio & Effects</div>
-                  <div class="settings-row">
-                    <label>Sound Effects</label>
-                    <button id="set-sounds" class="settings-toggle on">On</button>
-                  </div>
-                  <div class="settings-row">
-                    <label>Block Animations</label>
-                    <button id="set-animations" class="settings-toggle on">On</button>
-                  </div>
-                  <div class="settings-row">
-                    <label>Drag Ghost Opacity</label>
-                    <select id="set-ghost-opacity" class="settings-select">
-                      <option value="0.3">30%</option>
-                      <option value="0.5" selected>50%</option>
-                      <option value="0.7">70%</option>
-                      <option value="1">100%</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div class="settings-group">
-                  <div class="settings-group-header">Run</div>
-                  <div class="settings-row">
-                    <label>Run Shortcut</label>
-                    <select id="set-run-shortcut" class="settings-select">
-                      <option value="ctrl+enter" selected>Ctrl+Enter</option>
-                      <option value="f5">F5</option>
-                      <option value="ctrl+f5">Ctrl+F5</option>
-                    </select>
-                  </div>
-                  <div class="settings-row">
-                    <label>Clear Console on Run</label>
-                    <button id="set-clear-run" class="settings-toggle on">On</button>
-                  </div>
-                  <div class="settings-row">
-                    <label>Memory Trace Default</label>
-                    <button id="set-mem-trace" class="settings-toggle">Off</button>
-                  </div>
-                </div>
-
-                <div class="settings-group">
-                  <div class="settings-group-header">Academy</div>
-                  <div class="settings-row">
-                    <label>Show XP Badge</label>
-                    <button id="set-show-xp" class="settings-toggle on">On</button>
-                  </div>
-                  <div class="settings-row">
-                    <label>Spaced Repetition</label>
-                    <button id="set-spaced-rep" class="settings-toggle on">On</button>
-                  </div>
-                  <div class="settings-row">
-                    <label>Hint Limit per Level</label>
-                    <select id="set-hint-limit" class="settings-select">
-                      <option value="3" selected>3</option>
-                      <option value="5">5</option>
-                      <option value="unlimited">Unlimited</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div class="settings-group">
-                  <div class="settings-group-header">Keyboard</div>
-                  <div class="settings-row">
-                    <label>Ctrl+1/2/3 View Switch</label>
-                    <button id="set-ctrl-view" class="settings-toggle on">On</button>
-                  </div>
-                  <div class="settings-row">
-                    <label>/ to Filter Blocks</label>
-                    <button id="set-slash-filter" class="settings-toggle on">On</button>
-                  </div>
-                  <div class="settings-row">
-                    <label>Tab Indents Code</label>
-                    <button id="set-tab-indent" class="settings-toggle on">On</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </main>
-        </div>
+      <div class="dialog-header">
+        <span class="dialog-title">Cade</span>
+        <button id="splash-quit" class="btn btn-icon btn-ghost" aria-label="Quit" style="-webkit-app-region: no-drag;">✕</button>
       </div>
-    </div>
-    <div id="app" data-view="split" data-mode="sandbox" role="application" aria-label="Cade Block Editor">
-      <header id="toolbar" role="banner">
-        <div class="header-brand">
-          <img id="brand-logo" src="/logos/brand.png" alt="Cade" />
-          <span id="xp-badge" aria-live="polite">☆ 0 XP</span>
-        </div>
-        <nav class="header-nav" role="navigation" aria-label="Main navigation">
-          <button id="open-folder" aria-label="Open folder">Open Folder</button>
-          <button id="open-file" title="Open a single file — no folder needed" aria-label="Open file">Open File</button>
-          <button id="new-file" aria-label="Create new file">New File</button>
-          <button id="save" aria-label="Save file (Ctrl+S)">Save (Ctrl+S)</button>
-          <span id="view-modes">
-            <button class="vm active" data-view="split" title="Blocks + text (Ctrl+2)">Split</button>
-            <button class="vm" data-view="blocks" title="Blocks only (Ctrl+1)">Blocks</button>
-            <button class="vm" data-view="text" title="Text only (Ctrl+3)">Text</button>
-            <button id="graduate" title="The off-ramp: switch to real-code view. Blocks come back with Ctrl+1.">🎓 Graduate</button>
-          </span>
+
+      <div class="dialog-body">
+
+        <nav class="splash-nav" aria-label="Splash navigation">
+          <button type="button" class="sidebar-row active" data-panel="sandbox" aria-selected="true">New</button>
+          <button type="button" class="sidebar-row" data-panel="academy" aria-selected="false">Academy</button>
+          <button type="button" class="sidebar-row" data-panel="recent" aria-selected="false">Recent</button>
+          <div class="grow-1"></div>
+          <button type="button" class="sidebar-row" data-panel="settings" aria-selected="false">Settings</button>
         </nav>
-        <div class="header-actions">
-          <span class="hint">Ctrl+Enter run · Ctrl+S save · Ctrl+F find · / filter blocks</span>
-          <button id="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle light/dark theme">☾</button>
-          <label id="trace-toggle" title="Enable trace mode: step through code line-by-line" class="trace-toggle">
-            <input type="checkbox" id="trace-check" aria-label="Enable trace mode" />
-            <span>Trace</span>
+
+        <div class="splash-panels">
+
+          <!-- New Project -->
+          <div id="splash-sandbox" class="splash-panel active" role="tabpanel">
+            <h2 class="splash-panel-title">Start a New Project</h2>
+            <p class="splash-panel-lead">Pick a language. Blocks and text stay in sync as you code.</p>
+            <div class="lang-grid">
+              <button type="button" class="lang-card selected" data-lang="c"><span class="lang-tile" data-lang="c" aria-hidden="true">C</span><span class="lang-name">C</span></button>
+              <button type="button" class="lang-card" data-lang="cpp"><span class="lang-tile" data-lang="cpp" aria-hidden="true">C+</span><span class="lang-name">C++</span></button>
+              <button type="button" class="lang-card" data-lang="python"><span class="lang-tile" data-lang="python" aria-hidden="true">Py</span><span class="lang-name">Python</span></button>
+              <button type="button" class="lang-card" data-lang="javascript"><span class="lang-tile" data-lang="javascript" aria-hidden="true">JS</span><span class="lang-name">JavaScript</span></button>
+              <button type="button" class="lang-card" data-lang="rust"><span class="lang-tile" data-lang="rust" aria-hidden="true">Rs</span><span class="lang-name">Rust</span></button>
+              <button type="button" class="lang-card" data-lang="go"><span class="lang-tile" data-lang="go" aria-hidden="true">Go</span><span class="lang-name">Go</span></button>
+              <button type="button" class="lang-card" data-lang="java"><span class="lang-tile" data-lang="java" aria-hidden="true">Jv</span><span class="lang-name">Java</span></button>
+              <button type="button" class="lang-card" data-lang="typescript"><span class="lang-tile" data-lang="typescript" aria-hidden="true">TS</span><span class="lang-name">TypeScript</span></button>
+            </div>
+            <div class="splash-actions">
+              <button id="hero-start" type="button" class="btn btn-primary btn-lg">Start Coding</button>
+              <button id="hero-open" type="button" class="btn btn-lg">Open Folder…</button>
+            </div>
+          </div>
+
+          <!-- Academy -->
+          <div id="splash-academy" class="splash-panel" role="tabpanel" hidden>
+            <h2 class="splash-panel-title">Academy</h2>
+            <p class="splash-panel-lead">Learn real coding concepts with visual puzzles, XP, and unlocks.</p>
+            <div class="carousel-slides">
+              <div class="carousel-slide active">
+                <div class="carousel-slide-icon" aria-hidden="true">🧩</div>
+                <h3>Learn Programming Visually</h3>
+                <p>Solve puzzles that teach real coding concepts step by step.</p>
+              </div>
+              <div class="carousel-slide">
+                <div class="carousel-slide-icon" aria-hidden="true">🏆</div>
+                <h3>Earn XP &amp; Unlock Levels</h3>
+                <p>Progress through challenges and build your skills.</p>
+              </div>
+              <div class="carousel-slide">
+                <div class="carousel-slide-icon" aria-hidden="true">🚀</div>
+                <h3>From Blocks to Real Code</h3>
+                <p>Seamlessly transition from visual blocks to text.</p>
+              </div>
+            </div>
+            <div class="carousel-dots" role="tablist" aria-label="Academy slides">
+              <button type="button" class="c-dot active" data-slide="0" aria-label="Slide 1"></button>
+              <button type="button" class="c-dot" data-slide="1" aria-label="Slide 2"></button>
+              <button type="button" class="c-dot" data-slide="2" aria-label="Slide 3"></button>
+            </div>
+            <button id="academy-start" type="button" class="btn btn-primary btn-lg btn-block" style="margin-top: var(--sp-4);">Start Academy</button>
+          </div>
+
+          <!-- Recent -->
+          <div id="splash-recent" class="splash-panel" role="tabpanel" hidden>
+            <h2 class="splash-panel-title">Recent Projects</h2>
+            <p class="splash-panel-lead">Jump back into something you were building.</p>
+            <div id="recent-list" class="scrollable grow-1"></div>
+          </div>
+
+          <!-- Settings -->
+          <div id="splash-settings" class="splash-panel" role="tabpanel" hidden>
+            <h2 class="splash-panel-title">Settings</h2>
+            <p class="splash-panel-lead">Tune the look, editor, and run behavior.</p>
+            <div class="settings-scroll scrollable">
+
+              <section class="settings-group" aria-labelledby="set-appearance">
+                <h3 id="set-appearance" class="settings-group-title">Appearance</h3>
+                <div class="settings-row">
+                  <label class="settings-label" for="set-theme">Theme</label>
+                  <select id="set-theme" class="select settings-select">
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                    <option value="auto">Auto</option>
+                  </select>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Accent Color</span>
+                  <div class="settings-colors" role="radiogroup" aria-label="Accent color">
+                    <button type="button" class="color-dot active" data-accent="teal"   style="background: var(--accent-teal);"   aria-label="Teal"></button>
+                    <button type="button" class="color-dot" data-accent="purple" style="background: var(--accent-purple);" aria-label="Purple"></button>
+                    <button type="button" class="color-dot" data-accent="pink"   style="background: var(--accent-pink);"   aria-label="Pink"></button>
+                    <button type="button" class="color-dot" data-accent="green"  style="background: var(--accent-green);"  aria-label="Green"></button>
+                    <button type="button" class="color-dot" data-accent="orange" style="background: var(--accent-orange);" aria-label="Orange"></button>
+                    <button type="button" class="color-dot" data-accent="red"    style="background: var(--accent-red);"    aria-label="Red"></button>
+                  </div>
+                </div>
+                <div class="settings-row">
+                  <label class="settings-label" for="set-font-family">Font</label>
+                  <select id="set-font-family" class="select settings-select">
+                    <option value="Comic Neue">Comic Neue</option>
+                    <option value="Cascadia Code">Cascadia Code</option>
+                    <option value="Fira Code">Fira Code</option>
+                    <option value="Consolas">Consolas</option>
+                  </select>
+                </div>
+                <div class="settings-row">
+                  <label class="settings-label" for="set-font-size">Font Size</label>
+                  <select id="set-font-size" class="select settings-select">
+                    <option value="12">12px</option>
+                    <option value="13">13px</option>
+                    <option value="14" selected>14px</option>
+                    <option value="16">16px</option>
+                    <option value="18">18px</option>
+                  </select>
+                </div>
+              </section>
+
+              <section class="settings-group" aria-labelledby="set-editor">
+                <h3 id="set-editor" class="settings-group-title">Editor</h3>
+                <div class="settings-row">
+                  <label class="settings-label" for="set-tab-size">Tab Size</label>
+                  <select id="set-tab-size" class="select settings-select">
+                    <option value="2">2 spaces</option>
+                    <option value="4" selected>4 spaces</option>
+                  </select>
+                </div>
+                <div class="settings-row">
+                  <label class="settings-label" for="set-line-height">Line Height</label>
+                  <select id="set-line-height" class="select settings-select">
+                    <option value="1.4">1.4</option>
+                    <option value="1.5" selected>1.5</option>
+                    <option value="1.6">1.6</option>
+                    <option value="1.8">1.8</option>
+                  </select>
+                </div>
+                <div class="settings-row">
+                  <label class="settings-label" for="set-autosave">Autosave</label>
+                  <select id="set-autosave" class="select settings-select">
+                    <option value="off">Off</option>
+                    <option value="after-delay" selected>After delay</option>
+                    <option value="on-focus-change">On focus change</option>
+                  </select>
+                </div>
+                <div class="settings-row">
+                  <label class="settings-label" for="set-ghost-opacity">Ghost opacity</label>
+                  <select id="set-ghost-opacity" class="select settings-select">
+                    <option value="0.3">30%</option>
+                    <option value="0.5" selected>50%</option>
+                    <option value="0.7">70%</option>
+                  </select>
+                </div>
+                <div class="settings-row">
+                  <label class="settings-label" for="set-sidebar-style">Sidebar</label>
+                  <select id="set-sidebar-style" class="select settings-select">
+                    <option value="source" selected>By source</option>
+                    <option value="category">By category</option>
+                  </select>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Word wrap</span>
+                  <button type="button" class="settings-toggle" id="set-word-wrap" data-val="off" aria-pressed="false"><span>Off</span></button>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Line numbers</span>
+                  <button type="button" class="settings-toggle on" id="set-line-numbers" data-val="on" aria-pressed="true"><span>On</span></button>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Bracket match</span>
+                  <button type="button" class="settings-toggle on" id="set-bracket-match" data-val="on" aria-pressed="true"><span>On</span></button>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Auto brackets</span>
+                  <button type="button" class="settings-toggle on" id="set-auto-brackets" data-val="on" aria-pressed="true"><span>On</span></button>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Highlight line</span>
+                  <button type="button" class="settings-toggle on" id="set-highlight-line" data-val="on" aria-pressed="true"><span>On</span></button>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Minimap</span>
+                  <button type="button" class="settings-toggle" id="set-minimap" data-val="off" aria-pressed="false"><span>Off</span></button>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Tab indents</span>
+                  <button type="button" class="settings-toggle on" id="set-tab-indent" data-val="on" aria-pressed="true"><span>On</span></button>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Format on save</span>
+                  <button type="button" class="settings-toggle on" id="set-format-save" data-val="on" aria-pressed="true"><span>On</span></button>
+                </div>
+              </section>
+
+              <section class="settings-group" aria-labelledby="set-run">
+                <h3 id="set-run" class="settings-group-title">Run</h3>
+                <div class="settings-row">
+                  <label class="settings-label" for="set-run-shortcut">Run shortcut</label>
+                  <select id="set-run-shortcut" class="select settings-select">
+                    <option value="ctrl+enter" selected>Ctrl+Enter</option>
+                    <option value="f5">F5</option>
+                  </select>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Memory Trace</span>
+                  <button type="button" class="settings-toggle" id="set-mem-trace" data-val="off" aria-pressed="false"><span>Off</span></button>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Clear console on run</span>
+                  <button type="button" class="settings-toggle on" id="set-clear-run" data-val="on" aria-pressed="true"><span>On</span></button>
+                </div>
+              </section>
+
+              <section class="settings-group" aria-labelledby="set-academy">
+                <h3 id="set-academy" class="settings-group-title">Academy</h3>
+                <div class="settings-row">
+                  <label class="settings-label" for="set-hint-limit">Hints per level</label>
+                  <select id="set-hint-limit" class="select settings-select">
+                    <option value="1">1</option>
+                    <option value="3" selected>3</option>
+                    <option value="5">5</option>
+                    <option value="0">Unlimited</option>
+                  </select>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Show XP</span>
+                  <button type="button" class="settings-toggle on" id="set-show-xp" data-val="on" aria-pressed="true"><span>On</span></button>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Spaced review</span>
+                  <button type="button" class="settings-toggle on" id="set-spaced-rep" data-val="on" aria-pressed="true"><span>On</span></button>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Control view</span>
+                  <button type="button" class="settings-toggle on" id="set-ctrl-view" data-val="on" aria-pressed="true"><span>On</span></button>
+                </div>
+              </section>
+
+              <section class="settings-group" aria-labelledby="set-feedback">
+                <h3 id="set-feedback" class="settings-group-title">Feedback</h3>
+                <div class="settings-row">
+                  <span class="settings-label">Sounds</span>
+                  <button type="button" class="settings-toggle on" id="set-sounds" data-val="on" aria-pressed="true"><span>On</span></button>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Animations</span>
+                  <button type="button" class="settings-toggle on" id="set-animations" data-val="on" aria-pressed="true"><span>On</span></button>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Slash filter</span>
+                  <button type="button" class="settings-toggle on" id="set-slash-filter" data-val="on" aria-pressed="true"><span>On</span></button>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Confirm before quit</span>
+                  <button type="button" class="settings-toggle on" id="set-confirm-exit" data-val="on" aria-pressed="true"><span>On</span></button>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Restore session</span>
+                  <button type="button" class="settings-toggle on" id="set-restore-session" data-val="on" aria-pressed="true"><span>On</span></button>
+                </div>
+              </section>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       MAIN APPLICATION
+       ═══════════════════════════════════════════════════════ -->
+  <div id="app" data-view="split" data-mode="blocks">
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar" role="complementary" aria-label="Sidebar">
+
+      <div class="sidebar-section" id="files-section">
+        <div class="sidebar-header">
+          <span class="sidebar-title">Files</span>
+        </div>
+        <div class="sidebar-content">
+          <div id="files" class="file-tree" role="tree"></div>
+        </div>
+      </div>
+
+      <div class="sidebar-section" id="palette-section">
+        <div class="sidebar-header">
+          <span class="sidebar-title">Blocks</span>
+        </div>
+        <div class="sidebar-content">
+          <div class="palette-filter">
+            <input id="pal-filter" class="input" type="search" placeholder="Filter blocks…" aria-label="Filter blocks" />
+          </div>
+          <div id="palette" class="palette-list" role="listbox" aria-label="Code blocks"></div>
+        </div>
+      </div>
+
+      <div class="sidebar-section hidden" id="academy-section">
+        <div class="sidebar-header">
+          <span class="sidebar-title">Academy</span>
+        </div>
+        <div class="sidebar-content" style="padding: var(--sp-3);">
+          <div id="academy" class="stack-3">
+            <div class="stack-2">
+              <label class="settings-label" for="level-select">Level</label>
+              <select id="level-select" class="select"></select>
+            </div>
+            <div class="stack-2">
+              <button id="level-load" type="button" class="btn btn-primary btn-block">Load</button>
+              <button id="hint-btn" type="button" class="btn btn-block" disabled>Hint</button>
+              <button id="check-btn" type="button" class="btn btn-block" disabled>Check</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- Sidebar resize -->
+    <div class="resize-handle" data-resize="sidebar" id="sidebar-resize" role="separator" aria-orientation="vertical" aria-label="Resize sidebar"></div>
+
+    <!-- Toolbar -->
+    <header class="toolbar" role="banner">
+      <div class="toolbar-brand" title="About Cade">
+        <img id="brand-logo" src="./logos/logo.png" alt="Cade" width="26" height="26" />
+        <span class="toolbar-brand-name">Cade</span>
+        <span id="xp-badge" class="badge badge-quiet" aria-live="polite">0 XP</span>
+      </div>
+
+      <div class="toolbar-nav">
+        <div class="toolbar-group">
+          <button id="open-folder" type="button" class="btn btn-sm btn-ghost" title="Open Folder (Ctrl+O)">Open</button>
+          <button id="open-file" type="button" class="btn btn-sm btn-ghost" title="Open File">File</button>
+          <button id="new-file" type="button" class="btn btn-sm btn-ghost" title="New File">New</button>
+          <button id="save" type="button" class="btn btn-sm btn-ghost" title="Save (Ctrl+S)">Save</button>
+        </div>
+        <div class="toolbar-sep" aria-hidden="true"></div>
+        <div id="view-modes" class="view-modes" role="radiogroup" aria-label="View mode">
+          <button type="button" class="vm active" data-view="split" role="radio" aria-checked="true">Split</button>
+          <button type="button" class="vm" data-view="blocks" role="radio" aria-checked="false">Blocks</button>
+          <button type="button" class="vm" data-view="text" role="radio" aria-checked="false">Text</button>
+        </div>
+        <button id="graduate" type="button" class="btn btn-sm" title="Switch to real code" style="display: none;">Graduate</button>
+        <button id="mode-toggle" type="button" class="btn btn-sm" title="Switch mode" style="display: none;">Mode</button>
+      </div>
+
+      <div class="toolbar-actions">
+        <span class="toolbar-hint" aria-hidden="true">Ctrl+Enter</span>
+        <button id="theme-toggle" type="button" class="btn btn-icon btn-ghost" title="Toggle theme" aria-label="Toggle theme"></button>
+        <label class="switch switch-compact" title="Trace mode">
+          <input type="checkbox" id="trace-check" />
+          <span class="switch-track"></span>
+        </label>
+        <button id="run" type="button" class="btn btn-primary">Run</button>
+        <span id="status" class="badge" role="status" aria-live="polite"></span>
+      </div>
+    </header>
+
+    <!-- Main -->
+    <div class="main-area" id="main-col" role="main">
+
+      <div class="editor-panel">
+        <div id="tabs" class="tab-bar" role="tablist" aria-label="Open files"></div>
+        <div class="editor-wrap" id="editor-wrap">
+          <textarea id="src" aria-label="Code editor"></textarea>
+          <div id="cm-editor"></div>
+        </div>
+      </div>
+
+      <div class="resize-handle resize-h" data-resize="canvas" id="canvas-resize" role="separator" aria-orientation="horizontal" aria-label="Resize canvas"></div>
+      <div id="canvas-host" class="canvas-host">
+        <div id="canvas-empty" class="canvas-empty" hidden>
+          <div class="canvas-empty-card">
+            <p class="canvas-empty-title">Blocks live here</p>
+            <p class="canvas-empty-body">Open a file or start a new project — blocks stay in sync with your code.</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="stage-wrap" class="stage-wrap" hidden>
+        <div class="stage-head">
+          <span class="stage-head-label">Stage</span>
+          <label class="switch" title="Memory trace">
+            <input type="checkbox" id="mem-trace" />
+            <span class="switch-track"></span>
           </label>
-          <button id="run" aria-label="Run program (Ctrl+Enter)">▶ Run</button>
-          <span id="status" role="status" aria-live="polite"></span>
-          <span class="win-controls" style="margin-left:8px;">
-            <button id="tb-minimize" class="win-btn" title="Minimize" aria-label="Minimize window">&#x2013;</button>
-            <button id="tb-maximize" class="win-btn" title="Maximize" aria-label="Maximize window">&#9633;</button>
-            <button id="tb-close" class="win-btn win-close" title="Close" aria-label="Close window">&#10005;</button>
-          </span>
+          <span id="stage-fps" class="stage-fps" aria-label="FPS"></span>
+          <button id="stage-stop" type="button" class="btn btn-icon btn-ghost btn-sm stage-stop" title="Stop" aria-label="Stop program" style="display: none;"></button>
         </div>
-      </header>
-      <div id="sidebar" role="complementary" aria-label="File explorer and palette">
-        <div id="files" role="tree" aria-label="Project files"></div>
-        <input id="pal-filter" type="text" placeholder="filter blocks  ( / )" spellcheck="false" autocomplete="off" aria-label="Filter palette blocks" />
-        <div id="palette" role="listbox" aria-label="Code blocks palette"></div>
-        <div id="academy">
-          <strong>Academy</strong>
-          <select id="level-select"></select>
-          <div class="row">
-            <button id="level-load">Load</button>
-            <button id="hint-btn" disabled>Hint</button>
-            <button id="check-btn">Check</button>
-          </div>
-        </div>
-      </div>
-      <div id="app-row">
-        <div class="panel-divider" data-resize="sidebar"></div>
-        <div id="main-col">
-          <div id="tabs"></div>
-          <div id="editor-wrap">
-            <textarea id="src" aria-label="Code editor" spellcheck="false" placeholder="Type code here or drag blocks from the palette..."></textarea>
-            <div id="cm-editor"></div>
-          </div>
-        </div>
-        <div id="canvas-host"></div>
-        <div id="stage-wrap">
-          <div id="stage-head">
-            <span>Stage</span>
-            <label id="mem-toggle"><input type="checkbox" id="mem-trace" /> memory</label>
-            <span id="stage-fps"></span>
-            <button id="stage-stop" title="Stop program" aria-label="Stop program">&#9632;</button>
-          </div>
+        <div class="stage-canvas">
           <canvas id="stage" width="320" height="240"></canvas>
-          <div id="mem-list"></div>
         </div>
+        <div id="mem-list" class="mem-list hidden"></div>
       </div>
-      <div id="console-wrap" role="log" aria-label="Program output">
-        <div id="trace-panel" style="display:none">
-          <div id="trace-toolbar">
-            <span id="trace-step-info" class="trace-step-info">Ready</span>
-            <button id="trace-play" title="Play/Pause trace" aria-label="Play/Pause trace">▶</button>
-            <button id="trace-step" title="Step to next line (→)" aria-label="Step to next line">→</button>
-            <button id="trace-reset" title="Reset trace" aria-label="Reset trace">↺</button>
-            <label id="trace-speed" title="Auto-play speed">
-              <input type="range" id="trace-speed-slider" min="1" max="10" value="5" aria-label="Trace speed" />
-              <span id="trace-speed-label">5</span>
-            </label>
+
+    </div>
+
+    <!-- Console -->
+    <section class="console-area" id="console-wrap" role="region" aria-label="Console">
+      <div class="console-head" aria-hidden="true">Console</div>
+
+      <div id="trace-panel" class="trace-panel">
+        <div class="trace-toolbar">
+          <span id="trace-step-info" class="trace-info">Step 0</span>
+          <button id="trace-play" type="button" class="btn btn-icon btn-ghost btn-sm" title="Play/Pause" aria-label="Play or pause trace"></button>
+          <button id="trace-step" type="button" class="btn btn-icon btn-ghost btn-sm" title="Step" aria-label="Step to next line"></button>
+          <button id="trace-reset" type="button" class="btn btn-icon btn-ghost btn-sm" title="Reset" aria-label="Reset trace"></button>
+          <div class="trace-speed">
+            <label for="trace-speed-slider">Speed</label>
+            <input id="trace-speed-slider" type="range" min="1" max="10" value="5" style="width: 80px;" />
+            <span id="trace-speed-label">5</span>
           </div>
-          <div id="trace-vars-wrap">
-            <div id="trace-vars-header">Variables</div>
-            <div id="trace-vars"></div>
-          </div>
-          <pre id="trace-output" aria-live="polite"></pre>
         </div>
-        <div id="diag-bar">
-          <button id="diag-toggle" title="toggle problem list" aria-expanded="false" aria-controls="diag-list">problems ▾</button>
-          <span id="diag-count" aria-live="polite"></span>
-        </div>
-        <div id="diag-list" style="display:none" aria-live="polite"></div>
-        <pre id="console" aria-live="polite">console</pre>
-        <div id="console-input-row">
-          <input id="console-input" placeholder="input for the program… (Enter to send)" autocomplete="off" />
-          <button id="console-send" title="Send to program" aria-label="Send to program">▶</button>
-        </div>
+        <div id="trace-vars" class="trace-vars scrollable"></div>
+        <pre id="trace-output" class="trace-output" aria-live="polite"></pre>
+      </div>
+
+      <div id="diag-toggle" class="diag-bar" role="button" aria-expanded="false" aria-controls="diag-list" tabindex="0">
+        <span>Problems</span>
+        <span id="diag-count" class="diag-count">0</span>
+      </div>
+      <div id="diag-list" class="diag-list hidden"></div>
+
+      <pre id="console" class="console-output" aria-live="polite"></pre>
+
+      <div id="console-input-row" class="console-input-row" hidden>
+        <span class="console-prompt">&gt;</span>
+        <input id="console-input" class="console-input" type="text" placeholder="Type input…" aria-label="Program input" autocomplete="off" />
+        <button id="console-send" type="button" class="btn btn-sm btn-primary">Send</button>
+      </div>
+
+    </section>
+
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       FLOATING ELEMENTS
+       ═══════════════════════════════════════════════════════ -->
+
+  <div id="toasts" class="toast-container" role="alert" aria-live="polite"></div>
+  <div id="ghost" class="drag-ghost" aria-hidden="true"></div>
+  <div id="dropbar" class="drop-indicator" aria-hidden="true"></div>
+  <div id="slot-editor" class="slot-editor"></div>
+  <div id="var-menu" class="ctx-menu" role="menu"></div>
+  <div id="ctx-menu" class="ctx-menu" role="menu"></div>
+
+  <div id="debug-log" class="debug-log" role="log" aria-label="Debug log">
+    <div class="debug-log-header">
+      <span>Debug Log</span>
+      <button id="debug-clear" type="button" class="btn btn-icon btn-ghost btn-sm" aria-label="Clear debug log">✕</button>
+    </div>
+    <div id="debug-log-content" class="debug-log-body"></div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       MODAL DIALOGS
+       ═══════════════════════════════════════════════════════ -->
+
+  <div id="exit-confirm" class="dialog-overlay" role="dialog" aria-modal="true" aria-label="Unsaved changes">
+    <div class="dialog" style="width: 380px;">
+      <div class="dialog-header">
+        <span class="dialog-title">Unsaved Changes</span>
+      </div>
+      <div class="dialog-body">
+        <p>You have unsaved changes. Quit without saving?</p>
+      </div>
+      <div class="dialog-footer">
+        <button id="exit-cancel" type="button" class="btn">Cancel</button>
+        <button id="exit-quit" type="button" class="btn btn-danger">Quit</button>
       </div>
     </div>
-    <div id="exit-confirm" role="dialog" aria-modal="true" aria-labelledby="exit-title" style="display:none">
-      <div id="exit-card">
-        <h3 id="exit-title">Unsaved Changes</h3>
-        <p>You have unsaved changes. Do you want to quit without saving?</p>
-        <div class="exit-actions">
-          <button id="exit-cancel" class="hero-btn">Cancel</button>
-          <button id="exit-quit" class="hero-btn primary">Quit</button>
-        </div>
+  </div>
+
+  <div id="tour" class="dialog-overlay" role="dialog" aria-modal="true" aria-label="Welcome tour">
+    <div class="dialog" style="width: 420px;">
+      <div class="dialog-header">
+        <span id="tour-title" class="dialog-title">Welcome to Cade</span>
       </div>
-    </div>
-    <div id="tour" role="dialog" aria-modal="true" aria-labelledby="tour-title" style="display:none">
-      <div id="tour-card">
-        <h2 id="tour-title"></h2>
+      <div class="dialog-body">
         <p id="tour-body"></p>
-        <div class="row">
-          <span class="step-dots" id="tour-dots"></span>
-          <button id="tour-next">Next</button>
-        </div>
+      </div>
+      <div class="dialog-footer" style="justify-content: space-between;">
+        <div id="tour-dots" class="carousel-dots"></div>
+        <button id="tour-next" type="button" class="btn btn-primary">Next</button>
       </div>
     </div>
-    <div id="about" role="dialog" aria-modal="true" style="display:none">
-      <div id="about-card" title="click outside to close" onclick="event.stopPropagation()">
-        <img src="/logos/brand.png" alt="Cade" />
-        <div class="about-tag">blocks that ARE the code — C · C++ · Python · JavaScript · Rust · Go · Java · TypeScript</div>
-        <div class="about-tag">v0.2.0 · offline-first · no accounts, no telemetry</div>
-        <div class="about-links">
-          <button id="show-shortcuts" class="hero-btn">Keyboard Shortcuts</button>
-          <button id="close-about" class="hero-btn">Close</button>
-        </div>
+  </div>
+
+  <div id="about" class="dialog-overlay" role="dialog" aria-modal="true" aria-label="About Cade">
+    <div class="dialog" style="width: 360px;">
+      <div class="dialog-header">
+        <span class="dialog-title">About Cade</span>
+        <button id="close-about" type="button" class="btn btn-icon btn-ghost btn-sm" aria-label="Close">✕</button>
+      </div>
+      <div class="dialog-body" style="text-align: center;">
+        <img class="about-brand" src="./logos/1.png" alt="Cade" />
+        <p class="about-name">Cade</p>
+        <p class="about-tagline">Visual code editor for real programming languages</p>
+        <button id="show-shortcuts" type="button" class="btn btn-block">Keyboard Shortcuts</button>
       </div>
     </div>
-    <div id="toasts" role="alert" aria-live="assertive"></div>
-    <div id="debug-log" style="display:none; position:fixed; bottom:0; right:0; width:400px; max-height:300px; background:rgba(0,0,0,0.9); color:#0f0; font-family:monospace; font-size:11px; padding:8px; overflow:auto; z-index:9999; border:1px solid #0f0; border-radius:4px 0 0 0;">
-      <div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom:1px solid #0f0; padding-bottom:4px;">
-        <strong>Debug Log</strong>
-        <button id="debug-clear" style="background:none; border:none; color:#0f0; cursor:pointer;">Clear</button>
+  </div>
+
+  <div id="shortcuts-dialog" class="dialog-overlay" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+    <div class="dialog" style="width: 520px;">
+      <div class="dialog-header">
+        <span class="dialog-title">Keyboard Shortcuts</span>
+        <button id="close-shortcuts" type="button" class="btn btn-icon btn-ghost btn-sm" aria-label="Close">✕</button>
       </div>
-      <div id="debug-log-content"></div>
-    </div>
-    <div id="shortcuts-dialog" role="dialog" aria-modal="true" style="display:none">
-      <div id="shortcuts-card" onclick="event.stopPropagation()">
-        <h3>Keyboard Shortcuts</h3>
+      <div class="dialog-body">
         <div class="shortcuts-grid">
           <div class="shortcut-group">
             <h4>General</h4>
-            <div class="shortcut-row"><kbd>Ctrl+S</kbd><span>Save</span></div>
-            <div class="shortcut-row"><kbd>Ctrl+Shift+S</kbd><span>Save As</span></div>
-            <div class="shortcut-row"><kbd>Ctrl+W</kbd><span>Close Tab</span></div>
-            <div class="shortcut-row"><kbd>Ctrl+Z</kbd><span>Undo</span></div>
-            <div class="shortcut-row"><kbd>Ctrl+Y</kbd><span>Redo</span></div>
+            <div class="shortcut-row"><span>Run</span><kbd>Ctrl+Enter</kbd></div>
+            <div class="shortcut-row"><span>Save</span><kbd>Ctrl+S</kbd></div>
+            <div class="shortcut-row"><span>Open Folder</span><kbd>Ctrl+O</kbd></div>
           </div>
           <div class="shortcut-group">
             <h4>Navigation</h4>
-            <div class="shortcut-row"><kbd>Ctrl+F</kbd><span>Find</span></div>
-            <div class="shortcut-row"><kbd>Ctrl+H</kbd><span>Find & Replace</span></div>
-            <div class="shortcut-row"><kbd>Ctrl+B</kbd><span>Toggle Sidebar</span></div>
-            <div class="shortcut-row"><kbd>/</kbd><span>Filter Blocks</span></div>
+            <div class="shortcut-row"><span>Command Palette</span><kbd>Ctrl+Shift+P</kbd></div>
+            <div class="shortcut-row"><span>Go to Line</span><kbd>Ctrl+G</kbd></div>
           </div>
           <div class="shortcut-group">
             <h4>View</h4>
-            <div class="shortcut-row"><kbd>Ctrl+1</kbd><span>Blocks View</span></div>
-            <div class="shortcut-row"><kbd>Ctrl+2</kbd><span>Split View</span></div>
-            <div class="shortcut-row"><kbd>Ctrl+3</kbd><span>Text View</span></div>
-          </div>
-          <div class="shortcut-group">
-            <h4>Run</h4>
-            <div class="shortcut-row"><kbd>Ctrl+Enter</kbd><span>Run Program</span></div>
-            <div class="shortcut-row"><kbd>F5</kbd><span>Run Program</span></div>
+            <div class="shortcut-row"><span>Toggle Sidebar</span><kbd>Ctrl+B</kbd></div>
+            <div class="shortcut-row"><span>Split View</span><kbd>Ctrl+1</kbd></div>
+            <div class="shortcut-row"><span>Blocks View</span><kbd>Ctrl+2</kbd></div>
+            <div class="shortcut-row"><span>Text View</span><kbd>Ctrl+3</kbd></div>
           </div>
           <div class="shortcut-group">
             <h4>Editor</h4>
-            <div class="shortcut-row"><kbd>Tab</kbd><span>Indent</span></div>
-            <div class="shortcut-row"><kbd>Shift+Tab</kbd><span>Outdent</span></div>
-            <div class="shortcut-row"><kbd>Enter</kbd><span>Auto-indent</span></div>
-            <div class="shortcut-row"><kbd>Escape</kbd><span>Close Overlay</span></div>
+            <div class="shortcut-row"><span>Undo</span><kbd>Ctrl+Z</kbd></div>
+            <div class="shortcut-row"><span>Redo</span><kbd>Ctrl+Shift+Z</kbd></div>
+            <div class="shortcut-row"><span>Indent</span><kbd>Tab</kbd></div>
           </div>
         </div>
-        <button id="close-shortcuts" class="hero-btn">Close</button>
       </div>
     </div>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+  </div>
+
+  <script type="module" src="./src/main.ts"></script>
+</body>
 </html>
