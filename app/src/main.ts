@@ -155,6 +155,16 @@ const overlay = new Container()
 app.stage.addChild(overlay)
 const snapLayer = new Container()
 
+// Handle window maximize/restore - force PixiJS resize
+let resizeTimer = 0
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer)
+  resizeTimer = window.setTimeout(() => {
+    app.renderer.resize(hostEl.clientWidth, hostEl.clientHeight)
+    void render(src)
+  }, 50)
+})
+
 const dropbar = document.createElement('div')
 dropbar.id = 'dropbar'
 document.body.appendChild(dropbar)
@@ -292,6 +302,7 @@ async function render(source: string): Promise<void> {
       for (const c of n.children) walkInc(c)
     }
     walkInc(out.tree.root)
+    walkSig(out.tree.root as never)
     const sig = `${[...kinds].sort().join(',')}|${[...includes].sort().join(',')}`
     const nextHarvest = harvestVars(out.tree.root)
     const nextSig = `${sig}|${nextHarvest.join('\u0000')}`
@@ -664,8 +675,8 @@ window.addEventListener('keydown', (e) => {
 registerContextMenuProvider((target) => {
   if (!target.closest('#canvas-host')) return []
   return [
-    { label: 'Undo', shortcut: 'Ctrl+Z', action: () => { const p = hist.undo(src); if (p !== null) { src = p; srcEl.value = p; editor?.setSource(p); void render(p); markDirty() } } },
-    { label: 'Redo', shortcut: 'Ctrl+Y', action: () => { const n = hist.redo(src); if (n !== null) { src = n; srcEl.value = n; editor?.setSource(n); void render(n); markDirty() } } },
+    { label: 'Undo', shortcut: 'Ctrl+Z', action: () => { const p = hist.undo(src); if (p !== null) { src = p; srcEl.value = p; editor?.setSource(p); void render(p); markDirty(); scheduleAutoSave() } } },
+    { label: 'Redo', shortcut: 'Ctrl+Y', action: () => { const n = hist.redo(src); if (n !== null) { src = n; srcEl.value = n; editor?.setSource(n); void render(n); markDirty(); scheduleAutoSave() } } },
     { divider: true, label: '' },
     { label: 'Select All', shortcut: 'Ctrl+A', action: () => { /* select all blocks */ } },
   ]
@@ -926,7 +937,7 @@ document.getElementById('open-file')?.addEventListener('click', async () => {
   const picked = await openDialog({
     multiple: false,
     filters: [
-      { name: 'Source files', extensions: ['c', 'cpp', 'cc', 'cxx', 'hpp', 'hh', 'py', 'js', 'mjs', 'rs'] },
+      { name: 'Source files', extensions: ['c', 'cpp', 'cc', 'cxx', 'hpp', 'hh', 'py', 'js', 'mjs', 'ts', 'tsx', 'rs', 'go', 'java'] },
       { name: 'All files', extensions: ['*'] },
     ],
   })
@@ -951,6 +962,9 @@ document.getElementById('new-file')?.addEventListener('click', async () => {
           <option value="python">Python</option>
           <option value="javascript">JavaScript</option>
           <option value="rust">Rust</option>
+          <option value="go">Go</option>
+          <option value="java">Java</option>
+          <option value="typescript">TypeScript</option>
         </select>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
           <button id="lang-cancel" style="padding:8px 16px;background:transparent;border:1px solid var(--border);border-radius:6px;cursor:pointer">Cancel</button>
@@ -974,7 +988,7 @@ document.getElementById('new-file')?.addEventListener('click', async () => {
   const name = window.prompt('New file name:', 'main.c')
   if (!name) return
 
-  const extMap: Record<string, string> = { c: '.c', cpp: '.cpp', python: '.py', javascript: '.js', rust: '.rs' }
+  const extMap: Record<string, string> = { c: '.c', cpp: '.cpp', python: '.py', javascript: '.js', rust: '.rs', go: '.go', java: '.java', typescript: '.ts' }
   const ext = extMap[lang]
   const withExt = /\.[a-z]+$/i.test(name) ? name : `${name}${ext}`
 
@@ -995,7 +1009,7 @@ document.getElementById('new-file')?.addEventListener('click', async () => {
     const picked = await saveDialog({
       title: 'Save new file',
       defaultPath: withExt,
-      filters: [{ name: 'Source files', extensions: ['c', 'cpp', 'cc', 'cxx', 'hh', 'py', 'js', 'mjs', 'rs'] }],
+      filters: [{ name: 'Source files', extensions: ['c', 'cpp', 'cc', 'cxx', 'hh', 'py', 'js', 'mjs', 'ts', 'tsx', 'rs', 'go', 'java'] }],
     })
     if (typeof picked !== 'string' || !picked) return
     const exists = await invoke<unknown>('read_abs', { path: picked }).then(
@@ -1057,7 +1071,7 @@ async function saveActive(saveAs = false): Promise<void> {
     const picked = await saveDialog({
       title: 'Save As',
       defaultPath: initDir ? `${initDir}\\${initName}` : initName,
-      filters: [{ name: 'Source files', extensions: ['c', 'cpp', 'cc', 'cxx', 'hh', 'py', 'js', 'mjs', 'rs'] }],
+      filters: [{ name: 'Source files', extensions: ['c', 'cpp', 'cc', 'cxx', 'hh', 'py', 'js', 'mjs', 'ts', 'tsx', 'rs', 'go', 'java'] }],
     })
     if (typeof picked !== 'string' || !picked) return
     target = asRelInWorkspace(picked) ?? normSlashes(picked)
@@ -1127,6 +1141,7 @@ window.addEventListener('keydown', (e) => {
       editor?.setSource(prev)
       void render(prev)
       markDirty()
+      scheduleAutoSave()
     }
   } else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
     e.preventDefault()
@@ -1137,6 +1152,7 @@ window.addEventListener('keydown', (e) => {
       editor?.setSource(next)
       void render(next)
       markDirty()
+      scheduleAutoSave()
     }
   } else if (e.key.toLowerCase() === 'd' && e.shiftKey) {
     e.preventDefault()
@@ -1165,7 +1181,7 @@ srcEl.addEventListener('scroll', () => {
 srcEl.addEventListener('blur', () => void canonicalize())
 
 // ------------------------------------------- text editor key handling (#8)
-initEditorKeys({ srcEl, editor, activeLang })
+initEditorKeys({ srcEl, editor: () => editor, activeLang: () => activeLang })
 
 // ------------------------------------------------------------------ pan/zoom
 initPanZoom({ app, hostEl, world, roots: () => roots, screenToWorld, hitTestHeader })
@@ -1392,7 +1408,11 @@ function setTheme(t: 'dark' | 'light'): void {
   world.emit('blockide:theme', t)
 }
 
-setTheme((localStorage.getItem('theme') as 'dark' | 'light') ?? 'light')
+const storedTheme = localStorage.getItem('theme') ?? 'light'
+const resolvedTheme = storedTheme === 'auto'
+  ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+  : storedTheme as 'dark' | 'light'
+setTheme(resolvedTheme)
 themeBtn.addEventListener('click', () =>
   setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'),
 )
@@ -1432,16 +1452,19 @@ async function beginSession(lang: Lang, mode?: 'sandbox' | 'academy'): Promise<v
   updateTitle()
   if (!localStorage.getItem('tour-done')) setTimeout(startTour, 600)
   recoverSession()
-  registerCommands([
-    { id: 'file.save', label: 'Save', category: 'File', shortcut: 'Ctrl+S', action: () => void saveActive() },
-    { id: 'file.saveAs', label: 'Save As...', category: 'File', shortcut: 'Ctrl+Shift+S', action: () => void saveActive(true) },
-    { id: 'file.open', label: 'Open File...', category: 'File', shortcut: 'Ctrl+O', action: () => void guardedOpenTab('') },
-    { id: 'file.openFolder', label: 'Open Folder...', category: 'File', action: () => void (document.getElementById('open-folder') as HTMLButtonElement)?.click() },
-    { id: 'file.close', label: 'Close Tab', category: 'File', shortcut: 'Ctrl+W', action: () => { if (activePath) void closeTab(activePath) } },
-    { id: 'file.new', label: 'New File', category: 'File', action: () => void (document.getElementById('new-file') as HTMLButtonElement)?.click() },
-    { id: 'edit.undo', label: 'Undo', category: 'Edit', shortcut: 'Ctrl+Z', action: () => document.execCommand('undo') },
-    { id: 'edit.redo', label: 'Redo', category: 'Edit', shortcut: 'Ctrl+Y', action: () => document.execCommand('redo') },
-    { id: 'edit.find', label: 'Find & Replace', category: 'Edit', shortcut: 'Ctrl+F', action: () => editor?.view.focus() },
+}
+
+// ---- register command palette commands (module-scope, so palette works even before splash) ----
+registerCommands([
+  { id: 'file.save', label: 'Save', category: 'File', shortcut: 'Ctrl+S', action: () => void saveActive() },
+  { id: 'file.saveAs', label: 'Save As...', category: 'File', shortcut: 'Ctrl+Shift+S', action: () => void saveActive(true) },
+  { id: 'file.open', label: 'Open File...', category: 'File', shortcut: 'Ctrl+O', action: () => void (document.getElementById('open-file') as HTMLButtonElement)?.click() },
+  { id: 'file.openFolder', label: 'Open Folder...', category: 'File', action: () => void (document.getElementById('open-folder') as HTMLButtonElement)?.click() },
+  { id: 'file.close', label: 'Close Tab', category: 'File', shortcut: 'Ctrl+W', action: () => { if (activePath) void closeTab(activePath) } },
+  { id: 'file.new', label: 'New File', category: 'File', action: () => void (document.getElementById('new-file') as HTMLButtonElement)?.click() },
+  { id: 'edit.undo', label: 'Undo', category: 'Edit', shortcut: 'Ctrl+Z', action: () => document.execCommand('undo') },
+  { id: 'edit.redo', label: 'Redo', category: 'Edit', shortcut: 'Ctrl+Y', action: () => document.execCommand('redo') },
+  { id: 'edit.find', label: 'Find & Replace', category: 'Edit', shortcut: 'Ctrl+F', action: () => editor?.view.focus() },
     { id: 'run.start', label: 'Run Program', category: 'Run', shortcut: 'F5', action: () => void startRun() },
     { id: 'run.stop', label: 'Stop Program', category: 'Run', shortcut: 'Shift+F5', action: () => stopRun() },
     { id: 'run.check', label: 'Check Code', category: 'Run', shortcut: 'Ctrl+Shift+C', action: () => void (document.getElementById('check-btn') as HTMLButtonElement)?.click() },
@@ -1452,7 +1475,6 @@ async function beginSession(lang: Lang, mode?: 'sandbox' | 'academy'): Promise<v
     { id: 'view.text', label: 'Text View', category: 'View', shortcut: 'Ctrl+3', action: () => setView('text') },
     { id: 'view.sidebar', label: 'Toggle Sidebar', category: 'View', shortcut: 'Ctrl+B', action: () => { const sb = document.getElementById('sidebar') as HTMLElement; sb.style.display = sb.style.display === 'none' ? 'flex' : 'none'; window.dispatchEvent(new Event('resize')) } },
   ])
-}
 
 async function beginFromRecent(entry: RecentEntry): Promise<void> {
   if (!(await confirmDiscard())) return
@@ -1520,9 +1542,11 @@ const diagListEl = document.getElementById('diag-list') as HTMLDivElement
 document.getElementById('diag-toggle')?.addEventListener('click', () => {
   const showing = diagListEl.style.display !== 'none'
   diagListEl.style.display = showing ? 'none' : 'block'
-  ;(document.getElementById('diag-toggle') as HTMLButtonElement).textContent = showing
-    ? 'problems ▸'
-    : 'problems ▾'
+  const btn = document.getElementById('diag-toggle')
+  if (btn) {
+    btn.textContent = showing ? 'problems ▸' : 'problems ▾'
+    btn.setAttribute('aria-expanded', String(!showing))
+  }
   if (!showing) renderDiagList(getLastDiags())
 })
 

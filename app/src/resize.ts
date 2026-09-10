@@ -13,7 +13,7 @@ export function initResizers(): void {
 
     let startWidth: number
     if (key === 'sidebar') {
-      startWidth = document.getElementById('sidebar')?.offsetWidth ?? 200
+      startWidth = document.getElementById('sidebar')?.offsetWidth ?? 216
     } else if (key === 'canvas') {
       startWidth = document.getElementById('canvas-host')?.offsetWidth ?? 400
     } else return
@@ -21,11 +21,16 @@ export function initResizers(): void {
     const onMove = (ev: MouseEvent): void => {
       const delta = ev.clientX - start
       if (key === 'sidebar') {
-        const el = document.getElementById('sidebar')
-        if (el) el.style.width = `${Math.max(120, Math.min(400, startWidth + delta))}px`
+        const app = document.getElementById('app')
+        if (app) {
+          const newW = Math.max(120, Math.min(400, startWidth + delta))
+          app.style.gridTemplateColumns = `${newW}px 1fr 240px`
+        }
       } else if (key === 'canvas') {
         const el = document.getElementById('canvas-host')
-        if (el) el.style.width = `${Math.max(200, Math.min(800, startWidth - delta))}px`
+        if (el) {
+          el.style.flex = `0 0 ${Math.max(200, Math.min(800, startWidth - delta))}px`
+        }
       }
     }
 

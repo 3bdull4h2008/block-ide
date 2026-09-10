@@ -4,13 +4,13 @@ import type { CadeEditor } from './editor'
 
 export interface EditorKeysDeps {
   srcEl: HTMLTextAreaElement
-  editor: CadeEditor | null
-  activeLang: SourceLang
+  editor: () => CadeEditor | null
+  activeLang: () => SourceLang
 }
 
 function editTextArea(deps: EditorKeysDeps, next: string, caret: number): void {
   deps.srcEl.value = next
-  deps.editor?.setSource(next)
+  deps.editor()?.setSource(next)
   deps.srcEl.setSelectionRange(caret, caret)
   deps.srcEl.dispatchEvent(new Event('input'))
 }
@@ -20,7 +20,7 @@ function toggleComment(deps: EditorKeysDeps): void {
   const end = deps.srcEl.selectionEnd ?? 0
   const text = deps.srcEl.value
 
-  const prefix = deps.activeLang === 'python' ? '# ' : '// '
+  const prefix = deps.activeLang() === 'python' ? '# ' : '// '
   const prefixLen = prefix.length
 
   if (sel === end) {

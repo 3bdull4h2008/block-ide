@@ -63,6 +63,18 @@
                     <span class="lang-big">Rs</span>
                     <span class="lang-name">Rust</span>
                   </button>
+                  <button class="lang-card" data-lang="go">
+                    <span class="lang-big">Go</span>
+                    <span class="lang-name">Go</span>
+                  </button>
+                  <button class="lang-card" data-lang="java">
+                    <span class="lang-big">Jv</span>
+                    <span class="lang-name">Java</span>
+                  </button>
+                  <button class="lang-card" data-lang="typescript">
+                    <span class="lang-big">Ts</span>
+                    <span class="lang-name">TypeScript</span>
+                  </button>
                 </div>
                 <div class="panel-actions">
                   <button id="hero-start" class="hero-btn primary">Start Coding</button>
@@ -345,6 +357,11 @@
           </label>
           <button id="run" aria-label="Run program (Ctrl+Enter)">▶ Run</button>
           <span id="status" role="status" aria-live="polite"></span>
+          <span class="win-controls" style="margin-left:8px;">
+            <button id="tb-minimize" class="win-btn" title="Minimize" aria-label="Minimize window">&#x2013;</button>
+            <button id="tb-maximize" class="win-btn" title="Maximize" aria-label="Maximize window">&#9633;</button>
+            <button id="tb-close" class="win-btn win-close" title="Close" aria-label="Close window">&#10005;</button>
+          </span>
         </div>
       </header>
       <div id="sidebar" role="complementary" aria-label="File explorer and palette">
@@ -370,8 +387,17 @@
             <div id="cm-editor"></div>
           </div>
         </div>
-        <div class="panel-divider" data-resize="canvas"></div>
         <div id="canvas-host"></div>
+        <div id="stage-wrap">
+          <div id="stage-head">
+            <span>Stage</span>
+            <label id="mem-toggle"><input type="checkbox" id="mem-trace" /> memory</label>
+            <span id="stage-fps"></span>
+            <button id="stage-stop" title="Stop program" aria-label="Stop program">&#9632;</button>
+          </div>
+          <canvas id="stage" width="320" height="240"></canvas>
+          <div id="mem-list"></div>
+        </div>
       </div>
       <div id="console-wrap" role="log" aria-label="Program output">
         <div id="trace-panel" style="display:none">
@@ -397,20 +423,10 @@
         </div>
         <div id="diag-list" style="display:none" aria-live="polite"></div>
         <pre id="console" aria-live="polite">console</pre>
-      </div>
-      <div id="console-input-row">
-        <input id="console-input" placeholder="input for the program… (Enter to send)" autocomplete="off" />
-        <button id="console-send" title="Send to program" aria-label="Send to program">▶</button>
-      </div>
-      <div id="stage-wrap">
-        <div id="stage-head">
-          <span>Stage</span>
-          <label id="mem-toggle"><input type="checkbox" id="mem-trace" /> memory</label>
-          <span id="stage-fps"></span>
-          <button id="stage-stop" title="Stop program" aria-label="Stop program">&#9632;</button>
+        <div id="console-input-row">
+          <input id="console-input" placeholder="input for the program… (Enter to send)" autocomplete="off" />
+          <button id="console-send" title="Send to program" aria-label="Send to program">▶</button>
         </div>
-        <canvas id="stage" width="320" height="240"></canvas>
-        <div id="mem-list"></div>
       </div>
     </div>
     <div id="exit-confirm" role="dialog" aria-modal="true" aria-labelledby="exit-title" style="display:none">
@@ -436,7 +452,7 @@
     <div id="about" role="dialog" aria-modal="true" style="display:none">
       <div id="about-card" title="click outside to close" onclick="event.stopPropagation()">
         <img src="/logos/brand.png" alt="Cade" />
-        <div class="about-tag">blocks that ARE the code — C · C++ · Python · JavaScript · Rust</div>
+        <div class="about-tag">blocks that ARE the code — C · C++ · Python · JavaScript · Rust · Go · Java · TypeScript</div>
         <div class="about-tag">v0.2.0 · offline-first · no accounts, no telemetry</div>
         <div class="about-links">
           <button id="show-shortcuts" class="hero-btn">Keyboard Shortcuts</button>

@@ -1,5 +1,6 @@
 import { SAMPLES } from './lang-data'
 import { toast } from './ui/toasts'
+import { readSetting } from './utils/pure'
 import type { SourceLang } from './palette'
 import type { CadeEditor } from './editor'
 
@@ -18,6 +19,8 @@ export interface AutosaveDeps {
 let autoSaveTimer = 0
 
 export function scheduleAutoSave(deps: AutosaveDeps): void {
+  const mode = String(readSetting('autosave', 'after-delay'))
+  if (mode === 'off') return
   clearTimeout(autoSaveTimer)
   autoSaveTimer = window.setTimeout(() => {
     const activePath = deps.activePath()
