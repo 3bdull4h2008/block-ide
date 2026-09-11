@@ -842,11 +842,9 @@ async function refreshFiles(): Promise<void> {
     return
   }
   filesSection?.classList.remove('is-empty')
-  console.log('[refreshFiles] workspace:', workspace)
   filesEl.innerHTML = '<div class="file-dir" style="color:var(--c-accent);">Loading...</div>'
   try {
     files = await invoke<string[]>('list_c_files', { root: workspace })
-    console.log('[refreshFiles] files:', files)
   } catch (err) {
     console.error('[refreshFiles] ERROR:', err)
     files = []
@@ -992,18 +990,14 @@ async function confirmDiscard(): Promise<boolean> {
 }
 
 async function guardedOpenTab(path: string): Promise<void> {
-  console.log('[guardedOpenTab] path:', path)
   if (!(await confirmDiscard())) {
-    console.log('[guardedOpenTab] discard cancelled')
     return
   }
   await openTab(path)
 }
 
 async function openTab(rel: string): Promise<void> {
-  console.log('[openTab] rel:', rel, 'existing tabs:', Array.from(tabsEl.children).map(t => (t as HTMLElement).dataset.path))
   if (Array.from(tabsEl.children).some((t) => (t as HTMLElement).dataset.path === rel)) {
-    console.log('[openTab] tab exists, activating')
     activateTab(rel)
     return
   }
@@ -1019,7 +1013,6 @@ async function openTab(rel: string): Promise<void> {
 }
 
 function activateTab(rel: string): void {
-  console.log('[activateTab] rel:', rel, 'activePath:', activePath)
   if (activePath === rel) return
   hist.reset()
   caretAnchor = null // different buffer — old node ids are meaningless here
@@ -1067,7 +1060,6 @@ openPop?.querySelectorAll('.menu-item').forEach((item) => {
 })
 
 document.getElementById('open-folder')?.addEventListener('click', async () => {
-  console.log('[open-folder] clicked')
   try {
     if (!(await confirmDiscard())) return
     const dir = await openDialog({
@@ -1076,7 +1068,6 @@ document.getElementById('open-folder')?.addEventListener('click', async () => {
       title: 'Open Folder',
       recursive: true,
     })
-    console.log('[open-folder] selected dir:', dir)
     if (typeof dir !== 'string' || !dir) return
     workspace = normSlashes(dir)
     tabsEl.innerHTML = ''
