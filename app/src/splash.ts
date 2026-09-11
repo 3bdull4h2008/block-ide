@@ -1,5 +1,6 @@
 import { blip } from './utils/audio'
 import { readSetting, writeSetting } from './utils/pure'
+import { refreshModeChrome } from './academy'
 import type { SourceLang } from './palette'
 
 type Lang = SourceLang
@@ -108,7 +109,7 @@ export function initSplashSettings(deps: SplashDeps): void {
     deps.srcEl.style.lineHeight = lineHeightSel.value
   })
 
-  const setupToggle = (id: string, key: string, defaultVal = false): void => {
+  const setupToggle = (id: string, key: string, defaultVal = false, after?: () => void): void => {
     const btn = document.getElementById(id) as HTMLButtonElement
     let on = readSetting(key, defaultVal)
     btn.classList.toggle('on', on)
@@ -118,6 +119,7 @@ export function initSplashSettings(deps: SplashDeps): void {
       btn.classList.toggle('on', on)
       btn.textContent = on ? 'On' : 'Off'
       writeSetting(key, on)
+      after?.()
     })
   }
 
@@ -134,7 +136,7 @@ export function initSplashSettings(deps: SplashDeps): void {
   setupToggle('set-animations', 'animations', true)
   setupToggle('set-clear-run', 'clearRun', true)
   setupToggle('set-mem-trace', 'memTrace', false)
-  setupToggle('set-show-xp', 'showXp', true)
+  setupToggle('set-show-xp', 'showXp', true, () => refreshModeChrome())
   setupToggle('set-spaced-rep', 'spacedRep', true)
   setupToggle('set-ctrl-view', 'ctrlView', true)
   setupToggle('set-slash-filter', 'slashFilter', true)
@@ -221,7 +223,8 @@ export function initSplashSidebar(deps: SplashDeps): void {
   })
 
   document.getElementById('hero-open')?.addEventListener('click', () => {
-    void deps.beginSession('c').then(() => {
+    // a folder workspace is always a sandbox session — never inherit stale academy mode
+    void deps.beginSession('c', 'sandbox').then(() => {
       window.setTimeout(() => document.getElementById('open-folder')?.click(), 150)
     })
   })

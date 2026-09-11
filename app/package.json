@@ -11,6 +11,7 @@
     "app": "npm run build && npm run copytcc && tauri dev",
     "app:hmr": "tauri dev --config tauri-dev.conf.json",
     "test": "vitest run",
+    "test:logic": "node --import ./scripts/register-ts.mjs scripts/test-logic.ts",
     "typecheck": "tsc --noEmit",
     "installer": "tauri build --bundles nsis"
   },

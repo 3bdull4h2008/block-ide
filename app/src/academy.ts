@@ -9,7 +9,7 @@ import {
   checkBadges,
   BADGES,
 } from './academy-extras'
-import { readJsonStore, writeJsonStore } from './utils/pure'
+import { readJsonStore, writeJsonStore, readSetting } from './utils/pure'
 
 export interface ProfileOut {
   xp: number
@@ -59,6 +59,10 @@ let appStats = readJsonStore<{ runs: number; fixes: number; loopsMastered: numbe
   { runs: 0, fixes: 0, loopsMastered: 0 },
 )
 let levelsCache: LevelInfo[] = []
+/** check-flow state feeding badge counters: fail→pass = a fixed program;
+ *  distinct looping level ids passed = looping concepts mastered */
+let failedLastCheck = false
+const loopLevelsPassed = new Set<string>(readJsonStore<string[]>('blockide-looplevels', []))
 
 // D7 mode split: sandbox | academy
 type AppMode = 'sandbox' | 'academy'
@@ -67,10 +71,42 @@ let appMode: AppMode = (localStorage.getItem('mode') as AppMode) ?? 'sandbox'
 
 export function getAppMode(): AppMode { return appMode }
 export function getProfile(): ProfileOut | null { return profile }
+
+/** palette element ref, captured in initAcademy — setMode re-renders locks */
+let modePaletteEl: HTMLDivElement | null = null
+
+/** Academy chrome is Academy-exclusive — the sandbox shows none of it:
+ *  XP badge, level/hint/check panel, and the mode switch back out.
+ *  The badge additionally honors the Settings "Show XP" toggle. */
+function applyModeChrome(): void {
+  const academy = appMode === 'academy'
+  const showXp = academy && readSetting<boolean>('showXp', true)
+  document.getElementById('xp-badge')?.toggleAttribute('hidden', !showXp)
+  document.getElementById('academy-section')?.classList.toggle('hidden', !academy)
+  const modeToggle = document.getElementById('mode-toggle')
+  if (modeToggle) modeToggle.style.display = academy ? '' : 'none'
+}
+
+export function refreshModeChrome(): void {
+  applyModeChrome()
+}
+
+/** One-shot XP badge flourish — retrigger-safe via animationend cleanup. */
+function pulseXpBadge(): void {
+  const badge = document.getElementById('xp-badge')
+  if (!badge || badge.hidden) return
+  badge.classList.remove('pulse')
+  void badge.offsetWidth // restart the animation if a pulse is mid-flight
+  badge.classList.add('pulse')
+  badge.addEventListener('animationend', () => badge.classList.remove('pulse'), { once: true })
+}
+
 export function setMode(m: AppMode): void {
   appMode = m
   localStorage.setItem('mode', m)
   appElMode.dataset.mode = m
+  applyModeChrome()
+  if (modePaletteEl) renderPaletteLocks(modePaletteEl, appMode, profile)
 }
 
 // ---------------------------------------------------------------------------
@@ -205,6 +241,14 @@ export function initAcademy(deps: AcademyDeps): void {
         levelSols[id] = deps.src()
         writeJsonStore('blockide-levelsol', levelSols)
 
+        // a pass right after a failure = a bug fixed (bug_squasher feed)
+        if (failedLastCheck) appStats.fixes++
+        failedLastCheck = false
+        // distinct looping levels passed = looping concepts mastered
+        if (/loop/i.test(id)) loopLevelsPassed.add(id)
+        appStats.loopsMastered = loopLevelsPassed.size
+        writeJsonStore('blockide-looplevels', [...loopLevelsPassed])
+
         // promote the spaced-mastery box
         mastery[id] = nextMastery(mastery[id], nowSec())
         writeJsonStore('blockide-mastery', mastery)
@@ -220,15 +264,18 @@ export function initAcademy(deps: AcademyDeps): void {
         if (newBadges.length > 0) {
           badgesState.push(...newBadges)
           writeJsonStore('blockide-badges', badgesState)
-          const badgeNames = newBadges.map((bid) => BADGES.find((b) => b.id === bid)?.icon).join(' ')
-          toast(`New Badges Unlocked: ${badgeNames}`, 'success', 5000)
+          const badgeNames = newBadges
+            .map((bid) => BADGES.find((b) => b.id === bid)?.name)
+            .filter(Boolean)
+            .join(', ')
+          toast(`New badges unlocked: ${badgeNames}`, 'success', 5000)
         }
         writeJsonStore('blockide-stats', appStats)
 
         const streakMsg =
           streakState.currentStreak > oldStreak
-            ? ` 🔥 ${streakState.currentStreak} Day Streak!`
-            : ` (Streak: ${streakState.currentStreak} 🔥)`
+            ? ` — ${streakState.currentStreak}-day streak!`
+            : ` (streak: ${streakState.currentStreak})`
 
         consoleEl.textContent =
           r.xp_awarded > 0
@@ -236,11 +283,13 @@ export function initAcademy(deps: AcademyDeps): void {
             : `[academy] PASSED ✓  (already completed before — no extra XP) · next ⟳review in ${review}... ${streakMsg}`
 
         await refreshProfile(deps)
+        if (r.xp_awarded > 0) pulseXpBadge()
         await refreshLevels(deps)
       } else {
         tourHooks.advance?.('check')
         const bad = r.results.filter((x) => !x.ok).map((x) => `test[${x.index}]`)
         consoleEl.textContent = `[academy] failed hidden tests: ${bad.join(', ')} — take a hint?`
+        failedLastCheck = true // next pass on this level counts as a fix
       }
     } catch (e) {
       consoleEl.textContent = String(e)
@@ -251,10 +300,12 @@ export function initAcademy(deps: AcademyDeps): void {
   const modeToggle = document.getElementById('mode-toggle') as HTMLButtonElement | null
   modeToggle?.addEventListener('click', () => {
     setMode(appMode === 'sandbox' ? 'academy' : 'sandbox')
-    renderPaletteLocks(paletteEl, appMode, profile)
   })
 
   // initial render
+  modePaletteEl = paletteEl
+  appElMode.dataset.mode = appMode
+  applyModeChrome()
   renderPaletteLocks(paletteEl, appMode, profile)
   updateHintBtn(hints, hintTier)
   refreshProfile(deps)

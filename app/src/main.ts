@@ -100,6 +100,7 @@ import { scheduleAutoSave as scheduleAutoSaveImpl, recoverSession as recoverSess
 import { startHtmlDrag as startHtmlDragImpl, type DragPayload } from './drag-drop'
 import { initDebugHooks } from './debug-hooks'
 import { drawBlock as drawBlockImpl } from './block-draw'
+import { normalizeTreeOffsets, normalizeDiagOffsets } from './utils/offsets'
 import { initSlotEditor, commitSlotValue as commitSlotValueFn, slotAt as slotAtFn, openSlotEditor as openSlotEditorImpl } from './inline-slot-editor'
 import { initKbdPalette, applyPalFilter } from './kbd-palette'
 import { initAcademy, renderPaletteLocks, getAppMode, getProfile, setMode } from './academy'
@@ -113,7 +114,7 @@ import { registerContextMenuProvider, initContextMenu } from './context-menu'
 import { initResizers } from './resize'
 import { initConsole } from './ui/console'
 import { initDialogs } from './ui/dialogs'
-import { applyChromeIcons, icons } from './ui/icons'
+import { icons } from './ui/icons'
 import {
   langOf,
   isWinPath,
@@ -216,6 +217,7 @@ const autosaveDeps = {
   get editor() { return editor },
   render: (s: string) => render(s),
   markDirty,
+  isClean: () => !isMeaningfullyDirty(),
 }
 function scheduleAutoSave(): void { scheduleAutoSaveImpl(autosaveDeps) }
 function recoverSession(): void { recoverSessionImpl(autosaveDeps) }
@@ -253,6 +255,11 @@ let traceIdx = -1
 let tracePlayTimer: ReturnType<typeof setInterval> | null = null
 
 let slotHits: SlotHit[] = []
+/** Per-root draw cache: unchanged top-level statements reuse their Pixi
+ *  subtree across renders (Text rasterization is the dominant per-keystroke
+ *  cost); replaced subtrees are destroyed instead of leaked. */
+interface RootDrawEntry { wrap: Container; hits: SlotHit[] }
+let rootDrawCache = new Map<string, RootDrawEntry>()
 
 function markDirty(): void {
   const dirty = activePath !== null && isMeaningfullyDirty()
@@ -265,9 +272,11 @@ function markDirty(): void {
 }
 
 /** True when the buffer differs from its load/save baseline in a way that
- *  matters. Trailing-newline / indent-only drift does not count. */
+ *  matters. Trailing-newline / indent-only drift does not count. The
+ *  empty-buffer and sample exemptions exist for the scratch buffer — a real
+ *  file that was emptied (or legitimately equals a sample) IS dirty. */
 function isMeaningfullyDirty(): boolean {
-  if (src.trim().length === 0 || src === SAMPLES[activeLang]) return false
+  if (activePath === null && (src.trim().length === 0 || src === SAMPLES[activeLang])) return false
   const baseline =
     activePath !== null
       ? (savedCache.get(activePath) ?? savedSnapshot)
@@ -329,6 +338,8 @@ async function render(source: string): Promise<void> {
       lang: activeLang,
     })
     if (gen !== renderGen) return // superseded — a newer parse owns the canvas
+    // parser speaks UTF-8 bytes; the whole edit surface speaks UTF-16 units
+    normalizeTreeOffsets(out.tree, source)
     roots = buildBlocks(out.tree)
     layoutStack(roots, 40, 40)
     // palette reflects the program: harvested vars + node kinds/includes
@@ -364,7 +375,43 @@ async function render(source: string): Promise<void> {
     }
     world.removeChildren()
     slotHits = []
-    for (const b of roots) drawBlock(b)
+    const themeTag = document.documentElement.dataset.theme === 'dark' ? 'd' : 'l'
+    const nextCache = new Map<string, RootDrawEntry>()
+    let drew = false
+    try {
+      for (const b of roots) {
+        // container/nodeKind participate: a same-span parse can flip the
+        // body rule, and reused slot hits must rebind to THIS parse's node
+        const key = `${themeTag}|${activeLang}|${b.cat}|${b.sticky ? 's' : 'b'}|${b.container ? 'C' : 'S'}|${b.nodeKind}|${b.start}:${b.end}:${b.x}:${b.y}|${source.slice(b.start, b.end)}`
+        const reuse = rootDrawCache.get(key)
+        if (reuse) {
+          world.addChild(reuse.wrap)
+          slotHits.push(...reuse.hits.map((h) => ({ ...h, block: b })))
+          nextCache.set(key, reuse)
+        } else {
+          const wrap = new Container()
+          const hits: SlotHit[] = []
+          drawBlockImpl({ world: wrap, slotHits: hits, attachHeaderEvents, onSlotHit: () => {} }, b)
+          world.addChild(wrap)
+          nextCache.set(key, { wrap, hits })
+        }
+      }
+      drew = true
+    } finally {
+      if (drew) {
+        for (const [k, e] of rootDrawCache) {
+          if (!nextCache.has(k)) e.wrap.destroy({ children: true })
+        }
+        rootDrawCache = nextCache
+      } else {
+        // mid-loop throw: destroy freshly created wraps (they were attached
+        // to world but are unknown to rootDrawCache — the next render's diff
+        // would leak them); reused entries stay live for the next render
+        for (const [k, e] of nextCache) {
+          if (!rootDrawCache.has(k)) e.wrap.destroy({ children: true })
+        }
+      }
+    }
     world.addChild(overlay)
     world.addChild(snapLayer)
     lastPaintedSrc = source
@@ -419,17 +466,21 @@ function renderDiagList(ds: Diag[]): void {
 }
 
 async function refreshDiags(): Promise<void> {
-  await refreshDiagsMod({ roots: () => roots, overlay, src: () => src, srcEl, activeLang: () => activeLang, setView, invoke })
-}
-
-const blockDrawDeps = {
-  world,
-  slotHits,
-  attachHeaderEvents,
-  onSlotHit: () => {},
-}
-function drawBlock(b: BBlock): void {
-  drawBlockImpl(blockDrawDeps, b)
+  await refreshDiagsMod({
+    roots: () => roots,
+    overlay,
+    src: () => src,
+    srcEl,
+    activeLang: () => activeLang,
+    setView,
+    // diagnostics arrive in byte offsets like the parse tree — convert at
+    // the boundary so jump/overlay math runs in UTF-16 units
+    invoke: async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> => {
+      const res = await invoke<T>(cmd, args as never)
+      if (cmd === 'diag_c') normalizeDiagOffsets(res as Diag[], src)
+      return res
+    },
+  })
 }
 
 function screenToWorld(ox: number, oy: number): { x: number; y: number } {
@@ -585,12 +636,12 @@ function traceShowStep(idx: number): void {
 
 function traceStop(): void {
   if (tracePlayTimer !== null) { clearInterval(tracePlayTimer); tracePlayTimer = null }
-  tracePlayBtn.textContent = '▶'
+  tracePlayBtn.innerHTML = icons.play
 }
 
 function tracePlay(): void {
   if (tracePlayTimer !== null) { traceStop(); return }
-  tracePlayBtn.textContent = '⏸'
+  tracePlayBtn.innerHTML = icons.pause
   const delay = Math.max(20, 520 - Number(traceSpeedSlider.value) * 50)
   tracePlayTimer = setInterval(() => {
     if (traceIdx >= traceSteps.length - 1) { traceStop(); return }
@@ -726,8 +777,8 @@ window.addEventListener('keydown', (e) => {
 registerContextMenuProvider((target) => {
   if (!target.closest('#canvas-host')) return []
   return [
-    { label: 'Undo', shortcut: 'Ctrl+Z', action: () => { const p = hist.undo(src); if (p !== null) { src = p; srcEl.value = p; editor?.setSource(p); void render(p); markDirty(); scheduleAutoSave() } } },
-    { label: 'Redo', shortcut: 'Ctrl+Y', action: () => { const n = hist.redo(src); if (n !== null) { src = n; srcEl.value = n; editor?.setSource(n); void render(n); markDirty(); scheduleAutoSave() } } },
+    { label: 'Undo', shortcut: 'Ctrl+Z', action: () => { const p = hist.undo(src); if (p !== null) { src = p; srcEl.value = p; srcSetting = true; editor?.setSource(p); srcSetting = false; void render(p); markDirty(); scheduleAutoSave() } } },
+    { label: 'Redo', shortcut: 'Ctrl+Y', action: () => { const n = hist.redo(src); if (n !== null) { src = n; srcEl.value = n; srcSetting = true; editor?.setSource(n); srcSetting = false; void render(n); markDirty(); scheduleAutoSave() } } },
     { divider: true, label: '' },
     { label: 'Select All', shortcut: 'Ctrl+A', action: () => { /* select all blocks */ } },
   ]
@@ -843,10 +894,15 @@ function createTab(path: string, content: string): void {
   dup?.remove()
   fileCache.set(path, content)
   savedCache.set(path, content)
-  // cache cap (#7): open docs are the hot set — evict the coldest entries
+  // cache cap (#7): open docs are the hot set — evict the coldest entries,
+  // but never an entry backing an open tab: activateTab falls back to ''
+  // on a miss, which would show an empty buffer marked as clean
+  const openPaths = new Set(
+    Array.from(tabsEl.children).map((t) => (t as HTMLElement).dataset.path),
+  )
   for (const key of fileCache.keys()) {
     if (fileCache.size <= 64) break
-    if (key !== path && key !== activePath) {
+    if (key !== path && key !== activePath && !openPaths.has(key)) {
       fileCache.delete(key)
       savedCache.delete(key)
     }
@@ -902,6 +958,11 @@ async function closeTab(path: string): Promise<void> {
   savedSnapshot = src
   srcEl.value = src
   editor?.setSource(src)
+  prevSrcForUndo = src
+  hist.reset()
+  // a pristine template is not a recovery candidate — the pending autosave
+  // tick would otherwise persist it and resurrect a spurious toast on boot
+  localStorage.removeItem('blockide-autosave:scratch')
   void render(src)
   markDirty()
   consoleEl.textContent = 'closed — New File or Open Folder to continue'
@@ -961,6 +1022,7 @@ function activateTab(rel: string): void {
   srcEl.value = src
   editor?.setSource(src)
   srcSetting = false
+  prevSrcForUndo = src // a fresh buffer — the previous tab's doc must never become its undo target
   renderPalette()
   lastPaintedSrc = null
   void scheduleRender(src)
@@ -970,6 +1032,29 @@ function activateTab(rel: string): void {
   const activeFileEl = filesEl.querySelector(`.file[data-path="${rel}"]`)
   if (activeFileEl) activeFileEl.classList.add('active')
 }
+
+// ---- Open… toolbar menu ----
+const openMenu = document.getElementById('open-menu')
+const openBtn = document.getElementById('open-btn') as HTMLButtonElement | null
+const openPop = openMenu?.querySelector<HTMLDivElement>('.menu-pop') ?? null
+
+function setOpenMenu(open: boolean): void {
+  if (!openPop || !openBtn) return
+  openPop.classList.toggle('open', open)
+  openBtn.setAttribute('aria-expanded', String(open))
+}
+openBtn?.addEventListener('click', () => {
+  setOpenMenu(!openPop?.classList.contains('open'))
+})
+document.addEventListener('click', (e) => {
+  if (openMenu && !openMenu.contains(e.target as Node)) setOpenMenu(false)
+})
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') setOpenMenu(false)
+})
+openPop?.querySelectorAll('.menu-item').forEach((item) => {
+  item.addEventListener('click', () => setOpenMenu(false))
+})
 
 document.getElementById('open-folder')?.addEventListener('click', async () => {
   console.log('[open-folder] clicked')
@@ -1149,6 +1234,10 @@ async function saveActive(saveAs = false): Promise<void> {
     activeLang = langOf(target) as Lang
     editor?.setLang(activeLang)
     createTab(target, src)
+    // createTab → activateTab early-returns (path already active), so the
+    // post-switch housekeeping a real tab switch gets is redone here
+    renderPalette()
+    tabViews.set(target, viewMode)
   } else {
     savedCache.set(target, src)
   }
@@ -1166,6 +1255,11 @@ async function saveActive(saveAs = false): Promise<void> {
 }
 
 window.addEventListener('keydown', (e) => {
+  // CodeMirror owns shortcuts inside the editor (Ctrl+Z among them) and
+  // calls preventDefault — without this guard one Ctrl+Z ran BOTH history
+  // systems: a double undo plus an unguarded setSource that re-pushed the
+  // edit as a new entry, making undo/redo toggle in place
+  if (e.defaultPrevented) return
   const ctrl = e.ctrlKey || e.metaKey
   if (!ctrl) return
   if (e.key.toLowerCase() === 's') {
@@ -1190,7 +1284,9 @@ window.addEventListener('keydown', (e) => {
     if (prev !== null) {
       src = prev
       srcEl.value = prev
+      srcSetting = true
       editor?.setSource(prev)
+      srcSetting = false
       void render(prev)
       markDirty()
       scheduleAutoSave()
@@ -1201,7 +1297,9 @@ window.addEventListener('keydown', (e) => {
     if (next !== null) {
       src = next
       srcEl.value = next
+      srcSetting = true
       editor?.setSource(next)
+      srcSetting = false
       void render(next)
       markDirty()
       scheduleAutoSave()
@@ -1460,6 +1558,8 @@ function setTheme(t: 'dark' | 'light'): void {
   localStorage.setItem('theme', t)
   app.renderer.background.color = t === 'dark' ? 0x0c3543 : 0xdff3fa
   editor?.setTheme(t === 'dark')
+  lastPaintedSrc = null // block colors are theme-dependent — force a repaint
+  void scheduleRender(src)
   world.emit('blockide:theme', t)
 }
 
@@ -1499,6 +1599,7 @@ async function beginSession(lang: Lang, mode?: 'sandbox' | 'academy'): Promise<v
   if (!editor) initEditor()
   editor?.setSource(src)
   editor?.setLang(lang)
+  prevSrcForUndo = src // first undo of a session must restore the sample, not wipe to ''
   applySettings()
   renderPalette()
   void render(src)
@@ -1522,7 +1623,7 @@ registerCommands([
   { id: 'edit.find', label: 'Find & Replace', category: 'Edit', shortcut: 'Ctrl+F', action: () => editor?.view.focus() },
     { id: 'run.start', label: 'Run Program', category: 'Run', shortcut: 'F5', action: () => void startRun() },
     { id: 'run.stop', label: 'Stop Program', category: 'Run', shortcut: 'Shift+F5', action: () => stopRun() },
-    { id: 'run.check', label: 'Check Code', category: 'Run', shortcut: 'Ctrl+Shift+C', action: () => void (document.getElementById('check-btn') as HTMLButtonElement)?.click() },
+    { id: 'run.check', label: 'Check Code', category: 'Run', shortcut: 'Ctrl+Shift+C', when: () => getAppMode() === 'academy', action: () => void (document.getElementById('check-btn') as HTMLButtonElement)?.click() },
     { id: 'view.theme', label: 'Toggle Theme', category: 'View', action: () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark') },
     { id: 'view.shortcuts', label: 'Keyboard Shortcuts', category: 'View', shortcut: 'Ctrl+/', action: () => { const sd = document.getElementById('shortcuts-dialog') as HTMLDivElement; sd.style.display = sd.style.display === 'flex' ? 'none' : 'flex' } },
     { id: 'view.blocks', label: 'Blocks View', category: 'View', shortcut: 'Ctrl+1', action: () => setView('blocks') },
@@ -1583,8 +1684,6 @@ initResizers()
 installPerfHooks()
 initExtensions()
 initDialogs()
-applyChromeIcons()
-setTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light')
 
 // ------------------------------------------------ drag & drop files (#12)
 initFileDrop({

@@ -9,16 +9,78 @@
 #splash .dialog {
   width: min(780px, 92vw);
   max-height: 88vh;
+  animation: splash-in 420ms var(--ease-bounce) both;
+}
+
+@keyframes splash-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* staggered arrival: brand, then nav rows, then the language cards */
+#splash .splash-brand { animation: splash-rise 380ms var(--ease-out) 60ms both; }
+#splash .sidebar-row  { animation: splash-rise 320ms var(--ease-out) both; }
+#splash .sidebar-row:nth-child(1) { animation-delay: 110ms; }
+#splash .sidebar-row:nth-child(2) { animation-delay: 150ms; }
+#splash .sidebar-row:nth-child(3) { animation-delay: 190ms; }
+#splash .sidebar-row:nth-child(5) { animation-delay: 230ms; }
+#splash .lang-card   { animation: splash-rise 320ms var(--ease-out) both; }
+#splash .lang-card:nth-child(1) { animation-delay: 160ms; }
+#splash .lang-card:nth-child(2) { animation-delay: 195ms; }
+#splash .lang-card:nth-child(3) { animation-delay: 230ms; }
+#splash .lang-card:nth-child(4) { animation-delay: 265ms; }
+#splash .lang-card:nth-child(5) { animation-delay: 300ms; }
+#splash .lang-card:nth-child(6) { animation-delay: 335ms; }
+#splash .lang-card:nth-child(7) { animation-delay: 370ms; }
+#splash .lang-card:nth-child(8) { animation-delay: 405ms; }
+#splash .splash-actions { animation: splash-rise 320ms var(--ease-out) 460ms both; }
+
+@keyframes splash-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 #splash .dialog-header {
   -webkit-app-region: drag;
-  background: linear-gradient(180deg, var(--c-bg-surface), var(--c-bg-alt));
+  background: linear-gradient(135deg, var(--c-accent-soft), var(--c-bg-alt));
+  border-bottom: 1px solid var(--c-border-subtle);
 }
 
+.splash-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.splash-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+.splash-logo {
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-sm);
+}
+.splash-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  min-width: 0;
+}
 #splash .dialog-title {
   color: var(--c-accent);
   font-size: var(--fs-xl);
+  font-family: var(--font-heading);
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.01em;
+}
+.splash-tagline {
+  font-size: var(--fs-xs);
+  color: var(--c-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 #splash .dialog-body {
@@ -911,6 +973,18 @@ html.theme-transitioning *::after {
 
 #xp-badge {
   transition: transform var(--dur-normal) var(--ease-bounce);
+}
+#xp-badge.pulse {
+  animation: xp-pulse 480ms var(--ease-bounce);
+}
+@keyframes xp-pulse {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.25); background: var(--c-success); color: var(--c-fg-inverse); }
+  100% { transform: scale(1); }
+}
+/* .badge's inline-flex would override the hidden attribute (Academy-only badge) */
+#xp-badge[hidden] {
+  display: none;
 }
 
 /* ── About dialog ────────────────────────────────────────── */

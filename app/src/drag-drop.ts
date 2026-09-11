@@ -116,6 +116,11 @@ function nearestCompatibleSlot(
 }
 
 export function startHtmlDrag(deps: DragDropDeps, e: PointerEvent, payload: DragPayload): void {
+  // re-entrancy guard: a drag that never saw pointerup (pointercancel, window
+  // blur) would otherwise leave two move listeners and orphaned overlays
+  if (dragState) {
+    window.dispatchEvent(new PointerEvent('pointerup'))
+  }
   dragState = payload
   deps.ghost.innerHTML = ''
   const fill = catColor(payload.cat)
@@ -252,9 +257,13 @@ export function startHtmlDrag(deps: DragDropDeps, e: PointerEvent, payload: Drag
     }
     let target = findDropTarget(deps.roots(), w.x, w.y)
     if (!target) {
-      const virtualRoot = deps.roots().find(r => r.container && r.children.length === 0) || deps.roots()[0]
-      if (virtualRoot) { target = { container: virtualRoot, index: 0, offset: virtualRoot.start + 1 } }
-      else { deps.setSrc(d.snippet ?? ''); void deps.canonicalize(); deps.tourHooks.advance?.('edit'); blipSuccess(); return }
+      // drop missed every container: append at FILE SCOPE, never splice
+      // after the first character of a non-container root (`i|nt x;`)
+      deps.setSrc(insertTopLevel(deps.src(), deps.roots(), d.snippet ?? ''))
+      void deps.canonicalize()
+      deps.tourHooks.advance?.('edit')
+      blipSuccess()
+      return
     }
     if (d.move && isInsideRange(target.container, d.move)) return
     const text = deps.src()
@@ -271,6 +280,19 @@ export function startHtmlDrag(deps: DragDropDeps, e: PointerEvent, payload: Drag
 
   window.addEventListener('pointermove', onDragMove)
   window.addEventListener('pointerup', onDragEnd, { once: true })
+  // releasing the pointer outside the webview (or a touch cancel) never
+  // fires pointerup — tear the overlays down so the ghost can't follow
+  // the mouse forever
+  const onCancel = (): void => {
+    if (!dragState) return
+    dragState = null
+    deps.ghost.style.display = 'none'
+    deps.ghost.style.opacity = '1'
+    deps.dropbar.style.display = 'none'
+    clearSnapGhost(deps.snapLayer)
+  }
+  window.addEventListener('pointercancel', onCancel, { once: true })
+  window.addEventListener('blur', onCancel, { once: true })
 }
 
 export function getDragState(): DragPayload | null { return dragState }

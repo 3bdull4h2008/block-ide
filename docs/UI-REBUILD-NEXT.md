@@ -1,7 +1,10 @@
 # UI Rebuild — Status & Next Agent Handoff
 
-> Session: 2026-09-10 · Theme score path **5.5 → 7.2/10**
+> Session: 2026-09-10/11 · Theme score path **5.5 → 7.2/10**
 > Design language: `DESIGN.md` (Sea palette, Comic Neue + Baloo 2, Scratch blocks)
+> **Logic track (2026-09-11): `docs/LOGIC-MAP.md`** — architecture map, 24 logic
+> bugs fixed, 35 external Node tests (`npm run test:logic`). Read it before
+> touching parse/render/gesture/academy logic.
 
 ## What shipped (do not re-do)
 
@@ -52,21 +55,83 @@
 
 ## Next priorities (ordered)
 
-| # | Task | Why | Where |
-|---|------|-----|--------|
-| 1 | **Repaint canvas on theme toggle** | `COLORS_DARK` exists but blocks don't re-draw when `data-theme` flips | `main.ts` `setTheme` → `lastPaintedSrc = null; void scheduleRender(src)` |
-| 2 | **Collapse Open+File** into one “Open…” menu | Toolbar density (reviewer +0.3 hierarchy) | `index.html` toolbar + `main.ts` handlers |
-| 3 | **Branded splash shell** | Still a generic dialog; distinctive moment for first impression | `index.html` `#splash` + `style.css` |
-| 4 | **Inline SVG in HTML** for remaining controls | Avoid post-boot `innerHTML` swap flash | `index.html` + `icons.ts` |
-| 5 | **Incremental block invalidation** | Perf: only redraw changed subtrees (IMPROVEMENT-PLAN #4) | `main.ts` `render` / `blocks.ts` |
-| 6 | **Dark canvas block edges** | Verify `palColors()` under dark; tune `BORDER_DARK` contrast | `blocks.ts` |
+All six items from the 2026-09-10 handoff are DONE (same day, second pass):
+
+| # | Task | Status |
+|---|------|--------|
+| 1 | Repaint canvas on theme toggle | **DONE** — `setTheme` resets `lastPaintedSrc` + `scheduleRender(src)` |
+| 2 | Collapse Open+File | **DONE** — single "Open…" dropdown (`.menu`/`.menu-pop`); `open-folder`/`open-file` IDs preserved |
+| 3 | Branded splash shell | **DONE** — logo + wordmark + tagline header, sea gradient |
+| 4 | Inline SVG in HTML | **DONE** — all chrome icons inlined in `index.html`; `applyChromeIcons()` deleted from `icons.ts`; trace play/pause swaps use `icons.play`/`icons.pause` (were emoji) |
+| 5 | Incremental block invalidation | **DONE** — per-root draw cache in `main.ts` `render()` keyed by theme+lang+cat+range+text+x+y; unchanged statements reuse their Pixi subtree, replaced ones are `destroy({children:true})`d (fixes Text-texture leak) |
+| 6 | Dark canvas block edges | **DONE** — `BORDER_DARK` retuned (edge-vs-fill 1.7–2.1 → 2.8–4.3:1); block labels use ink (`#0c3543`) under dark theme and on `comment` blocks in both themes (white was 1.2–2.6:1) |
+
+### Skills installed from online (2026-09-11) — `.agents/skills/` + `skills-lock.json`
+
+7 new UI skills (302 files), verified clean of unsafe instructions:
+
+| Skill | Source | Use here |
+|-------|--------|----------|
+| `theme-factory` | anthropics/skills | Theme/color-system generation (Sea tokens) |
+| `webapp-testing` | anthropics/skills | Playwright-driven UI verification of the shell |
+| `typography-audit` | mblode/agent-skills | 78-rule type audit (fonts, scale, punctuation) |
+| `ui-design` | mblode/agent-skills | Audit/Build/Direction modes with rule files |
+| `ui-verification` | mblode/agent-skills | Runtime browser probes (focus, hit targets, themes) |
+| `ui-animation` | mblode/agent-skills | Motion work with scripts |
+| `ax-audit` | mblode/agent-skills | Accessibility + architecture rule audits |
+
+canvas-design (anthropics) was skipped — 5.4 MB of bundled fonts, low fit for an app
+with its own design language. Lockfile hashes are sha256 of the installed SKILL.md.
+
+### UI enhancement pass (2026-09-11)
+
+- **Tab dirty state made visible** — `markDirty()` toggled a `.dirty` class with zero
+  CSS (invisible). Now: accent dot replaces the close '×' until hover (VS-Code style).
+- **Open… menu pop-in** — scale+fade with bounce, matching the dialog language.
+- **View modes → segmented control** — sunken pill container, raised surface thumb,
+  no divider borders.
+- **Splash entrance** — brand/nav/lang-cards/actions stagger in (splash-rise);
+  global `prefers-reduced-motion` guard neutralizes all of it.
+- **XP badge pulse** — CSS hook existed, nothing triggered it; now fires once per
+  XP award (`animationend` cleanup, retrigger-safe).
+
+### Mode separation (2026-09-11): Academy chrome is Academy-exclusive
+
+The sandbox previously leaked Academy UI. All of it is now gated by `applyModeChrome()`
+in `src/academy.ts`, called from `setMode()` and at init:
+
+- `#xp-badge` (★ XP) — hidden in sandbox (also honors the Settings "Show XP" toggle,
+  which was stored but never wired — now live via `refreshModeChrome()`); needs the
+  `#xp-badge[hidden]` CSS guard in `style.css` because `.badge` sets `display`.
+- `#academy-section` (level/hint/check sidebar) — was permanently `hidden` even in
+  Academy mode (dead since decomposition); now shows in Academy, never in sandbox.
+- `#mode-toggle` — the only wired way out of Academy mode; now visible in Academy only.
+- Command palette "Check Code" — new `when?: () => boolean` gate in `palette-cmd.ts`;
+  Academy-only.
+- Splash "Open Folder…" forced `mode: 'sandbox'` (was inheriting stale Academy mode
+  from localStorage); "Start Coding" already did.
+- `#app` `data-mode` default was the bogus `"blocks"` — now `"sandbox"`, synced at boot.
+
+### Bugs found & fixed during the pass
+- `blockDrawDeps` captured the initial `slotHits` array while `render()` reassigned
+  `slotHits = []` — slot hit-regions landed in an orphaned array. The incremental
+  renderer passes a fresh per-root array instead.
+- `applyChromeIcons()` would have clobbered the Open-menu item labels (`Open Folder… <kbd>Ctrl+O</kbd>` → "Open").
+
+### Remaining (next agent)
+| Task | Why | Where |
+|------|-----|-------|
+| Code-split the >500 kB chunk | Only remaining build warning | vite/rolldown config |
+| Light-theme block label contrast | White on control/variables fills ≈ 2.1:1 (Scratch-style, but ink labels like dark theme would clear it) | `block-draw.ts` `labelStyle` |
+| Offline font fallback | Google Fonts still CDN | `index.html` |
+| Visual pass light+dark | Verify: splash, Open menu, blocks edges, labels, theme toggle repaint | manual / `npm run tauri dev` |
 
 ## Known leftovers / debt
 
-- `skills-lock.json` and `.agents/` are workspace tooling — commit or ignore deliberately.
+- `skills-lock.json` and `.agents/` are workspace tooling — left untracked deliberately.
 - Some deleted modules (`state.ts`, `theme.ts`, `trace-panel.ts`) were leftover dead files removed during rebuild.
 - Google Fonts still load from CDN — offline fallbacks are system stacks (acceptable).
-- Academy / tour copy still has light emoji in a few places — replace when touching those surfaces.
+- Academy/tour emoji cleaned 2026-09-10: carousel icons are inline SVG (puzzle/trophy/rocket), badges toast by name, streak copy is text-only. Remaining ✓ ✖ ▲ ▸ ▾ ⟳ ★ glyphs are typographic and intentional.
 
 ## Score path (for continuity)
 

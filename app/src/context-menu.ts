@@ -14,7 +14,9 @@ const providers: ContextMenuProvider[] = []
 
 let menuEl: HTMLDivElement | null = null
 let activeIndex = 0
-let visibleItems: ContextMenuItem[] = []
+/** items in DOM-row order (dividers excluded) — activeIndex is a ROW index,
+ *  so keyboard activation must resolve against this, not the full item list */
+let rowItems: ContextMenuItem[] = []
 
 function ensureMenu(): HTMLDivElement {
   if (menuEl) return menuEl
@@ -35,7 +37,7 @@ function ensureMenu(): HTMLDivElement {
       moveSelection(-1)
     } else if (e.key === 'Enter') {
       e.preventDefault()
-      const item = visibleItems[activeIndex]
+      const item = rowItems[activeIndex]
       if (item && !item.disabled && !item.divider) {
         hideContextMenu()
         item.action?.()
@@ -71,13 +73,13 @@ export function registerContextMenuProvider(provider: ContextMenuProvider): void
 export function hideContextMenu(): void {
   if (menuEl) menuEl.style.display = 'none'
   activeIndex = 0
-  visibleItems = []
+  rowItems = []
 }
 
 function showContextMenu(x: number, y: number, items: ContextMenuItem[]): void {
   const menu = ensureMenu()
   menu.innerHTML = ''
-  visibleItems = items
+  rowItems = []
   activeIndex = 0
 
   for (const item of items) {
@@ -87,6 +89,7 @@ function showContextMenu(x: number, y: number, items: ContextMenuItem[]): void {
       menu.appendChild(hr)
       continue
     }
+    rowItems.push(item)
     const row = document.createElement('div')
     row.className = 'ctx-item'
     row.dataset.disabled = String(!!item.disabled)

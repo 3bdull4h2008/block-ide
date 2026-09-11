@@ -131,8 +131,10 @@ const LANG_SHAPES: Record<string, LangShape> = {
 /** Active shape — set per buildBlocks call (render is single-threaded). */
 let SHAPE: LangShape = LANG_SHAPES.c
 
-/** tree-sitter-c field names that hold a control statement's nested bodies */
-const BODY_FIELDS = new Set(['body', 'consequence', 'alternative'])
+/** tree-sitter field names that hold a control statement's nested bodies.
+ *  `handler`/`finalbody` keep python's except/finally clauses out of the
+ *  try-block header (they are body fields, not header tokens). */
+const BODY_FIELDS = new Set(['body', 'consequence', 'alternative', 'handler', 'finalbody'])
 
 function isBrace(n: CNodeJSON): boolean {
   return !n.named && (n.text === '{' || n.text === '}')
@@ -327,7 +329,9 @@ function toBlock(n: CNodeJSON): BBlock {
       container
         ? bodies.length > 0
           ? Math.min(...bodies.map((b) => b.start))
-          : (compound as CNodeJSON).start
+          : // tree-sitter error recovery can hand a control node with no
+            // body field and no `{` — degrade to the node end, never null
+            (compound?.start ?? n.end)
         : n.end,
     x: 0,
     y: 0,
@@ -361,12 +365,23 @@ export function harvestVars(root: CNodeJSON): string[] {
       if (m.text !== null && m.text.length > 0) out.add(m.text)
       return
     }
-    if (
-      m.kind === 'init_declarator' ||
-      m.kind === 'array_declarator' ||
-      m.kind === 'pointer_declarator'
-    ) {
-      for (const c of m.children) fromDeclarator(c)
+    if (m.kind === 'init_declarator') {
+      // the INITIALIZER is an expression, not a declaration: `int x = y;`
+      // declares x, and y/count/a/b are merely read. Descend the declarator
+      // child only (field 'declarator' in real trees; first child as the
+      // hand-built/legacy fallback).
+      const d = m.children.find((c) => c.field === 'declarator') ?? m.children[0]
+      if (d) fromDeclarator(d)
+    } else if (m.kind === 'array_declarator' || m.kind === 'pointer_declarator') {
+      for (const c of m.children) {
+        if (
+          c.kind === 'identifier' ||
+          c.kind === 'array_declarator' ||
+          c.kind === 'pointer_declarator'
+        ) {
+          fromDeclarator(c)
+        }
+      }
     }
   }
   const visit = (n: CNodeJSON): void => {
@@ -556,20 +571,22 @@ export const BORDER: Record<Cat, number> = {
   structs: 0xbe2e6f,
 }
 
+/** Dark-theme edges: ~35-40% lighterness drop from the fill, same hue —
+ *  ≥2.8:1 against the fill so the 3px rim reads on the #0c3543 canvas. */
 export const BORDER_DARK: Record<Cat, number> = {
-  function: 0x6b3fd4,
-  control: 0xc47a0a,
-  statement: 0x147a90,
-  variables: 0xc47010,
-  comment: 0xb89840,
-  error: 0x6a3840,
-  structs: 0xc43d7a,
+  function: 0x4c2a9e,
+  control: 0x8a5200,
+  statement: 0x0b4f60,
+  variables: 0x7d4a00,
+  comment: 0x7a6420,
+  error: 0x4a272e,
+  structs: 0x8a1e56,
 }
 
-export function palColors(): { fill: Record<Cat, number>; edge: Record<Cat, number> } {
+export function palColors(): { fill: Record<Cat, number>; edge: Record<Cat, number>; dark: boolean } {
   const dark = typeof document !== 'undefined'
     && document.documentElement.getAttribute('data-theme') === 'dark'
   return dark
-    ? { fill: COLORS_DARK, edge: BORDER_DARK }
-    : { fill: COLORS, edge: BORDER }
+    ? { fill: COLORS_DARK, edge: BORDER_DARK, dark }
+    : { fill: COLORS, edge: BORDER, dark }
 }

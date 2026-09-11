@@ -20,11 +20,11 @@ export interface SlotEditorDeps {
 
 let editingSlot: SlotHit | null = null
 
+// index.html ships the `.slot-editor` wrapper div — mount the input inside
+// it so the CSS contract (`.slot-editor input`, `.slot-editor.open`) applies
+const wrapper = document.getElementById('slot-editor') as HTMLDivElement
 const slotEditor = document.createElement('input')
-slotEditor.id = 'slot-editor'
-slotEditor.className = 'slot-editor'
-slotEditor.style.display = 'none'
-document.body.appendChild(slotEditor)
+wrapper.appendChild(slotEditor)
 
 export function commitSlotValue(deps: SlotEditorDeps, s: SlotHit, raw: string): string | null {
   const final = validateSlotValue(s.part.type, raw)
@@ -43,28 +43,29 @@ export function commitSlotValue(deps: SlotEditorDeps, s: SlotHit, raw: string): 
 function closeSlotEditor(deps: SlotEditorDeps, commit: boolean): void {
   const s = editingSlot
   editingSlot = null
-  slotEditor.style.display = 'none'
-  slotEditor.classList.remove('bad')
+  wrapper.classList.remove('open', 'bad')
   if (s && commit) {
     const err = commitSlotValue(deps, s, slotEditor.value)
     if (err !== null && s.part.type !== 'string') {
-      openSlotEditor(deps, s)
-      slotEditor.classList.add('bad')
+      openSlotEditor(deps, s, true) // keep the user's text so they can fix it
+      wrapper.classList.add('bad')
       blipError()
     }
   }
 }
 
-function openSlotEditor(deps: SlotEditorDeps, s: SlotHit): void {
+function openSlotEditor(deps: SlotEditorDeps, s: SlotHit, preserveValue = false): void {
   editingSlot = s
   const r = deps.hostEl.getBoundingClientRect()
   const scale = deps.world.scale.x
-  slotEditor.value =
-    s.part.type === 'string' ? s.part.text.replace(/^"(.*)"$/s, '$1') : s.part.text
-  slotEditor.style.display = 'block'
-  slotEditor.style.left = `${r.left + s.x * scale + deps.world.x - 4}px`
-  slotEditor.style.top = `${r.top + s.y * scale + deps.world.y}px`
-  slotEditor.style.width = `${Math.max(60, s.w * scale + 8)}px`
+  if (!preserveValue) {
+    slotEditor.value =
+      s.part.type === 'string' ? s.part.text.replace(/^"(.*)"$/s, '$1') : s.part.text
+  }
+  wrapper.classList.add('open')
+  wrapper.style.left = `${r.left + s.x * scale + deps.world.x - 4}px`
+  wrapper.style.top = `${r.top + s.y * scale + deps.world.y}px`
+  wrapper.style.width = `${Math.max(60, s.w * scale + 8)}px`
   slotEditor.focus()
   slotEditor.select()
 }

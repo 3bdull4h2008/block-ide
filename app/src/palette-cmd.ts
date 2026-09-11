@@ -6,6 +6,8 @@ export interface PaletteCommand {
   label: string
   category: string
   shortcut?: string
+  /** Optional mode gate — a false return hides the command from the list. */
+  when?: () => boolean
   action: () => void
 }
 
@@ -52,9 +54,10 @@ document.body.appendChild(overlay)
 // ---- Render ----
 function renderList(): void {
   const q = input.value.trim().toLowerCase()
+  const available = commands.filter((c) => !c.when || c.when())
   filteredCommands = q === ''
-    ? [...commands]
-    : commands.filter((c) => c.label.toLowerCase().includes(q))
+    ? [...available]
+    : available.filter((c) => c.label.toLowerCase().includes(q))
 
   if (selectedIndex >= filteredCommands.length) selectedIndex = Math.max(0, filteredCommands.length - 1)
 

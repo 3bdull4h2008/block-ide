@@ -35,6 +35,10 @@ export function initPanZoom(deps: PanZoomDeps): void {
     lastY = e.global.y
   })
   window.addEventListener('pointerup', () => (panning = false))
+  // a pointerup outside the webview never arrives — without these the
+  // canvas keeps panning on the next hover-move
+  window.addEventListener('pointercancel', () => (panning = false))
+  window.addEventListener('blur', () => (panning = false))
   hostEl.addEventListener(
     'wheel',
     (e) => {
@@ -44,9 +48,11 @@ export function initPanZoom(deps: PanZoomDeps): void {
       const my = e.offsetY
       const wx = (mx - world.x) / world.scale.x
       const wy = (my - world.y) / world.scale.y
-      world.scale.set(world.scale.x * factor)
-      world.x = mx - wx * world.scale.x
-      world.y = my - wy * world.scale.y
+      // clamp: unbounded zoom-out collapses hit-testing and ghost math
+      const next = Math.min(3, Math.max(0.2, world.scale.x * factor))
+      world.scale.set(next)
+      world.x = mx - wx * next
+      world.y = my - wy * next
     },
     { passive: false },
   )

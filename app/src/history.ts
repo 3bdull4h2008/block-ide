@@ -19,6 +19,9 @@ export class History {
   undo(current: string): string | null {
     const prev = this.past.pop()
     if (prev === undefined) return null
+    // break type-coalescing across an undo: type → undo → type must not
+    // silently swallow the redo branch into the last typing run
+    this.lastKind = ''
     this.future.push(current)
     return prev
   }
@@ -26,6 +29,7 @@ export class History {
   redo(current: string): string | null {
     const next = this.future.pop()
     if (next === undefined) return null
+    this.lastKind = ''
     this.past.push(current)
     return next
   }

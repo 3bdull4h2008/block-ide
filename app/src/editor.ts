@@ -212,6 +212,10 @@ const cadeDarkHighlightStyle = HighlightStyle.define([
 // ---- Language compartment (swappable at runtime) ----
 const languageCompartment = new Compartment()
 const themeCompartment = new Compartment()
+/** History compartment: setSource toggles it off around its full-document
+ *  replace so a programmatic setSource is NOT an undo step (CM-Ctrl+Z
+ *  otherwise walks back across tab switches and replays other tabs' text) */
+const historyCompartment = new Compartment()
 
 function getLanguageExtension(lang: string) {
   switch (lang) {
@@ -274,7 +278,7 @@ export function createCodeMirrorEditor(
       lineNumbers(),
       highlightActiveLineGutter(),
       highlightSpecialChars(),
-      history(),
+      historyCompartment.of(history()),
       foldGutter(),
       drawSelection(),
       dropCursor(),
@@ -314,7 +318,11 @@ export function createCodeMirrorEditor(
       if (current !== src) {
         view.dispatch({
           changes: { from: 0, to: current.length, insert: src },
+          effects: historyCompartment.reconfigure([]),
         })
+        // re-enable history with no doc change in flight: the next dispatch
+        // starts from a clean undo stack
+        view.dispatch({ effects: historyCompartment.reconfigure(history()) })
       }
     },
     getSource() {

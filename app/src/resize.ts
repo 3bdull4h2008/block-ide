@@ -6,10 +6,10 @@ export function initResizers(): void {
     if (!divider) return
 
     e.preventDefault()
-    divider.classList.add('active')
 
     const key = (divider as HTMLElement).dataset.resize
-    if (key !== 'sidebar') return
+    if (key !== 'sidebar') return // canvas divider is not implemented yet
+    divider.classList.add('active')
 
     const start = e.clientX
     const startWidth = document.getElementById('sidebar')?.offsetWidth ?? 216
@@ -27,6 +27,9 @@ export function initResizers(): void {
       divider.classList.remove('active')
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
+      // the grid change resized hostEl — let the Pixi renderer catch up,
+      // otherwise the canvas stays stretched until the next window event
+      window.dispatchEvent(new Event('resize'))
     }
 
     document.addEventListener('mousemove', onMove)

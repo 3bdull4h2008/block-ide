@@ -38,7 +38,8 @@ export function spliceInsert(
       if (m && m[1].length > 0) {
         const indent = m[1]
         insert = '\n' + indent + snippet.split('\n').join('\n' + indent)
-        return text.slice(0, lastNl + 1) + insert + text.slice(offset)
+        // fall through to the shared splice — the early return used to drop
+        // the line prefix [lastNl+1, offset), deleting the statement's text
       }
     }
     insert = '\n' + insert

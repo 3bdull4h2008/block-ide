@@ -460,8 +460,9 @@ const NUMERIC = /^[+-]?(\d+\.?\d*|\.\d+)$/
  *  Deliberately EXCLUDES = < > ! & | — those are boolean-only (hex sockets),
  *  mirroring Scratch's reporter/boolean shape split. */
 const EXPR = /^[A-Za-z0-9_+*%/().[\]\- ]+$/
-/** a bare token (no operator) must still be a valid operand */
-const BARE = /^[A-Za-z0-9_]+(\[\d+\])?$/
+/** a bare token (no operator) must still be a valid operand: an identifier
+ *  (optionally indexed) or a decimal/hex number — '9bad' is neither */
+const BARE = /^[A-Za-z_][A-Za-z0-9_]*(\[\d+\])?$|^[+-]?(\d+(\.\d+)?|0[xX][0-9a-fA-F]+)$/
 
 function isArithmetic(v: string): boolean {
   if (!EXPR.test(v)) return false

@@ -15,9 +15,12 @@ export interface BlockDrawDeps {
 export function drawBlock(deps: BlockDrawDeps, b: BBlock): void {
   const { world, slotHits, attachHeaderEvents, onSlotHit } = deps
   const g = new Graphics()
-  const { fill: fills, edge: edges } = palColors()
+  const { fill: fills, edge: edges, dark } = palColors()
   const fill = fills[b.cat] ?? fills.statement
   const edge = edges[b.cat] ?? edges.statement
+  // White dies on the warm dark fills (2.0:1 on control) and on pale sand —
+  // ink labels clear 3.7:1 everywhere; light theme only needs the comment fix.
+  const labelStyle = dark || b.cat === 'comment' ? DARK_LABEL : WHITE_LABEL
   if (b.sticky) {
     g.roundRect(b.x, b.y, b.w, b.h, 8)
     g.fill({ color: fill })
@@ -63,7 +66,7 @@ export function drawBlock(deps: BlockDrawDeps, b: BBlock): void {
   }
   const header: (Text | Graphics)[] = []
   if (b.parts.length === 0) {
-    const t = new Text({ text: b.label || b.nodeKind, style: WHITE_LABEL })
+    const t = new Text({ text: b.label || b.nodeKind, style: labelStyle })
     t.x = b.x + PAD
     t.y = b.y + (ROW_H - t.height) / 2
     header.push(t)
@@ -72,7 +75,7 @@ export function drawBlock(deps: BlockDrawDeps, b: BBlock): void {
     for (const p of b.parts) {
       const w = partWidth(p)
       if (p.type === 'text') {
-        const t = new Text({ text: p.text, style: WHITE_LABEL })
+        const t = new Text({ text: p.text, style: labelStyle })
         t.x = cx
         t.y = b.y + (ROW_H - t.height) / 2
         header.push(t)

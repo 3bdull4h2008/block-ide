@@ -10,6 +10,8 @@ export interface KeybindDeps {
 
 export function initKeybindings(deps: KeybindDeps): void {
   window.addEventListener('keydown', (e) => {
+    // handled keys (CodeMirror, app shortcuts) must not re-trigger here
+    if (e.defaultPrevented) return
     if (e.ctrlKey && e.shiftKey && e.key === 'P') {
       e.preventDefault()
       deps.togglePalette()
@@ -38,7 +40,9 @@ export function initKeybindings(deps: KeybindDeps): void {
       deps.setView('text')
     } else if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
       const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT')) return
+      // CM's editable is a contenteditable DIV — '/' while typing code
+      // must reach the document, not hijack focus to the palette filter
+      if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable)) return
       e.preventDefault()
       deps.palFilter.focus()
       deps.palFilter.select()
