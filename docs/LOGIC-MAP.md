@@ -142,3 +142,26 @@ a named regression test in `scripts/test-logic.ts`.
 | Dead code | `#graduate` is now live (shown in Academy mode after passing a level — the designed off-ramp); unused slotEditor/autosave deps (`viewMode`, `anchorToBlock`, `hitTestHeader`, `srcEl`) removed; slot commits use the real `setSrc` (history + dirty + autosave instead of the CM onUpdate backdoor) |
 
 Remaining debt after round 2: `hitTestHeader` overlap nuance (by design), the manual light/dark visual pass, and the latent `#src` textarea pathway.
+
+## 8. Round 3 (2026-09-12) — tracer/interpreter audit
+
+The C interpreter (`tracer.ts`, the one complex module the services mapping never
+covered) had five real bugs, all fixed with regression tests (46 external assertions):
+
+1. `continue` threw the break signal — any `continue` **ended the loop** (new
+   `ContinueSignal`; `for` still runs its update clause on continue)
+2. `i++` evaluated as `++i` (post/prefix test used a JS-only grammar kind), and
+   prefix `++i` returned 0 without incrementing (operand resolution picked the
+   operator token) — now the operator's child position decides
+3. `<<=` / `>>=` compound assigns silently replaced the variable with the RHS
+4. unbraced `if` bodies never executed — tree-sitter-c names the branch
+   `consequence`, the code looked for `body`; `else` now unwraps the clause
+5. loops truncated **silently** at 10000 iterations (wrong final state presented
+   as complete) — now throw an iteration-limit error, consistent with stepLimit
+
+Also noted: the byte→char offset normalization (round 1) silently fixed tracer
+line/col numbers for multibyte sources — `lineCol` compares node offsets against
+char-based line starts.
+
+The remaining small services modules (`mem-view`, `debug-hooks`, `extensions`,
+`kbd-palette`, `exit-alert`) were skimmed: error handling in place, no defects found.
