@@ -39,6 +39,7 @@
 
 .toolbar {
   grid-area: toolbar;
+  position: relative; /* makes z-index real — the Open… dropdown must paint above the main area */
   display: flex;
   align-items: center;
   gap: var(--sp-2);
@@ -85,7 +86,8 @@
 .toolbar-nav {
   margin-left: var(--sp-2);
   flex-wrap: nowrap;
-  overflow: hidden;
+  /* no overflow:hidden here — it clipped the Open… dropdown, which renders
+     below the button (the menu was "open" but invisible) */
 }
 .toolbar-actions {
   margin-left: auto;

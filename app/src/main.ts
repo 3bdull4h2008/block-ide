@@ -1179,7 +1179,9 @@ function statusFlash(msg: string): void {
 
 let lastWindowTitle = ''
 function updateTitle(): void {
-  const dirty = activePath !== null && isMeaningfullyDirty() ? ' •' : ''
+  // meaningful-dirty already exempts a pristine scratch buffer — no need to
+  // gate on activePath (a typed-into scratch deserves the dot too)
+  const dirty = isMeaningfullyDirty() ? ' •' : ''
   const name = activePath ? baseName(activePath) : 'Cade'
   const title = `${name}${dirty} - Cade`
   if (title === lastWindowTitle) return
