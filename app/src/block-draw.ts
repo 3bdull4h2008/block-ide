@@ -12,6 +12,10 @@ export interface BlockDrawDeps {
   onSlotHit: (s: SlotHit) => void
 }
 
+/** Light-theme fills whose ink label beats white (control 2.1:1, variables
+ *  2.0:1, comment 1.2:1 with white; ink clears 7:1 on all three). */
+const LIGHT_INK = new Set(['control', 'variables', 'comment'])
+
 export function drawBlock(deps: BlockDrawDeps, b: BBlock): void {
   const { world, slotHits, attachHeaderEvents, onSlotHit } = deps
   const g = new Graphics()
@@ -19,8 +23,9 @@ export function drawBlock(deps: BlockDrawDeps, b: BBlock): void {
   const fill = fills[b.cat] ?? fills.statement
   const edge = edges[b.cat] ?? edges.statement
   // White dies on the warm dark fills (2.0:1 on control) and on pale sand —
-  // ink labels clear 3.7:1 everywhere; light theme only needs the comment fix.
-  const labelStyle = dark || b.cat === 'comment' ? DARK_LABEL : WHITE_LABEL
+  // ink labels clear 3.7:1 everywhere. Light theme keeps Scratch-style white
+  // on the saturated cool fills.
+  const labelStyle = dark || LIGHT_INK.has(b.cat) ? DARK_LABEL : WHITE_LABEL
   if (b.sticky) {
     g.roundRect(b.x, b.y, b.w, b.h, 8)
     g.fill({ color: fill })

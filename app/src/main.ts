@@ -213,7 +213,6 @@ const autosaveDeps = {
   setSrc: (s: string) => setSrc(s),
   activeLang: () => activeLang,
   setActiveLang: (l: SourceLang) => { activeLang = l },
-  srcEl,
   get editor() { return editor },
   render: (s: string) => render(s),
   markDirty,
@@ -302,6 +301,7 @@ function setSrc(next: string, kind: 'op' | 'type' = 'op'): Promise<void> {
   lastPaintedSrc = null
   const p = scheduleRender(next)
   markDirty()
+  scheduleAutoSave() // formatting/programmatic rewrites persist too
   return p
 }
 
@@ -315,10 +315,15 @@ let lastPaintedSrc: string | null = null
 let renderRaf = 0
 let pendingRenderSrc: string | null = null
 
+/** While a rAF is pending, every caller awaits the SAME final render —
+ *  the old early-return resolved immediately, so `await setSrc(...)` in
+ *  canonicalize resumed before the new tree existed (caret raced the parse). */
+let renderSettling: Promise<void> = Promise.resolve()
+
 function scheduleRender(source: string): Promise<void> {
   pendingRenderSrc = source
-  if (renderRaf) return Promise.resolve()
-  return new Promise((resolve) => {
+  if (renderRaf) return renderSettling
+  renderSettling = new Promise((resolve) => {
     renderRaf = requestAnimationFrame(() => {
       renderRaf = 0
       const next = pendingRenderSrc
@@ -327,6 +332,7 @@ function scheduleRender(source: string): Promise<void> {
       void render(next).then(resolve)
     })
   })
+  return renderSettling
 }
 
 async function render(source: string): Promise<void> {
@@ -443,16 +449,19 @@ async function canonicalize(): Promise<void> {
       if (src !== buf) return // buffer moved on — nothing to format anymore
       // Formatting rewrites the buffer UNDER the user — map the caret onto
       // the freshly parsed tree WITHOUT stealing focus from wherever they went.
-      const anchor = pickAnchor(roots, srcEl.selectionStart ?? 0)
-      await setSrc(clean)
-      requestAnimationFrame(() => {
-        try {
-          const pos = Math.max(0, Math.min(src.length, caretOffset(roots, src.length, anchor)))
-          srcEl.setSelectionRange(pos, pos)
-        } catch {
-          /* anchor no longer resolvable — leave caret */
-        }
-      })
+      // caret source of truth is CodeMirror (the hidden textarea's
+      // selection is permanently 0 for CM users)
+      const caretPos = editor ? editor.view.state.selection.main.head : (srcEl.selectionStart ?? 0)
+      const anchor = pickAnchor(roots, caretPos)
+      await setSrc(clean) // resolves AFTER the new tree is laid out
+      // roots now reflect the formatted source — map the caret immediately
+      try {
+        const pos = Math.max(0, Math.min(src.length, caretOffset(roots, src.length, anchor)))
+        srcEl.setSelectionRange(pos, pos)
+        editor?.view.dispatch({ selection: { anchor: pos } })
+      } catch {
+        /* anchor no longer resolvable — leave caret */
+      }
     }
   } catch {
     /* keep as-is */
@@ -503,6 +512,7 @@ const dragDropDeps = {
   canonicalize: () => canonicalize(),
   activeLang: () => activeLang,
   commitSlotValue,
+  renderSettled: () => lastPaintedSrc === src,
   tourHooks,
 }
 function startHtmlDrag(e: PointerEvent, payload: DragPayload): void {
@@ -533,15 +543,14 @@ function attachHeaderEvents(
 const slotEditorDeps = {
   slotHits: () => slotHits,
   src: () => src,
-  setSrc: (s: string) => { src = s; srcEl.value = s; editor?.setSource(s) },
+  // the REAL setSrc: the old inline clone bypassed history/dirty/render
+  setSrc: (s: string) => { void setSrc(s, 'type') },
   canonicalize: () => canonicalize(),
   hostEl,
   world,
   screenToWorld,
-  hitTestHeader,
   roots: () => roots,
-  viewMode: () => viewMode,
-  anchorToBlock,
+  renderSettled: () => lastPaintedSrc === src,
 }
 initSlotEditor(slotEditorDeps)
 
@@ -570,6 +579,7 @@ hostEl.addEventListener('dblclick', (e) => {
   }
   const replacement = window.prompt('Edit statement:', hit.label)
   if (replacement === null) return
+  if (lastPaintedSrc !== src) return // stale tree — offsets not trustworthy
   setSrc(applyEdit(hit, replacement)(src))
   void canonicalize()
 })

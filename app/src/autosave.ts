@@ -10,7 +10,6 @@ export interface AutosaveDeps {
   setSrc: (s: string) => void
   activeLang: () => SourceLang
   setActiveLang: (l: SourceLang) => void
-  srcEl: HTMLTextAreaElement
   editor: CadeEditor | null
   render: (s: string) => Promise<void>
   markDirty: () => void

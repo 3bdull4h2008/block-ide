@@ -9,11 +9,9 @@ import { lintKeymap } from '@codemirror/lint'
 import { tags } from '@lezer/highlight'
 
 // Language imports
-import { cpp } from '@codemirror/lang-cpp'
-import { javascript } from '@codemirror/lang-javascript'
-import { python } from '@codemirror/lang-python'
-import { go } from '@codemirror/lang-go'
-import { java } from '@codemirror/lang-java'
+// Language packs load LAZILY (dynamic import) — five grammars pushed the
+// initial chunk past 900 KB; they're needed only once a session picks a lang.
+import type { LanguageSupport } from '@codemirror/language'
 
 // ---- Light theme (Cade custom — sea paper) ----
 const cadeLightTheme = EditorView.theme({
@@ -217,26 +215,34 @@ const themeCompartment = new Compartment()
  *  otherwise walks back across tab switches and replays other tabs' text) */
 const historyCompartment = new Compartment()
 
-function getLanguageExtension(lang: string) {
-  switch (lang) {
-    case 'c':
-    case 'cpp':
-      return cpp()
-    case 'javascript':
-    case 'typescript':
-      return javascript()
-    case 'python':
-      return python()
-    case 'go':
-      return go()
-    case 'java':
-      return java()
-    case 'rust':
-      // Rust not in @codemirror — fall back to C-like highlighting
-      return cpp()
-    default:
-      return cpp()
-  }
+const langCache = new Map<string, Promise<LanguageSupport | []>>()
+
+async function loadLanguageExtension(lang: string): Promise<LanguageSupport | []> {
+  const cached = langCache.get(lang)
+  if (cached) return cached
+  const p = (async (): Promise<LanguageSupport | []> => {
+    switch (lang) {
+      case 'c':
+      case 'cpp':
+      case 'rust':
+        // Rust not in @codemirror — fall back to C-like highlighting
+        return (await import('@codemirror/lang-cpp')).cpp()
+      case 'javascript':
+        return (await import('@codemirror/lang-javascript')).javascript()
+      case 'typescript':
+        return (await import('@codemirror/lang-javascript')).javascript({ typescript: true })
+      case 'python':
+        return (await import('@codemirror/lang-python')).python()
+      case 'go':
+        return (await import('@codemirror/lang-go')).go()
+      case 'java':
+        return (await import('@codemirror/lang-java')).java()
+      default:
+        return (await import('@codemirror/lang-cpp')).cpp()
+    }
+  })()
+  langCache.set(lang, p)
+  return p
 }
 
 function getThemeExtensions(dark: boolean) {
@@ -302,7 +308,7 @@ export function createCodeMirrorEditor(
         ...lintKeymap,
         indentWithTab,
       ]),
-      languageCompartment.of(getLanguageExtension(initialLang)),
+      languageCompartment.of([]), // loaded async by the first setLang
       themeCompartment.of(getThemeExtensions(dark)),
       updateListener,
       EditorView.lineWrapping,
@@ -310,6 +316,7 @@ export function createCodeMirrorEditor(
   })
 
   const view = new EditorView({ state, parent })
+  let currentLang = initialLang // guards async lang loads against races
 
   const editor: CadeEditor = {
     view,
@@ -329,8 +336,13 @@ export function createCodeMirrorEditor(
       return view.state.doc.toString()
     },
     setLang(lang: string) {
-      view.dispatch({
-        effects: languageCompartment.reconfigure(getLanguageExtension(lang)),
+      // highlight nothing until the (cached) dynamic import lands; a rapid
+      // lang switch must not let a slow older load win
+      currentLang = lang
+      void loadLanguageExtension(lang).then((ext) => {
+        if (currentLang === lang) {
+          view.dispatch({ effects: languageCompartment.reconfigure(ext) })
+        }
       })
     },
     setTheme(dark: boolean) {

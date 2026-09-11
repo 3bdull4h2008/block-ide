@@ -85,6 +85,9 @@ function applyModeChrome(): void {
   document.getElementById('academy-section')?.classList.toggle('hidden', !academy)
   const modeToggle = document.getElementById('mode-toggle')
   if (modeToggle) modeToggle.style.display = academy ? '' : 'none'
+  // the graduate off-ramp only makes sense inside the Academy
+  const graduate = document.getElementById('graduate')
+  if (graduate) graduate.style.display = academy ? '' : 'none'
 }
 
 export function refreshModeChrome(): void {
@@ -283,7 +286,12 @@ export function initAcademy(deps: AcademyDeps): void {
             : `[academy] PASSED ✓  (already completed before — no extra XP) · next ⟳review in ${review}... ${streakMsg}`
 
         await refreshProfile(deps)
-        if (r.xp_awarded > 0) pulseXpBadge()
+        if (r.xp_awarded > 0) {
+          pulseXpBadge()
+          // the off-ramp moment: a passed level earns the Graduate shortcut
+          const graduate = document.getElementById('graduate')
+          if (graduate) graduate.style.display = ''
+        }
         await refreshLevels(deps)
       } else {
         tourHooks.advance?.('check')

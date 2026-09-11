@@ -128,3 +128,17 @@ a named regression test in `scripts/test-logic.ts`.
 - `LANG_SHAPES` lacks go/java/typescript — they parse but render with C shapes (New File offers them).
 - `hitTestHeader` returns the deepest match; container headers lose to child rows on overlap (fine today).
 - Drag/slot gestures splice against the last COMPLETED render without a `renderSettled` check — mitigated by rAF coalescing but not airtight.
+
+## 7. Round 2 (2026-09-11, later) — the §6 debt cleared
+
+| Item | Resolution |
+|---|---|
+| Canonicalize caret race | `scheduleRender` now returns the pending render's promise (all callers while a rAF is queued await the SAME final render); `setSrc` awaits it and re-maps the caret against the FRESH roots — and the caret is read from / restored into CodeMirror, not the hidden textarea |
+| Gesture settlement | `renderSettled()` dep on drag-drop + slot editor (+ dblclick edit guard): splices refuse to run while `lastPaintedSrc !== src` |
+| go/java/typescript shapes | `LANG_SHAPES` gained all three (TS = JS shape + `method_definition`; go = if/for via `consequence`/`body`; java = full control set, `class_body` expansion, `enhanced_for_statement`); `class_body` joined the row-holder kinds in `toBlock` — fixtures tested per language |
+| editor-keys purity | transforms extracted to `utils/edit-ops.ts` (`indentLines`, `splitLine`, `toggleCommentLines`) — DOM-free, Node-tested; editor-keys.ts is now a thin adapter |
+| >500 kB chunk | CodeMirror language packs load via dynamic import with a race-guarded cache (`editor.ts`); initial chunk 892 KB → 244 KB |
+| Fonts | Google Fonts CDN link removed; `Baloo 2` (variable) + `Comic Neue` 400/700 self-hosted via `@font-face` in `tokens.css` from `public/fonts/` (OFL) |
+| Dead code | `#graduate` is now live (shown in Academy mode after passing a level — the designed off-ramp); unused slotEditor/autosave deps (`viewMode`, `anchorToBlock`, `hitTestHeader`, `srcEl`) removed; slot commits use the real `setSrc` (history + dirty + autosave instead of the CM onUpdate backdoor) |
+
+Remaining debt after round 2: `hitTestHeader` overlap nuance (by design), the manual light/dark visual pass, and the latent `#src` textarea pathway.

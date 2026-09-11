@@ -24,6 +24,7 @@ import {
   nextMastery, masteryDue, masteryNextIn, previousLevel, updateStreak, checkBadges,
 } from '../src/academy-extras.ts'
 import { validateSlotValue, reporterFits } from '../src/palette.ts'
+import { indentLines, splitLine, toggleCommentLines } from '../src/utils/edit-ops.ts'
 import { langOf, trimmedEndsWithOpener, baseName, dirName, normSlashes } from '../src/utils/pure.ts'
 
 // ── micro harness ──────────────────────────────────────────────────────────
@@ -57,8 +58,8 @@ function node(kind: string, opts: Partial<CNodeJSON> & { children?: CNodeJSON[] 
     children,
   }
 }
-function tree(root: CNodeJSON): CTreeJSON {
-  return { root, tail: '', lang: 'c' }
+function tree(root: CNodeJSON, lang = 'c'): CTreeJSON {
+  return { root, tail: '', lang }
 }
 
 // ═══════════════════════════════ 1. BYTE→CHAR OFFSETS ═════════════════════
@@ -487,7 +488,46 @@ check('reporterFits: round vs hex socket compatibility', 'slots', () => {
   assert.equal(reporterFits('bool', 'ident'), false)
 })
 
-// ═══════════════════════════════ 8. PATH UTILS ════════════════════════════
+// ═══════════════════════════════ 8. EDIT-OPS (editor-keys transforms) ═════
+check('indentLines: caret insert, shift dedent, block indent/outdent', 'edit-ops', () => {
+  assert.deepEqual(indentLines('abc', 1, 1, false), { text: 'a  bc', caret: 3 })
+  const indented = '  deep()'
+  assert.deepEqual(indentLines(indented, 5, 5, true), { text: 'deep()', caret: 3 })
+  // shift with no leading spaces is a no-op
+  assert.deepEqual(indentLines('x = 1;', 3, 3, true), { text: 'x = 1;', caret: 3 })
+  // selection: every line gains/loses indentation, caret tracks line 1
+  const sel = 'a\nb\nc'
+  const out = indentLines(sel, 0, 5, false)
+  assert.equal(out.text, '  a\n  b\n  c')
+  assert.equal(out.caret, 2)
+  const back = indentLines(out.text, 0, 11, true)
+  assert.equal(back.text, sel)
+})
+
+check('splitLine: indent continuation, opener deepening, paired brace', 'edit-ops', () => {
+  assert.deepEqual(splitLine('    keep();', 11, 11), { text: '    keep();\n    ', caret: 16 })
+  // opener deepens by 4 and pulls the } onto its own line (pos 8 = after '{')
+  const res = splitLine('if (x) {}', 8, 8)
+  assert.equal(res.text, 'if (x) {\n    \n}')
+  assert.equal(res.caret, 13)
+})
+
+check('toggleCommentLines: single line and block, both directions', 'edit-ops', () => {
+  const code = 'a = 1;\nb = 2;'
+  // single-line comment
+  assert.deepEqual(toggleCommentLines(code, 0, 0, '// '), { text: '// a = 1;\nb = 2;', caret: 3 })
+  // single-line uncomment (prefix after indent)
+  assert.deepEqual(toggleCommentLines('// a = 1;', 5, 5, '// '), { text: 'a = 1;', caret: 2 })
+  // block: mixed lines → comment all non-blank
+  const mixed = 'a;\n\nb;'
+  assert.equal(toggleCommentLines(mixed, 0, 6, '// ').text, '// a;\n\n// b;') // blank line untouched
+  // block: all commented → uncomment all
+  assert.equal(toggleCommentLines('// a;\n// b;', 0, 10, '// ').text, 'a;\nb;')
+  // python prefix
+  assert.deepEqual(toggleCommentLines('x = 1', 0, 0, '# '), { text: '# x = 1', caret: 2 })
+})
+
+// ═══════════════════════════════ 9. PATH UTILS ════════════════════════════
 check('langOf extension map incl. multi-extension families', 'paths', () => {
   assert.equal(langOf('a.c'), 'c')
   assert.equal(langOf('a.cpp'), 'cpp')
@@ -507,6 +547,67 @@ check('path helpers: opener detection, basenames, slashes', 'paths', () => {
   assert.equal(dirName('src/main.c'), 'src')
   assert.equal(dirName('main.c'), '.')
   assert.equal(normSlashes('a\\b\\c'), 'a/b/c')
+})
+
+check('REGRESSION: go if/for render as containers via fielded bodies', 'blocks', () => {
+  const t = tree(node('source_file', {
+      children: [node('if_statement', {
+        children: [
+          node('if', { named: false, text: 'if' }),
+          node('binary_expression', { field: 'condition', text: 'x > 0' }),
+          node('block', { field: 'consequence', children: [node('short_var_declaration', { text: 'y := 1' })] }),
+        ],
+      })],
+    }), 'go')
+  const roots = buildBlocks(t)
+  assert.equal(roots.length, 1)
+  assert.ok(roots[0].container, 'go if is a container')
+  assert.equal(roots[0].children.length, 1)
+  assert.ok(!roots[0].label.includes(':='))
+})
+
+check('REGRESSION: java methods expand; class bodies via class_body kind', 'blocks', () => {
+  const method = node('method_declaration', {
+    children: [
+      node(' modifiers', { named: false, text: 'public' }),
+      node('void_type', { text: 'void' }),
+      node('identifier', { field: 'name', text: 'run' }),
+      node('formal_parameters', { field: 'parameters', text: '()' }),
+      node('block', { field: 'body', children: [node('expression_statement', { text: 'count++;' })] }),
+    ],
+  })
+  const klass = node('class_declaration', {
+    children: [
+      node('class', { named: false, text: 'class' }),
+      node('identifier', { field: 'name', text: 'Main' }),
+      node('class_body', { field: 'body', children: [method] }),
+    ],
+  })
+  const t = tree(node('program', { children: [klass] }), 'java')
+  const roots = buildBlocks(t)
+  assert.equal(roots.length, 1)
+  assert.ok(roots[0].container, 'java class is a container')
+  const m = roots[0].children[0]
+  assert.ok(m.container, 'java method is a container')
+  assert.equal(m.cat, 'function')
+  assert.ok(m.label.includes('void'), 'header includes return type')
+  assert.ok(!m.label.includes('count++'), 'body must not leak into header')
+})
+
+check('REGRESSION: typescript uses the JS shape (statement_block bodies)', 'blocks', () => {
+  const t = tree(node('program', {
+      children: [node('function_declaration', {
+        children: [
+          node('function', { named: false, text: 'function' }),
+          node('identifier', { field: 'name', text: 'greet' }),
+          node('statement_block', { field: 'body', children: [node('expression_statement', { text: 'return 1;' })] }),
+        ],
+      })],
+    }), 'typescript')
+  const roots = buildBlocks(t)
+  assert.ok(roots[0].container)
+  assert.equal(roots[0].cat, 'function')
+  assert.ok(roots[0].label.includes('greet'))
 })
 
 // ── report ────────────────────────────────────────────────────────────────

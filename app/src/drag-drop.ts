@@ -44,6 +44,9 @@ export interface DragDropDeps {
   canonicalize: () => Promise<void>
   activeLang: () => string
   commitSlotValue: (s: SlotHit, raw: string) => string | null
+  /** false while a newer edit is still rendering — splicing then would use
+   *  offsets from a stale tree */
+  renderSettled: () => boolean
   tourHooks: { advance?: (ev: 'edit' | 'run' | 'check') => void }
 }
 
@@ -228,6 +231,13 @@ export function startHtmlDrag(deps: DragDropDeps, e: PointerEvent, payload: Drag
     const inside =
       ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom
     if (!inside) return
+    // a newer edit is still parsing — drop targets/slot ranges belong to a
+    // stale tree, and splicing them would corrupt the buffer
+    if (!deps.renderSettled()) {
+      blipError()
+      deps.consoleEl.textContent = '[drop] skipped — canvas is still catching up, try again'
+      return
+    }
     const w = deps.screenToWorld(ev.clientX - r.left, ev.clientY - r.top)
     if (d.slotValue) {
       const s = slotUnderWorldPoint(deps.slotHits(), w.x, w.y) ?? nearestCompatibleSlot(deps.slotHits(), deps.roots(), w.x, w.y, d.slotKind)

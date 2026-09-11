@@ -2,7 +2,7 @@ import { validateSlotValue } from './palette'
 import { blipSlot, blipError } from './utils/audio'
 import { tourHooks } from './tour'
 import type { BBlock } from './blocks'
-import type { SlotHit, ViewMode } from './types'
+import type { SlotHit } from './types'
 
 export interface SlotEditorDeps {
   slotHits: () => SlotHit[]
@@ -12,10 +12,9 @@ export interface SlotEditorDeps {
   hostEl: HTMLDivElement
   world: import('pixi.js').Container
   screenToWorld: (ox: number, oy: number) => { x: number; y: number }
-  hitTestHeader: (roots: BBlock[], x: number, y: number) => BBlock | null
   roots: () => BBlock[]
-  viewMode: () => ViewMode
-  anchorToBlock: (b: BBlock) => void
+  /** false while a newer edit is still rendering — slot spans would be stale */
+  renderSettled: () => boolean
 }
 
 let editingSlot: SlotHit | null = null
@@ -32,6 +31,9 @@ export function commitSlotValue(deps: SlotEditorDeps, s: SlotHit, raw: string): 
     return `${s.part.type} slot rejects ${JSON.stringify(raw)}`
   }
   if (final === s.part.text) return null
+  if (!deps.renderSettled()) {
+    return 'canvas is still catching up — try again in a moment'
+  }
   const src = deps.src()
   deps.setSrc(src.slice(0, s.part.start) + final + src.slice(s.part.end))
   void deps.canonicalize()

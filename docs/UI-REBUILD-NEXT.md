@@ -121,10 +121,10 @@ in `src/academy.ts`, called from `setMode()` and at init:
 ### Remaining (next agent)
 | Task | Why | Where |
 |------|-----|-------|
-| Code-split the >500 kB chunk | Only remaining build warning | vite/rolldown config |
-| Light-theme block label contrast | White on control/variables fills ≈ 2.1:1 (Scratch-style, but ink labels like dark theme would clear it) | `block-draw.ts` `labelStyle` |
-| Offline font fallback | Google Fonts still CDN | `index.html` |
-| Visual pass light+dark | Verify: splash, Open menu, blocks edges, labels, theme toggle repaint | manual / `npm run tauri dev` |
+| Visual pass light+dark in `tauri dev` | Verify: splash, Open menu, blocks edges, ink labels both themes, theme toggle repaint, tab dirty dots | manual — the only task that needs eyes |
+| ~~Light-theme block label contrast~~ | **DONE 2026-09-11** — ink labels on control/variables/comment (`block-draw.ts` `LIGHT_INK`) | — |
+| ~~Code-split the >500 kB chunk~~ | **DONE 2026-09-11** — lazy CM language packs; initial chunk 892→244 KB | — |
+| ~~Offline font fallback~~ | **DONE 2026-09-11** — self-hosted @font-face (Baloo 2 var + Comic Neue), CDN link removed | — |
 
 ## Known leftovers / debt
 

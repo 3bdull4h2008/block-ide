@@ -126,6 +126,51 @@ const LANG_SHAPES: Record<string, LangShape> = {
     fns: new Set(['function_item']),
     classes: new Set(['struct_item', 'enum_item']),
   },
+  /** TS statement syntax is a superset of JS — same kinds, same fields. */
+  typescript: {
+    body: 'statement_block',
+    controls: new Set([
+      'if_statement',
+      'for_statement',
+      'for_in_statement',
+      'while_statement',
+      'do_statement',
+      'switch_statement',
+      'try_statement',
+    ]),
+    fns: new Set([
+      'function_declaration',
+      'generator_function_declaration',
+      'method_definition',
+    ]),
+    classes: new Set(['class_declaration']),
+  },
+  go: {
+    body: 'block',
+    // if uses field 'consequence'; for/switch use 'body'. switch/select case
+    // clauses are deliberately NOT containers — their headers carry labels.
+    controls: new Set(['if_statement', 'for_statement']),
+    fns: new Set(['function_declaration', 'method_declaration']),
+    classes: new Set(['type_declaration']),
+  },
+  java: {
+    body: 'block',
+    controls: new Set([
+      'if_statement',
+      'for_statement',
+      'enhanced_for_statement',
+      'while_statement',
+      'switch_statement',
+      'try_statement',
+    ]),
+    fns: new Set(['method_declaration', 'constructor_declaration']),
+    classes: new Set([
+      'class_declaration',
+      'interface_declaration',
+      'enum_declaration',
+      'record_declaration',
+    ]),
+  },
 }
 
 /** Active shape — set per buildBlocks call (render is single-threaded). */
@@ -153,7 +198,7 @@ function collapse(s: string): string {
  *  class/struct field-list kinds tree-sitter-cpp uses. MUST NOT recurse —
  *  a deep search made `namespace` claim the first nested function's braces
  *  and mash every sibling signature into one header. */
-const BODY_KINDS = new Set<string>(['compound_statement', 'field_declaration_list', 'declaration_list', 'field_declaration_list'])
+const BODY_KINDS = new Set<string>(['compound_statement', 'field_declaration_list', 'declaration_list', 'class_body'])
 function findCompound(n: CNodeJSON): CNodeJSON | null {
   for (const c of n.children) {
     if (c.field === 'body' && (c.kind === SHAPE.body || BODY_KINDS.has(c.kind))) return c
@@ -287,7 +332,13 @@ function toBlock(n: CNodeJSON): BBlock {
             ? (b.children.find((c) => c.kind !== 'else') ?? b)
             : b
         if (isBrace(inner)) continue
-        if (inner.kind === SHAPE.body || inner.kind === 'field_declaration_list') {
+        // row-holder kinds expand into rows; everything else (else clauses,
+        // python handlers) becomes a block of its own
+        if (
+          inner.kind === SHAPE.body ||
+          inner.kind === 'field_declaration_list' ||
+          inner.kind === 'class_body'
+        ) {
           kids.push(...stackFrom(inner))
         } else {
           kids.push(toBlock(inner))
