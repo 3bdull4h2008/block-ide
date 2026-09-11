@@ -23,6 +23,7 @@ import {
 import {
   nextMastery, masteryDue, masteryNextIn, previousLevel, updateStreak, checkBadges,
 } from '../src/academy-extras.ts'
+import { interpretC, type TraceStep } from '../src/tracer.ts'
 import { validateSlotValue, reporterFits } from '../src/palette.ts'
 import { indentLines, splitLine, toggleCommentLines } from '../src/utils/edit-ops.ts'
 import { langOf, trimmedEndsWithOpener, baseName, dirName, normSlashes } from '../src/utils/pure.ts'
@@ -608,6 +609,103 @@ check('REGRESSION: typescript uses the JS shape (statement_block bodies)', 'bloc
   assert.ok(roots[0].container)
   assert.equal(roots[0].cat, 'function')
   assert.ok(roots[0].label.includes('greet'))
+})
+
+// ═══════════════════════════════ 9. C INTERPRETER (tracer) ════════════════
+// fixture helpers over the tracer's CNodeJSON trees
+const tn = (kind: string, opts: Partial<CNodeJSON> & { children?: CNodeJSON[] } = {}): CNodeJSON => ({
+  id: nextId++, kind, field: opts.field ?? null, named: opts.named ?? true, missing: false,
+  start: 0, end: 0, pre: '', text: opts.text ?? null, children: opts.children ?? [],
+})
+const ident = (name: string, field?: string): CNodeJSON => tn('identifier', { text: name, field })
+const num = (v: number): CNodeJSON => tn('number_literal', { text: String(v) })
+const bin = (l: CNodeJSON, op: string, r: CNodeJSON): CNodeJSON =>
+  tn('binary_expression', { children: [l, tn(op, { named: false, text: op }), r] })
+const declInit = (name: string, val: CNodeJSON): CNodeJSON =>
+  tn('declaration', { children: [tn('primitive_type', { text: 'int' }), tn('init_declarator', { children: [ident(name), val] })] })
+const update = (name: string, op: '++' | '--', postfix: boolean): CNodeJSON =>
+  tn('update_expression', { children: postfix ? [ident(name), tn(op, { named: false, text: op })] : [tn(op, { named: false, text: op }), ident(name)] })
+const assign = (name: string, val: CNodeJSON, op = '='): CNodeJSON =>
+  tn('assignment_expression', { children: [ident(name), tn(op, { named: false, text: op }), val] })
+
+function runTrace(root: CNodeJSON): { vars: Record<string, unknown>; error?: string } {
+  const res = interpretC('int i = 0;\nint sum = 0;\n', root)
+  const last: TraceStep | undefined = res.steps[res.steps.length - 1]
+  return { vars: last?.vars ?? {}, error: last?.error }
+}
+
+check('REGRESSION: continue skips an iteration instead of ending the loop', 'tracer', () => {
+  // while (i < 3) { i++; if (i == 2) continue; sum += i; }  → sum === 4
+  const program = tn('translation_unit', { children: [
+    declInit('i', num(0)),
+    declInit('sum', num(0)),
+    tn('while_statement', { children: [
+      Object.assign(bin(ident('i'), '<', num(3)), { field: 'condition' }),
+      tn('compound_statement', { field: 'body', children: [
+        tn('expression_statement', { children: [update('i', '++', true)] }),
+        tn('if_statement', { children: [
+          Object.assign(bin(ident('i'), '==', num(2)), { field: 'condition' }),
+          tn('compound_statement', { field: 'consequence', children: [tn('continue_statement')] }),
+        ] }),
+        tn('expression_statement', { children: [assign('sum', bin(ident('sum'), '+', ident('i')))] }),
+      ] }),
+    ] }),
+  ] })
+  const { vars, error } = runTrace(program)
+  assert.equal(error, undefined, error)
+  assert.equal(vars.sum, 4, `continue broke the loop: sum = ${vars.sum}`)
+  assert.equal(vars.i, 3)
+})
+
+check('REGRESSION: i++ evaluates to the OLD value; ++i to the new', 'tracer', () => {
+  // int i = 5; int x = i++;  → x === 5, i === 6 (was: x === 6, and ++i returned 0)
+  const post = tn('translation_unit', { children: [
+    declInit('i', num(5)),
+    declInit('x', update('i', '++', true)),
+  ] })
+  const r1 = runTrace(post)
+  assert.equal(r1.vars.x, 5, `postfix returned ${r1.vars.x}`)
+  assert.equal(r1.vars.i, 6)
+
+  const pre = tn('translation_unit', { children: [
+    declInit('i', num(5)),
+    declInit('x', update('i', '++', false)),
+  ] })
+  const r2 = runTrace(pre)
+  assert.equal(r2.vars.x, 6, `prefix returned ${r2.vars.x} (was 0 before the fix)`)
+  assert.equal(r2.vars.i, 6)
+})
+
+check('REGRESSION: unbraced if consequence executes (field consequence)', 'tracer', () => {
+  // int y = 0; if (1) y = 7;  → y === 7 (was: silently skipped)
+  const program = tn('translation_unit', { children: [
+    declInit('y', num(0)),
+    tn('if_statement', { children: [
+      Object.assign(num(1), { field: 'condition' }),
+      tn('expression_statement', { field: 'consequence', children: [assign('y', num(7))] }),
+    ] }),
+  ] })
+  const { vars } = runTrace(program)
+  assert.equal(vars.y, 7)
+})
+
+check('REGRESSION: <<= shifts instead of corrupting the variable', 'tracer', () => {
+  // int x = 3; x <<= 2;  → x === 12 (was: x === 2, the RHS)
+  const program = tn('translation_unit', { children: [
+    declInit('x', num(3)),
+    tn('expression_statement', { children: [assign('x', num(2), '<<=')] }),
+  ] })
+  const { vars } = runTrace(program)
+  assert.equal(vars.x, 12)
+})
+
+check('run errors surface in the last step (undefined variable)', 'tracer', () => {
+  // a compound op READS the old value — ghost is undefined → error
+  const program = tn('translation_unit', { children: [
+    tn('expression_statement', { children: [assign('ghost', num(1), '+=')] }),
+  ] })
+  const { error } = runTrace(program)
+  assert.match(error ?? '', /undefined variable/)
 })
 
 // ── report ────────────────────────────────────────────────────────────────

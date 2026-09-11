@@ -27,6 +27,7 @@ class BreakSignal {
   val?: unknown
   constructor(val?: unknown) { this.val = val }
 }
+class ContinueSignal {}
 class ReturnSignal {
   val?: unknown
   constructor(val?: unknown) { this.val = val }
@@ -126,7 +127,7 @@ export class CInterpreter {
       case 'break_statement':
         this.snap('break', n); throw new BreakSignal()
       case 'continue_statement':
-        this.snap('continue', n); throw new BreakSignal()
+        this.snap('continue', n); throw new ContinueSignal()
       case 'function_definition':
         this.execFnDef(n); break
       case 'preproc_include':
@@ -201,13 +202,18 @@ export class CInterpreter {
     this.snap('if', n)
     const cond = this.evalChild(n, 'condition')
     if (this.truthy(cond)) {
-      const body = this.childByField(n, 'body') || this.childByKind(n, 'compound_statement')
+      // tree-sitter-c names the taken branch 'consequence'; the generic
+      // 'body'/'compound' fallbacks cover dialects and error recovery
+      const body = this.childByField(n, 'consequence') || this.childByField(n, 'body')
+        || this.childByKind(n, 'compound_statement')
       if (body) this.exec(body)
     } else {
       const alt = this.childByField(n, 'alternative')
         || this.childByKind(n, 'else_clause')
       if (alt) {
-        const body = this.childByField(alt, 'body') || this.childByKind(alt, 'compound_statement') || alt
+        const body = this.childByField(alt, 'body') || this.childByKind(alt, 'compound_statement')
+          || alt.children.find(c => c.named && c.kind !== 'else')
+          || alt
         this.exec(body)
       }
     }
@@ -223,11 +229,14 @@ export class CInterpreter {
         try { this.exec(body) }
         catch (e) {
           if (e instanceof BreakSignal) break
+          if (e instanceof ContinueSignal) continue
           if (e instanceof ReturnSignal) throw e
           throw e
         }
       }
     }
+    if (this.truthy(this.evalChild(n, 'condition')))
+      throw new Error('iteration limit reached in loop (10000)')
   }
 
   private execFor(n: CNodeJSON): void {
@@ -235,23 +244,28 @@ export class CInterpreter {
     const init = this.childByField(n, 'init') || this.childByKind(n, 'declaration')
     if (init) this.exec(init)
 
+    let capped = true
     for (let i = 0; i < 10000; i++) {
       const cond = this.childByField(n, 'condition')
-      if (cond && !this.truthy(this.eval(cond))) break
+      if (cond && !this.truthy(this.eval(cond))) { capped = false; break }
 
       const body = this.childByField(n, 'body') || this.childByKind(n, 'compound_statement')
       if (body) {
         try { this.exec(body) }
         catch (e) {
-          if (e instanceof BreakSignal) break
+          // ContinueSignal falls through: a C `for` still runs the update
+          if (e instanceof BreakSignal) { capped = false; break }
           if (e instanceof ReturnSignal) throw e
-          throw e
+          if (!(e instanceof ContinueSignal)) throw e
         }
       }
 
       const update = this.childByField(n, 'update')
       if (update) this.eval(update)
     }
+    // exhausted the cap without a false condition → the loop would run forever
+    if (capped && this.truthy(this.evalChild(n, 'condition')))
+      throw new Error('iteration limit reached in loop (10000)')
   }
 
   private execDoWhile(n: CNodeJSON): void {
@@ -264,11 +278,13 @@ export class CInterpreter {
         catch (e) {
           if (e instanceof BreakSignal) break
           if (e instanceof ReturnSignal) throw e
-          throw e
+          if (!(e instanceof ContinueSignal)) throw e
         }
       }
       if (cond && !this.truthy(this.eval(cond))) break
     }
+    if (cond && this.truthy(this.eval(cond)))
+      throw new Error('iteration limit reached in loop (10000)')
   }
 
   private execReturn(n: CNodeJSON): void {
@@ -384,9 +400,13 @@ export class CInterpreter {
   }
 
   private evalUpdate(n: CNodeJSON): unknown {
-    const isPost = n.kind === 'postfix_expression'
-    const op = this.txt(n.children[1] ?? n)
-    const operand = n.children[0]
+    // the operator's POSITION decides: prefix `++i` has it first, postfix
+    // `i++` last (tree-sitter-c has no separate postfix_expression kind)
+    const opIdx = n.children.findIndex(c => c.text === '++' || c.text === '--')
+    if (opIdx === -1) return 0
+    const isPost = opIdx > 0
+    const op = this.txt(n.children[opIdx])
+    const operand = n.children.find(c => c.named)
     if (!operand) return 0
     const name = this.findIdent(operand)
     if (!name) return 0
@@ -422,6 +442,8 @@ export class CInterpreter {
         case '&': newVal = lv & rv; break
         case '|': newVal = lv | rv; break
         case '^': newVal = lv ^ rv; break
+        case '<': newVal = lv << rv; break // <<=
+        case '>': newVal = lv >> rv; break // >>=
         default: newVal = this.eval(src_)
       }
     }
