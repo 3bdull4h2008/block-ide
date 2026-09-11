@@ -121,7 +121,15 @@ in `src/academy.ts`, called from `setMode()` and at init:
 ### Remaining (next agent)
 | Task | Why | Where |
 |------|-----|-------|
-| Visual pass light+dark in `tauri dev` | Verify: splash, Open menu, blocks edges, ink labels both themes, theme toggle repaint, tab dirty dots | manual — the only task that needs eyes |
+| Visual pass **Academy mode** | The sandbox half of the live window-control pass is DONE (2026-09-11): splash, Open… menu, view modes, theme repaint both ways, ink labels both themes, typing→canvas sync, dirty dot, drag+drop+canonicalize, Run, Go native rendering, unsaved-changes guard, autosave recovery. Academy-side visuals (level panel, palette locks, XP pulse, graduate off-ramp) still need eyes — needs an Academy session | `npm run tauri dev` → splash → Academy |
+| Run support for non-C languages | Run on a `.go` file fails with a raw clang linker error — works (no crash) but a "language not runnable in the sandbox" message would be kinder | `stage-run` / runner wiring |
+
+**Live-pass bug fixes (2026-09-11, commit d9e7e77):** the Open… menu was invisible —
+`.toolbar-nav` `overflow:hidden` clipped it AND `.toolbar` needed `position:relative`
+for its z-index; and `updateTitle` gated the dirty dot on `activePath`, so a typed-into
+scratch never showed the `•`.
+**Gotcha:** `npm run app` serves `dist` (tauri CLI on :1430) — frontend edits need
+`vite build` + webview reload; there is no HMR on this script.
 | ~~Light-theme block label contrast~~ | **DONE 2026-09-11** — ink labels on control/variables/comment (`block-draw.ts` `LIGHT_INK`) | — |
 | ~~Code-split the >500 kB chunk~~ | **DONE 2026-09-11** — lazy CM language packs; initial chunk 892→244 KB | — |
 | ~~Offline font fallback~~ | **DONE 2026-09-11** — self-hosted @font-face (Baloo 2 var + Comic Neue), CDN link removed | — |
