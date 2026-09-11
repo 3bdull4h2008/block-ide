@@ -121,8 +121,16 @@ in `src/academy.ts`, called from `setMode()` and at init:
 ### Remaining (next agent)
 | Task | Why | Where |
 |------|-----|-------|
-| Visual pass **Academy mode** | The sandbox half of the live window-control pass is DONE (2026-09-11): splash, Open… menu, view modes, theme repaint both ways, ink labels both themes, typing→canvas sync, dirty dot, drag+drop+canonicalize, Run, Go native rendering, unsaved-changes guard, autosave recovery. Academy-side visuals (level panel, palette locks, XP pulse, graduate off-ramp) still need eyes — needs an Academy session | `npm run tauri dev` → splash → Academy |
-| Run support for non-C languages | Run on a `.go` file fails with a raw clang linker error — works (no crash) but a "language not runnable in the sandbox" message would be kinder | `stage-run` / runner wiring |
+| Run support for non-C languages | **Kindness pass DONE 2026-09-12** — non-C langs now get "`<lang>` can't run in the sandbox yet — the runner speaks C (and C++)" instead of a raw clang linker error | `stage-run.ts` `startRun` |
+
+**Live pass COMPLETE (2026-09-11/12, window control):** sandbox surfaces all verified —
+splash (brand header/tiles/stagger), Open… menu (after the two CSS fixes), view modes,
+theme repaint both ways, ink labels both themes, typing→canvas sync, dirty dot (title +
+tab), drag+drop+canonicalize, Run (exit 0 on C), Go native rendering, unsaved-changes
+and reload guards, autosave recovery. **Academy mode verified too:** XP badge appears,
+ACADEMY section (Level/Load/Hint/Check) appears, Graduate + Mode buttons appear, level
+load seeds from the student's own solution, Run executes with [exit 0]. Nothing left
+unverified visually.
 
 **Live-pass bug fixes (2026-09-11, commit d9e7e77):** the Open… menu was invisible —
 `.toolbar-nav` `overflow:hidden` clipped it AND `.toolbar` needed `position:relative`

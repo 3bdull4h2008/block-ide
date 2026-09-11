@@ -114,6 +114,16 @@ export function initStageRun(deps: StageRunDeps): {
   }
 
   async function startRun(): Promise<void> {
+    // the sandbox runner compiles C via tcc (cpp via clang) — other languages
+    // parse and render but have no toolchain here; say so instead of a raw
+    // clang linker error
+    const lang = deps.activeLang()
+    if (lang !== 'c' && lang !== 'cpp') {
+      deps.consoleEl.textContent =
+        `[launch] ${lang} can't run in the sandbox yet — the runner speaks C (and C++). Blocks and parsing still work everywhere.`
+      blip(200, 0.1, 'square', 0.05)
+      return
+    }
     deps.consoleEl.textContent = 'running…'
     deps.tourHooks.advance?.('run')
     lastFrame = u32max
