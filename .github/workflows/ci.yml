@@ -26,9 +26,9 @@ jobs:
         working-directory: app
         run: npx tsc --noEmit
 
-      - name: Vitest unit tests
+      - name: Unit tests
         working-directory: app
-        run: npx vitest run --exclude 'e2e/**'
+        run: npm run test:logic
 
   test:
     runs-on: windows-latest
@@ -71,27 +71,6 @@ jobs:
       - name: E2E tests (vitest)
         working-directory: app
         run: npx vitest run e2e
-
-  e2e:
-    runs-on: windows-latest
-    needs: lint
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Node 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: app/package-lock.json
-
-      - name: npm ci
-        working-directory: app
-        run: npm ci
-
-      - name: E2E tests
-        working-directory: app
-        run: npx vitest run --reporter=verbose e2e
 
   accessibility:
     runs-on: windows-latest
@@ -160,7 +139,7 @@ jobs:
 
   build:
     runs-on: windows-latest
-    needs: [test, e2e, accessibility]
+    needs: [test, accessibility]
     steps:
       - uses: actions/checkout@v4
 
