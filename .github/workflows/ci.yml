@@ -28,7 +28,7 @@ jobs:
 
       - name: Vitest unit tests
         working-directory: app
-        run: npx vitest run
+        run: npx vitest run --exclude 'e2e/**'
 
   test:
     runs-on: windows-latest
@@ -67,6 +67,10 @@ jobs:
         run: cargo test --workspace -- --skip opens_5k_file_project_under_3s
         env:
           BLOCKIDE_DATA_DIR: ${{ runner.temp }}/blockide-ci-data
+
+      - name: E2E tests (vitest)
+        working-directory: app
+        run: npx vitest run e2e
 
   e2e:
     runs-on: windows-latest
