@@ -7,3 +7,22 @@ build/
 
 # generated at bundle time from third_party/tcc (single source of truth)
 app/src-tauri/resources/tcc/
+
+# AI agent content
+.agents/
+skills-lock.json
+corpus/
+
+# Planning/design docs
+docs/
+DESIGN.md
+LOG.md
+LOGIC_MAP.md
+PLAN.md
+ROADMAP-v0.3.0.md
+
+# Temp files
+err.txt
+out.txt
+stderr.txt
+stdout.txt
